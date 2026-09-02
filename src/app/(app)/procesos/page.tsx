@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { Encabezado, Tarjeta, Vacio, Pastilla, BotonEliminar } from "@/components/ui";
+import { Modal } from "@/components/Modal";
 import type { Proceso } from "@/lib/tipos";
 import { crearProceso, actualizarProceso, eliminarProceso } from "./acciones";
 
@@ -62,53 +63,54 @@ export default async function ProcesosPage({
       <Encabezado
         titulo="Procesos"
         descripcion="Catálogo de operaciones productivas. Después se asignan a cada producto o subgrupo con su tiempo o costo."
+        acciones={
+          <Modal boton="+ Agregar proceso" titulo="Nuevo proceso">
+            <Formulario accion={crearProceso} />
+          </Modal>
+        }
       />
 
-      <div className="grid gap-6 lg:grid-cols-[1fr_22rem] lg:items-start">
-        <Tarjeta titulo={`${procesos.length} procesos`}>
-          <div className="overflow-x-auto">
-            <table className="tabla">
-              <thead>
-                <tr>
-                  <th>Código</th>
-                  <th>Nombre</th>
-                  <th>Descripción</th>
-                  <th>Estado</th>
-                  <th />
+      <Tarjeta titulo={`${procesos.length} procesos`}>
+        <div className="overflow-x-auto">
+          <table className="tabla">
+            <thead>
+              <tr>
+                <th>Código</th>
+                <th>Nombre</th>
+                <th>Descripción</th>
+                <th>Estado</th>
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              {procesos.length === 0 && <Vacio mensaje="Sin procesos cargados." colSpan={5} />}
+              {procesos.map((p) => (
+                <tr key={p.id}>
+                  <td className="font-mono text-stone-500">{p.codigo}</td>
+                  <td className="font-medium text-stone-900">{p.nombre}</td>
+                  <td className="text-stone-500">{p.descripcion ?? "—"}</td>
+                  <td>{p.activo ? <Pastilla tono="verde">Activo</Pastilla> : <Pastilla>Inactivo</Pastilla>}</td>
+                  <td className="whitespace-nowrap text-right">
+                    <Link href={`/procesos?editar=${p.id}`} className="mr-2 text-xs text-marca-700 hover:underline">
+                      Editar
+                    </Link>
+                    <form action={eliminarProceso} className="inline">
+                      <input type="hidden" name="id" value={p.id} />
+                      <BotonEliminar />
+                    </form>
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                {procesos.length === 0 && <Vacio mensaje="Sin procesos cargados." colSpan={5} />}
-                {procesos.map((p) => (
-                  <tr key={p.id}>
-                    <td className="font-mono text-stone-500">{p.codigo}</td>
-                    <td className="font-medium text-stone-900">{p.nombre}</td>
-                    <td className="text-stone-500">{p.descripcion ?? "—"}</td>
-                    <td>{p.activo ? <Pastilla tono="verde">Activo</Pastilla> : <Pastilla>Inactivo</Pastilla>}</td>
-                    <td className="whitespace-nowrap text-right">
-                      <Link href={`/procesos?editar=${p.id}`} className="mr-2 text-xs text-marca-700 hover:underline">
-                        Editar
-                      </Link>
-                      <form action={eliminarProceso} className="inline">
-                        <input type="hidden" name="id" value={p.id} />
-                        <BotonEliminar />
-                      </form>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </Tarjeta>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Tarjeta>
 
-        <Tarjeta titulo={enEdicion ? `Editar: ${enEdicion.nombre}` : "Nuevo proceso"}>
-          {enEdicion ? (
-            <Formulario key={enEdicion.id} accion={actualizarProceso} proceso={enEdicion} />
-          ) : (
-            <Formulario accion={crearProceso} />
-          )}
-        </Tarjeta>
-      </div>
+      {enEdicion && (
+        <Modal titulo={`Editar: ${enEdicion.nombre}`} abierto hrefAlCerrar="/procesos">
+          <Formulario key={enEdicion.id} accion={actualizarProceso} proceso={enEdicion} />
+        </Modal>
+      )}
     </>
   );
 }

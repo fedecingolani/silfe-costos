@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { Encabezado, Tarjeta, Vacio, Pastilla, BotonEliminar } from "@/components/ui";
+import { Modal } from "@/components/Modal";
 import { pesos, porcentaje } from "@/lib/formato";
 import type { CategoriaManoObra } from "@/lib/tipos";
 import { crearCategoria, actualizarCategoria, eliminarCategoria } from "./acciones";
@@ -67,63 +68,64 @@ export default async function ManoObraPage({
       <Encabezado
         titulo="Mano de obra"
         descripcion="Costo horario de cada categoría de operario. El costo cargado incluye las cargas sociales y es el que se usa en el costeo."
+        acciones={
+          <Modal boton="+ Agregar categoría" titulo="Nueva categoría">
+            <Formulario accion={crearCategoria} />
+          </Modal>
+        }
       />
 
-      <div className="grid gap-6 lg:grid-cols-[1fr_22rem] lg:items-start">
-        <Tarjeta titulo={`${categorias.length} categorías`}>
-          <div className="overflow-x-auto">
-            <table className="tabla">
-              <thead>
-                <tr>
-                  <th>Categoría</th>
-                  <th className="num">Costo/hora</th>
-                  <th className="num">Cargas</th>
-                  <th className="num">Costo/hora cargado</th>
-                  <th className="num">Costo/minuto</th>
-                  <th>Estado</th>
-                  <th />
-                </tr>
-              </thead>
-              <tbody>
-                {categorias.length === 0 && <Vacio mensaje="Sin categorías cargadas." colSpan={7} />}
-                {categorias.map((c) => {
-                  const cargado = c.costo_hora * (1 + c.cargas_sociales_pct / 100);
-                  return (
-                    <tr key={c.id}>
-                      <td className="font-medium text-stone-900">{c.nombre}</td>
-                      <td className="num">{pesos(c.costo_hora)}</td>
-                      <td className="num text-stone-500">{porcentaje(c.cargas_sociales_pct)}</td>
-                      <td className="num font-medium text-marca-800">{pesos(cargado)}</td>
-                      <td className="num text-stone-500">{pesos(cargado / 60, true)}</td>
-                      <td>{c.activo ? <Pastilla tono="verde">Activa</Pastilla> : <Pastilla>Inactiva</Pastilla>}</td>
-                      <td className="whitespace-nowrap text-right">
-                        <Link
-                          href={`/mano-obra?editar=${c.id}`}
-                          className="mr-2 text-xs text-marca-700 hover:underline"
-                        >
-                          Editar
-                        </Link>
-                        <form action={eliminarCategoria} className="inline">
-                          <input type="hidden" name="id" value={c.id} />
-                          <BotonEliminar />
-                        </form>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </Tarjeta>
+      <Tarjeta titulo={`${categorias.length} categorías`}>
+        <div className="overflow-x-auto">
+          <table className="tabla">
+            <thead>
+              <tr>
+                <th>Categoría</th>
+                <th className="num">Costo/hora</th>
+                <th className="num">Cargas</th>
+                <th className="num">Costo/hora cargado</th>
+                <th className="num">Costo/minuto</th>
+                <th>Estado</th>
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              {categorias.length === 0 && <Vacio mensaje="Sin categorías cargadas." colSpan={7} />}
+              {categorias.map((c) => {
+                const cargado = c.costo_hora * (1 + c.cargas_sociales_pct / 100);
+                return (
+                  <tr key={c.id}>
+                    <td className="font-medium text-stone-900">{c.nombre}</td>
+                    <td className="num">{pesos(c.costo_hora)}</td>
+                    <td className="num text-stone-500">{porcentaje(c.cargas_sociales_pct)}</td>
+                    <td className="num font-medium text-marca-800">{pesos(cargado)}</td>
+                    <td className="num text-stone-500">{pesos(cargado / 60, true)}</td>
+                    <td>{c.activo ? <Pastilla tono="verde">Activa</Pastilla> : <Pastilla>Inactiva</Pastilla>}</td>
+                    <td className="whitespace-nowrap text-right">
+                      <Link
+                        href={`/mano-obra?editar=${c.id}`}
+                        className="mr-2 text-xs text-marca-700 hover:underline"
+                      >
+                        Editar
+                      </Link>
+                      <form action={eliminarCategoria} className="inline">
+                        <input type="hidden" name="id" value={c.id} />
+                        <BotonEliminar />
+                      </form>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </Tarjeta>
 
-        <Tarjeta titulo={enEdicion ? `Editar: ${enEdicion.nombre}` : "Nueva categoría"}>
-          {enEdicion ? (
-            <Formulario key={enEdicion.id} accion={actualizarCategoria} categoria={enEdicion} />
-          ) : (
-            <Formulario accion={crearCategoria} />
-          )}
-        </Tarjeta>
-      </div>
+      {enEdicion && (
+        <Modal titulo={`Editar: ${enEdicion.nombre}`} abierto hrefAlCerrar="/mano-obra">
+          <Formulario key={enEdicion.id} accion={actualizarCategoria} categoria={enEdicion} />
+        </Modal>
+      )}
     </>
   );
 }
