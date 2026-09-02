@@ -118,9 +118,13 @@ export function Migas({ items }: { items: { href?: string; texto: string }[] }) 
   );
 }
 
-export function BotonEliminar({ children = "Eliminar" }: { children?: ReactNode }) {
+export function BotonEliminar({ children = "Eliminar", title }: { children?: ReactNode; title?: string }) {
   return (
-    <button type="submit" className="boton-peligro px-2 py-1 text-xs">
+    <button
+      type="submit"
+      className="boton-peligro px-2 py-1 text-xs"
+      aria-label={title ?? (typeof children === "string" ? children : "Eliminar")}
+    >
       {children}
     </button>
   );

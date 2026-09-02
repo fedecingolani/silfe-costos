@@ -21,6 +21,34 @@ export type Proveedor = {
   activo: boolean;
 };
 
+export type Zona = {
+  id: string;
+  nombre: string;
+};
+
+export type Cliente = {
+  id: string;
+  codigo_legado: number | null;
+  razon_social: string;
+  cuit: string | null;
+  direccion: string | null;
+  localidad: string | null;
+  provincia: string | null;
+  codigo_postal: string | null;
+  telefono: string | null;
+  zona_id: string | null;
+  activo: boolean;
+};
+
+export type ClienteContacto = {
+  id: string;
+  cliente_id: string;
+  nombre: string;
+  cargo: string | null;
+  telefono: string | null;
+  orden: number;
+};
+
 export type MateriaPrima = {
   id: string;
   codigo: string;

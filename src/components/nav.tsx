@@ -9,6 +9,7 @@ const SECCIONES: { titulo: string; items: { href: string; texto: string }[] }[] 
     items: [
       { href: "/", texto: "Panel" },
       { href: "/productos", texto: "Productos" },
+      { href: "/clientes", texto: "Clientes" },
     ],
   },
   {
