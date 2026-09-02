@@ -74,19 +74,11 @@ se ven afectados si cambia el precio de un material.
 
 ## Puesta en marcha
 
-1. Crear un proyecto en [Supabase](https://supabase.com/dashboard).
+El proyecto de Supabase ya existe (`silfe-costos`, región `sa-east-1`), con las cuatro
+migraciones aplicadas y los datos de ejemplo cargados: unidades, cuatro proveedores, doce
+materias primas con precios, tres subgrupos y dos productos terminados ya costeados.
 
-2. Aplicar las migraciones en orden, desde el SQL Editor del dashboard o con la CLI:
-
-   ```bash
-   supabase link --project-ref <ref-del-proyecto>
-   supabase db push
-   ```
-
-   Opcionalmente, cargar los datos de ejemplo (`supabase/seed.sql`): trae unidades, proveedores,
-   doce materias primas, tres subgrupos y dos productos terminados ya costeados.
-
-3. Configurar las variables de entorno:
+1. Configurar las variables de entorno:
 
    ```bash
    cp .env.example .env.local
@@ -94,15 +86,26 @@ se ven afectados si cambia el precio de un material.
 
    Los valores están en el dashboard de Supabase, en *Settings → API*.
 
-4. Crear el primer usuario en *Authentication → Users* del dashboard. La app usa email y
+2. Crear el primer usuario en *Authentication → Users* del dashboard. La app usa email y
    contraseña, y no tiene registro abierto: los usuarios se dan de alta desde ahí.
 
-5. Levantar la app:
+3. Levantar la app:
 
    ```bash
    npm install
    npm run dev
    ```
+
+Para levantar el esquema en otra base (una copia de prueba, por ejemplo), aplicar las
+migraciones en orden desde el SQL Editor del dashboard o con la CLI:
+
+```bash
+supabase link --project-ref <ref-del-proyecto>
+supabase db push
+```
+
+Los datos de ejemplo están en `supabase/seed.sql` y se pueden volver a correr: son idempotentes
+por código.
 
 ## Seguridad
 
