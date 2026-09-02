@@ -9,7 +9,7 @@ const monedaFinaFmt = new Intl.NumberFormat("es-AR", {
   style: "currency",
   currency: "ARS",
   minimumFractionDigits: 2,
-  maximumFractionDigits: 4,
+  maximumFractionDigits: 2,
 });
 
 export function pesos(valor: number | null | undefined, fina = false) {

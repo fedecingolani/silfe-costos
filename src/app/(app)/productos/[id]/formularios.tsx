@@ -6,6 +6,48 @@ import { pesos } from "@/lib/formato";
 
 type Accion = (formData: FormData) => Promise<void>;
 
+export function CampoCantidadComponente({
+  formId,
+  id,
+  productoId,
+  cantidad,
+  unidad,
+  accion,
+}: {
+  formId: string;
+  id: string;
+  productoId: string;
+  cantidad: number;
+  unidad: string;
+  accion: Accion;
+}) {
+  return (
+    <form id={formId} action={accion} className="flex h-7 items-center justify-end gap-1">
+      <input type="hidden" name="id" value={id} />
+      <input type="hidden" name="producto_id" value={productoId} />
+      <input
+        name="cantidad"
+        defaultValue={cantidad}
+        onBlur={(e) => e.currentTarget.form?.requestSubmit()}
+        className="campo mt-0 w-14 px-1.5 py-1 text-right text-xs"
+      />
+      <span className="text-xs text-stone-400">{unidad}</span>
+    </form>
+  );
+}
+
+export function CampoMermaComponente({ formId, mermaPct }: { formId: string; mermaPct: number }) {
+  return (
+    <input
+      name="merma_pct"
+      form={formId}
+      defaultValue={mermaPct}
+      onBlur={(e) => e.currentTarget.form?.requestSubmit()}
+      className="campo mt-0 w-10 px-1.5 py-1 text-right text-xs"
+    />
+  );
+}
+
 export function FormularioComponente({
   productoId,
   permiteSubgrupos,

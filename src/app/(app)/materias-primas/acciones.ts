@@ -5,6 +5,15 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { aNumero, aTexto } from "@/lib/formato";
 
+function mensajeCodigoDuplicado(codigo: string, error: { code?: string; message: string }) {
+  if (error.code === "23505") {
+    return `Ya existe una materia prima con el código "${codigo}".`;
+  }
+  return null;
+}
+
+export type EstadoFormularioMateriaPrima = { error?: string } | undefined;
+
 function datosMateriaPrima(formData: FormData) {
   return {
     codigo: String(formData.get("codigo") ?? "").trim(),
@@ -19,14 +28,16 @@ function datosMateriaPrima(formData: FormData) {
   };
 }
 
-export async function crearMateriaPrima(formData: FormData) {
+export async function crearMateriaPrima(
+  _estado: EstadoFormularioMateriaPrima,
+  formData: FormData,
+): Promise<EstadoFormularioMateriaPrima> {
   const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("materia_prima")
-    .insert(datosMateriaPrima(formData))
-    .select("id")
-    .single();
-  if (error) throw new Error(`No se pudo crear la materia prima: ${error.message}`);
+  const datos = datosMateriaPrima(formData);
+  const { data, error } = await supabase.from("materia_prima").insert(datos).select("id").single();
+  if (error) {
+    return { error: mensajeCodigoDuplicado(datos.codigo, error) ?? `No se pudo crear la materia prima: ${error.message}` };
+  }
 
   // Precio inicial opcional
   const precio = aNumero(formData.get("precio"));
@@ -38,18 +49,28 @@ export async function crearMateriaPrima(formData: FormData) {
       precio,
       es_preferido: true,
     });
-    if (errorPrecio) throw new Error(`Materia prima creada, pero falló el precio: ${errorPrecio.message}`);
+    if (errorPrecio) {
+      revalidatePath("/materias-primas");
+      revalidatePath("/productos");
+      return { error: `Materia prima creada, pero falló el precio: ${errorPrecio.message}` };
+    }
   }
 
   revalidatePath("/materias-primas");
   revalidatePath("/productos");
 }
 
-export async function actualizarMateriaPrima(formData: FormData) {
+export async function actualizarMateriaPrima(
+  _estado: EstadoFormularioMateriaPrima,
+  formData: FormData,
+): Promise<EstadoFormularioMateriaPrima> {
   const id = String(formData.get("id"));
   const supabase = await createClient();
-  const { error } = await supabase.from("materia_prima").update(datosMateriaPrima(formData)).eq("id", id);
-  if (error) throw new Error(`No se pudo actualizar la materia prima: ${error.message}`);
+  const datos = datosMateriaPrima(formData);
+  const { error } = await supabase.from("materia_prima").update(datos).eq("id", id);
+  if (error) {
+    return { error: mensajeCodigoDuplicado(datos.codigo, error) ?? `No se pudo actualizar la materia prima: ${error.message}` };
+  }
   revalidatePath("/materias-primas");
   revalidatePath(`/materias-primas/${id}`);
   revalidatePath("/productos");

@@ -25,7 +25,7 @@ import {
   actualizarProcesoDeProducto,
   eliminarProcesoDeProducto,
 } from "../acciones";
-import { FormularioComponente, FormularioProceso } from "./formularios";
+import { CampoCantidadComponente, CampoMermaComponente, FormularioComponente, FormularioProceso } from "./formularios";
 
 export const dynamic = "force-dynamic";
 
@@ -156,10 +156,12 @@ export default async function ProductoPage({ params }: { params: Promise<{ id: s
                     <Vacio mensaje="Todavía no cargaste componentes." colSpan={9} />
                   )}
                   {componentes.map((c) => (
-                    <tr key={c.id}>
-                      <td className="text-xs text-stone-400">{c.orden}</td>
+                    <tr key={c.id} className="[&>td]:!align-top">
+                      <td className="text-xs text-stone-400">
+                        <div className="flex h-7 items-center">{c.orden}</div>
+                      </td>
                       <td>
-                        <div className="flex items-center gap-2">
+                        <div className="flex h-7 items-center gap-2">
                           {c.tipo === "SUBGRUPO" ? (
                             <Pastilla tono="azul">Subgrupo</Pastilla>
                           ) : (
@@ -188,37 +190,41 @@ export default async function ProductoPage({ params }: { params: Promise<{ id: s
                         </div>
                       </td>
                       <td className="num">
-                        <form action={actualizarComponente} className="flex items-center justify-end gap-1">
-                          <input type="hidden" name="id" value={c.id} />
-                          <input type="hidden" name="producto_id" value={producto.id} />
-                          <input
-                            name="cantidad"
-                            defaultValue={c.cantidad}
-                            className="campo mt-0 w-20 px-2 py-1 text-right text-xs"
-                          />
-                          <input
-                            name="merma_pct"
-                            defaultValue={c.merma_pct}
-                            className="campo mt-0 w-14 px-2 py-1 text-right text-xs"
-                          />
-                          <button className="boton-secundario px-2 py-1 text-xs">✓</button>
-                        </form>
-                        <div className="mt-0.5 text-xs text-stone-400">{c.unidad}</div>
+                        <CampoCantidadComponente
+                          formId={`form-componente-${c.id}`}
+                          id={c.id}
+                          productoId={producto.id}
+                          cantidad={c.cantidad}
+                          unidad={c.unidad}
+                          accion={actualizarComponente}
+                        />
                       </td>
-                      <td className="num text-xs text-stone-500">{porcentaje(c.merma_pct)}</td>
+                      <td className="num text-xs text-stone-500">
+                        <div className="flex h-7 items-center justify-end">
+                          <CampoMermaComponente formId={`form-componente-${c.id}`} mermaPct={c.merma_pct} />
+                        </div>
+                      </td>
                       <td className="num text-stone-600">
-                        {numero(c.cantidad_con_merma, 4)} {c.unidad}
+                        <div className="flex h-7 items-center justify-end">
+                          {numero(c.cantidad_con_merma)} {c.unidad}
+                        </div>
                       </td>
                       <td className="num">
-                        {c.sin_precio ? <Pastilla tono="ambar">Sin precio</Pastilla> : pesos(c.costo_unitario, true)}
+                        <div className="flex h-7 items-center justify-end">
+                          {c.sin_precio ? <Pastilla tono="ambar">Sin precio</Pastilla> : pesos(c.costo_unitario, true)}
+                        </div>
                       </td>
-                      <td className="num font-medium text-stone-900">{pesos(c.costo_total)}</td>
-                      <td className="num text-xs text-stone-400">{porcentaje(parte(c.costo_total ?? 0))}</td>
+                      <td className="num font-medium text-stone-900">
+                        <div className="flex h-7 items-center justify-end">{pesos(c.costo_total)}</div>
+                      </td>
+                      <td className="num text-xs text-stone-400">
+                        <div className="flex h-7 items-center justify-end">{porcentaje(parte(c.costo_total ?? 0))}</div>
+                      </td>
                       <td className="text-right">
-                        <form action={eliminarComponente}>
+                        <form action={eliminarComponente} className="flex h-7 items-center justify-end">
                           <input type="hidden" name="id" value={c.id} />
                           <input type="hidden" name="producto_id" value={producto.id} />
-                          <BotonEliminar />
+                          <BotonEliminar title="Eliminar componente">×</BotonEliminar>
                         </form>
                       </td>
                     </tr>
@@ -412,7 +418,7 @@ export default async function ProductoPage({ params }: { params: Promise<{ id: s
                           </td>
                           <td className="text-stone-500">{e.proveedor ?? "—"}</td>
                           <td className="num">
-                            {numero(e.cantidad, 4)} {e.unidad}
+                            {numero(e.cantidad)} {e.unidad}
                           </td>
                           <td className="num font-medium">{pesos(e.costo)}</td>
                         </tr>
