@@ -21,6 +21,16 @@ export type Proveedor = {
   activo: boolean;
 };
 
+export type ProveedorContacto = {
+  id: string;
+  proveedor_id: string;
+  nombre: string;
+  cargo: string | null;
+  telefono: string | null;
+  email: string | null;
+  orden: number;
+};
+
 export type Zona = {
   id: string;
   nombre: string;

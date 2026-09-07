@@ -71,7 +71,14 @@ export function FilaProveedor({
 }) {
   return (
     <tr>
-      <td className="font-medium text-stone-900">{proveedor.nombre}</td>
+      <td>
+        <Link
+          href={`/proveedores/${proveedor.id}`}
+          className="font-medium text-stone-900 hover:text-marca-700 hover:underline"
+        >
+          {proveedor.nombre}
+        </Link>
+      </td>
       <td className="text-stone-500">{proveedor.cuit ?? "—"}</td>
       <td className="text-stone-500">{proveedor.contacto ?? "—"}</td>
       <td className="text-stone-500">
