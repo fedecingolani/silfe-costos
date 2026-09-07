@@ -56,3 +56,13 @@ export function aTexto(valor: FormDataEntryValue | null): string | null {
   const texto = String(valor).trim();
   return texto === "" ? null : texto;
 }
+
+/** Sugiere el próximo código correlativo (ej. "MP-013") a partir de los códigos existentes. */
+export function sugerirCodigo(prefijo: string, codigosExistentes: string[], digitos = 3): string {
+  const regex = new RegExp(`^${prefijo}-(\\d+)$`, "i");
+  const maximo = codigosExistentes.reduce((max, codigo) => {
+    const match = codigo.match(regex);
+    return match ? Math.max(max, Number(match[1])) : max;
+  }, 0);
+  return `${prefijo}-${String(maximo + 1).padStart(digitos, "0")}`;
+}

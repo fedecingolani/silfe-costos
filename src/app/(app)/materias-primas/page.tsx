@@ -2,7 +2,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { Encabezado, Tarjeta, Vacio, Pastilla } from "@/components/ui";
 import { Modal } from "@/components/Modal";
-import { pesos, numero, porcentaje } from "@/lib/formato";
+import { pesos, numero, porcentaje, sugerirCodigo } from "@/lib/formato";
 import type { MateriaPrimaCosto, Proveedor, UnidadMedida } from "@/lib/tipos";
 import { FormNuevaMateriaPrima } from "./FormNuevaMateriaPrima";
 
@@ -37,6 +37,7 @@ export default async function MateriasPrimasPage({
   const listaUnidades = (unidades ?? []) as UnidadMedida[];
   const listaProveedores = (proveedores ?? []) as Proveedor[];
   const sinPrecio = lista.filter((m) => m.precio_compra === null).length;
+  const codigoSugerido = sugerirCodigo("MP", (materias ?? []).map((m) => m.codigo));
 
   return (
     <>
@@ -45,7 +46,11 @@ export default async function MateriasPrimasPage({
         descripcion="Cada material se compra en una unidad y se consume en otra. El factor de conversión traduce una en la otra."
         acciones={
           <Modal boton="+ Agregar materia prima" titulo="Nueva materia prima">
-            <FormNuevaMateriaPrima listaUnidades={listaUnidades} listaProveedores={listaProveedores} />
+            <FormNuevaMateriaPrima
+              listaUnidades={listaUnidades}
+              listaProveedores={listaProveedores}
+              codigoSugerido={codigoSugerido}
+            />
           </Modal>
         }
       />

@@ -8,9 +8,11 @@ import { crearMateriaPrima } from "./acciones";
 export function FormNuevaMateriaPrima({
   listaUnidades,
   listaProveedores,
+  codigoSugerido,
 }: {
   listaUnidades: UnidadMedida[];
   listaProveedores: Proveedor[];
+  codigoSugerido: string;
 }) {
   const [estado, accion, pendiente] = useActionState(crearMateriaPrima, undefined);
 
@@ -20,7 +22,7 @@ export function FormNuevaMateriaPrima({
         <div className="grid grid-cols-3 gap-3">
           <div>
             <label className="etiqueta">Código *</label>
-            <input name="codigo" required placeholder="MP-013" className="campo" />
+            <input name="codigo" required defaultValue={codigoSugerido} className="campo" />
           </div>
           <div className="col-span-2">
             <label className="etiqueta">Nombre *</label>
