@@ -8,6 +8,7 @@
 insert into unidad_medida (codigo, nombre, magnitud) values
   ('u',   'Unidad',            'UNIDAD'),
   ('par', 'Par',               'UNIDAD'),
+  ('doc', 'Docena',            'UNIDAD'),
   ('kg',  'Kilogramo',         'MASA'),
   ('g',   'Gramo',             'MASA'),
   ('m',   'Metro',             'LONGITUD'),

@@ -2,9 +2,10 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { Encabezado, Tarjeta, Vacio, Pastilla } from "@/components/ui";
 import { Modal } from "@/components/Modal";
-import { pesos, minutosAHoras } from "@/lib/formato";
+import { pesos, numero, porcentaje, minutosAHoras } from "@/lib/formato";
 import type { ProductoCosto, UnidadMedida } from "@/lib/tipos";
 import { crearProducto } from "./acciones";
+import { CamposVenta } from "./CamposVenta";
 
 export const dynamic = "force-dynamic";
 
@@ -27,6 +28,7 @@ export default async function ProductosPage({
 
   const todos = (data ?? []) as ProductoCosto[];
   const listaUnidades = (unidades ?? []) as UnidadMedida[];
+  const codigoUnidad = new Map(listaUnidades.map((u) => [u.id, u.codigo]));
   const filtrados = tipo ? todos.filter((p) => p.tipo === tipo) : todos;
   const terminados = todos.filter((p) => p.tipo === "TERMINADO").length;
   const subgrupos = todos.filter((p) => p.tipo === "SUBGRUPO").length;
@@ -77,6 +79,7 @@ export default async function ProductosPage({
                   ))}
                 </select>
               </div>
+              <CamposVenta unidades={listaUnidades} />
               <div>
                 <label className="etiqueta">Descripción</label>
                 <textarea name="descripcion" rows={2} className="campo" />
@@ -120,10 +123,11 @@ export default async function ProductosPage({
                   <th className="num">Tiempo</th>
                   <th className="num">Costo total</th>
                   <th className="num">Precio sugerido</th>
+                  <th className="num">Precio presentación</th>
                 </tr>
               </thead>
               <tbody>
-                {filtrados.length === 0 && <Vacio mensaje="No hay productos cargados." colSpan={7} />}
+                {filtrados.length === 0 && <Vacio mensaje="No hay productos cargados." colSpan={8} />}
                 {filtrados.map((p) => (
                   <tr key={p.id}>
                     <td>
@@ -152,6 +156,14 @@ export default async function ProductosPage({
                     <td className="num text-stone-500">{minutosAHoras(p.minutos_totales)}</td>
                     <td className="num font-semibold text-stone-900">{pesos(p.costo_total)}</td>
                     <td className="num text-marca-800">{pesos(p.precio_sugerido)}</td>
+                    <td className="num text-marca-800">
+                      {pesos(p.precio_presentacion)}
+                      <div className="text-xs font-normal text-stone-400">
+                        {p.unidad_venta_id ? `x ${codigoUnidad.get(p.unidad_venta_id) ?? "—"} · ` : ""}
+                        {p.factor_venta !== 1 ? `factor ${numero(p.factor_venta)} · ` : ""}
+                        IVA {porcentaje(p.alicuota_iva)}
+                      </div>
+                    </td>
                   </tr>
                 ))}
               </tbody>

@@ -25,6 +25,7 @@ import {
   actualizarProcesoDeProducto,
   eliminarProcesoDeProducto,
 } from "../acciones";
+import { CamposVenta } from "../CamposVenta";
 import { CampoCantidadComponente, CampoMermaComponente, FormularioComponente, FormularioProceso } from "./formularios";
 
 export const dynamic = "force-dynamic";
@@ -74,6 +75,13 @@ export default async function ProductoPage({ params }: { params: Promise<{ id: s
   const faltanPrecios = componentes.some((c) => c.sin_precio);
   const costoTotal = costo?.costo_total ?? 0;
   const parte = (valor: number) => (costoTotal > 0 ? (valor / costoTotal) * 100 : 0);
+  const unidadVenta = unidades.find((u) => u.id === costo?.unidad_venta_id);
+  const presentacion = [
+    unidadVenta ? `x ${unidadVenta.codigo}` : null,
+    `factor ${numero(costo?.factor_venta ?? producto.factor_venta)}`,
+  ]
+    .filter(Boolean)
+    .join(" · ");
 
   return (
     <>
@@ -102,7 +110,7 @@ export default async function ProductoPage({ params }: { params: Promise<{ id: s
         </div>
       )}
 
-      <div className="mb-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+      <div className="mb-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
         <Kpi
           etiqueta="Materiales"
           valor={pesos(costo?.costo_materiales)}
@@ -122,6 +130,11 @@ export default async function ProductoPage({ params }: { params: Promise<{ id: s
           etiqueta="Precio sugerido"
           valor={pesos(costo?.precio_sugerido)}
           detalle={`margen ${porcentaje(costo?.margen_pct)}`}
+        />
+        <Kpi
+          etiqueta="Precio presentación"
+          valor={pesos(costo?.precio_presentacion)}
+          detalle={`${presentacion} · IVA ${porcentaje(costo?.alicuota_iva ?? producto.alicuota_iva)}`}
         />
       </div>
 
@@ -471,6 +484,16 @@ export default async function ProductoPage({ params }: { params: Promise<{ id: s
                 <dt className="text-stone-600">Precio sugerido ({porcentaje(costo?.margen_pct)})</dt>
                 <dd className="tabular-nums font-medium text-stone-900">{pesos(costo?.precio_sugerido)}</dd>
               </div>
+              <div className="flex justify-between px-4 py-2">
+                <dt className="text-stone-600">Precio por presentación ({presentacion})</dt>
+                <dd className="tabular-nums font-medium text-stone-900">{pesos(costo?.precio_presentacion)}</dd>
+              </div>
+              <div className="flex justify-between px-4 py-2">
+                <dt className="text-stone-600">Alícuota de IVA</dt>
+                <dd className="tabular-nums text-stone-900">
+                  {porcentaje(costo?.alicuota_iva ?? producto.alicuota_iva)}
+                </dd>
+              </div>
             </dl>
             <p className="border-t border-stone-100 px-4 py-2 text-xs text-stone-400">
               Los porcentajes de gastos generales y margen se configuran en{" "}
@@ -512,6 +535,12 @@ export default async function ProductoPage({ params }: { params: Promise<{ id: s
                   ))}
                 </select>
               </div>
+              <CamposVenta
+                unidades={unidades}
+                alicuotaIva={producto.alicuota_iva}
+                unidadVentaId={producto.unidad_venta_id}
+                factorVenta={producto.factor_venta}
+              />
               <div>
                 <label className="etiqueta">Descripción</label>
                 <textarea name="descripcion" rows={3} defaultValue={producto.descripcion ?? ""} className="campo" />

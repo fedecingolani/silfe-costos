@@ -21,6 +21,9 @@ function datosProducto(formData: FormData) {
     descripcion: aTexto(formData.get("descripcion")),
     unidad_id: aTexto(formData.get("unidad_id")),
     activo: formData.get("activo") === "on",
+    alicuota_iva: aNumero(formData.get("alicuota_iva"), 21),
+    unidad_venta_id: aTexto(formData.get("unidad_venta_id")),
+    factor_venta: aNumero(formData.get("factor_venta"), 1),
   };
 }
 
@@ -76,6 +79,9 @@ export async function duplicarProducto(formData: FormData) {
       descripcion: original.descripcion,
       unidad_id: original.unidad_id,
       activo: false,
+      alicuota_iva: original.alicuota_iva,
+      unidad_venta_id: original.unidad_venta_id,
+      factor_venta: original.factor_venta,
     })
     .select("id")
     .single();

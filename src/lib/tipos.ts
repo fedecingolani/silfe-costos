@@ -130,6 +130,12 @@ export type Producto = {
   descripcion: string | null;
   unidad_id: string | null;
   activo: boolean;
+  /** Alícuota de IVA en porcentaje (ej. 10.5, 21). */
+  alicuota_iva: number;
+  /** Unidad de la presentación de venta; null = igual a unidad_id. */
+  unidad_venta_id: string | null;
+  /** Unidades de costeo por presentación de venta. */
+  factor_venta: number;
 };
 
 export type ProductoCosto = {
@@ -153,6 +159,12 @@ export type ProductoCosto = {
   gastos_generales: number;
   costo_total: number;
   precio_sugerido: number;
+  alicuota_iva: number;
+  /** Ya resuelta: unidad_venta_id del producto o, si falta, su unidad_id. */
+  unidad_venta_id: string | null;
+  factor_venta: number;
+  /** precio_sugerido × factor_venta. */
+  precio_presentacion: number;
 };
 
 export type ComponenteDetalle = {
