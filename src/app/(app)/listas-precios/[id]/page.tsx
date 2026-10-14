@@ -40,9 +40,17 @@ export default async function ListaPrecioPage({ params }: { params: Promise<{ id
         titulo={datos.nombre}
         descripcion={`${datos.titulo ?? "Sin título"} · Creada el ${fechaHora(datos.creado_en)}`}
         acciones={
-          <Link href={`/listas-precios/nueva?desde=${datos.id}`} className="boton-primario">
-            Duplicar
-          </Link>
+          <div className="flex gap-2">
+            <a href={`/listas-precios/${datos.id}/pdf`} className="boton-secundario">
+              PDF
+            </a>
+            <a href={`/listas-precios/${datos.id}/excel`} className="boton-secundario">
+              Excel
+            </a>
+            <Link href={`/listas-precios/nueva?desde=${datos.id}`} className="boton-primario">
+              Duplicar
+            </Link>
+          </div>
         }
       />
 

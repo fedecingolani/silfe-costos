@@ -238,6 +238,10 @@ export type ParametroCosteo = {
   moneda: string;
   gastos_generales_pct: number;
   margen_pct: number;
+  /** Texto grande y centrado del pie de la lista en PDF. null: no se imprime. */
+  lista_texto_destacado: string | null;
+  /** Contacto del pie de la lista en PDF, en varias líneas. null: no se imprime. */
+  lista_contacto: string | null;
 };
 
 /** Lista de precios guardada. Inmutable: para corregirla se duplica. */

@@ -1,7 +1,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { Encabezado, Tarjeta } from "@/components/ui";
-import { aNumero } from "@/lib/formato";
+import { aNumero, aTexto } from "@/lib/formato";
 import type { ParametroCosteo } from "@/lib/tipos";
 
 export const dynamic = "force-dynamic";
@@ -15,6 +15,8 @@ async function guardar(formData: FormData) {
       moneda: String(formData.get("moneda") ?? "ARS").trim(),
       gastos_generales_pct: aNumero(formData.get("gastos_generales_pct"), 0),
       margen_pct: aNumero(formData.get("margen_pct"), 0),
+      lista_texto_destacado: aTexto(formData.get("lista_texto_destacado")),
+      lista_contacto: aTexto(formData.get("lista_contacto")),
     })
     .eq("id", true);
   if (error) throw new Error(`No se pudieron guardar los parámetros: ${error.message}`);
@@ -56,6 +58,34 @@ export default async function ConfiguracionPage() {
               <input name="margen_pct" defaultValue={p?.margen_pct ?? 0} className="campo" />
               <p className="mt-1 text-xs text-stone-500">
                 Sólo se usa para calcular el precio sugerido; no afecta el costo.
+              </p>
+            </div>
+            <div className="border-t border-stone-200 pt-3">
+              <p className="text-sm font-medium text-stone-800">Pie de la lista de precios</p>
+              <p className="mt-1 text-xs text-stone-500">
+                Se imprime al final del PDF de cada lista. Si lo dejás vacío, no se imprime.
+              </p>
+            </div>
+            <div>
+              <label className="etiqueta">Texto destacado</label>
+              <input
+                name="lista_texto_destacado"
+                defaultValue={p?.lista_texto_destacado ?? ""}
+                placeholder="SIL – FE 30 AÑOS"
+                className="campo"
+              />
+              <p className="mt-1 text-xs text-stone-500">Va grande y centrado, debajo de los precios.</p>
+            </div>
+            <div>
+              <label className="etiqueta">Contacto</label>
+              <textarea
+                name="lista_contacto"
+                rows={4}
+                defaultValue={p?.lista_contacto ?? ""}
+                className="campo"
+              />
+              <p className="mt-1 text-xs text-stone-500">
+                Teléfonos, correo, dirección. Cada renglón se imprime en una línea.
               </p>
             </div>
             <button className="boton-primario">Guardar parámetros</button>

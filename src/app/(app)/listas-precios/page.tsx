@@ -60,10 +60,18 @@ export default async function ListasPreciosPage() {
                   </td>
                   <td className="text-stone-600">{l.titulo ?? "—"}</td>
                   <td className="num">{l.lista_precio_item[0]?.count ?? 0}</td>
-                  <td className="text-right">
-                    <Link href={`/listas-precios/${l.id}`} className="boton-secundario px-2 py-1 text-xs">
-                      Ver
-                    </Link>
+                  <td className="whitespace-nowrap text-right">
+                    <div className="inline-flex gap-1">
+                      <a href={`/listas-precios/${l.id}/pdf`} className="boton-secundario px-2 py-1 text-xs">
+                        PDF
+                      </a>
+                      <a href={`/listas-precios/${l.id}/excel`} className="boton-secundario px-2 py-1 text-xs">
+                        Excel
+                      </a>
+                      <Link href={`/listas-precios/${l.id}`} className="boton-secundario px-2 py-1 text-xs">
+                        Ver
+                      </Link>
+                    </div>
                   </td>
                 </tr>
               ))}
