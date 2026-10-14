@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { Encabezado, Tarjeta, Vacio, Pastilla, Migas } from "@/components/ui";
 import { fechaHora, numero, pesos, porcentaje } from "@/lib/formato";
 import type { ListaPrecio, ListaPrecioItem } from "@/lib/tipos";
+import { esUuid } from "@/lib/listas-precios/uuid";
 
 export const dynamic = "force-dynamic";
 
@@ -14,6 +15,7 @@ function diferencia(item: ListaPrecioItem): number | null {
 
 export default async function ListaPrecioPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  if (!esUuid(id)) notFound();
   const supabase = await createClient();
 
   const [{ data: lista, error: errorLista }, { data: itemsData, error: errorItems }] = await Promise.all([

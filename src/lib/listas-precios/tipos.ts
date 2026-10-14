@@ -16,4 +16,6 @@ export type DatosListaDescarga = {
   contacto: string | null;
   /** Bytes del logo en PNG. null: la lista sale sin logo. */
   logo: Uint8Array | null;
+  /** Fecha de creación de la lista (ISO): fija las fechas del PDF para que la misma lista dé los mismos bytes. */
+  creadoEn: string;
 };

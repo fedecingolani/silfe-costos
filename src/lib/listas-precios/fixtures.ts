@@ -58,4 +58,5 @@ export const datosDeReferencia: DatosListaDescarga = {
   textoDestacado: "SIL – FE 30 AÑOS",
   contacto: "Ventas: (0299) 555-1234\nventas@silfe.com.ar\nCipolletti, Río Negro",
   logo: null,
+  creadoEn: "2023-12-01T12:00:00+00:00",
 };
