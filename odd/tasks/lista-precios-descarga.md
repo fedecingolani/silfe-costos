@@ -99,7 +99,15 @@ con un texto destacado y los datos de contacto. El Excel sirve para operar con l
   - un id que no es uuid devuelve 500;
   - los caracteres fuera de WinAnsi salen como "?".
 
+- Commit `be3bec0`. Revisión `review-fcf7ab3e060c8391`, con consentimiento: **aprobada y
+  confirmada**. Seguimientos que no bloquean:
+  - un id inválido devuelve 500 con el mensaje de la base;
+  - el fetch del logo no tiene timeout y se ignora en silencio si falla;
+  - una presentación larga puede superponerse con el precio en el PDF;
+  - las rutas no tienen tests;
+  - "Repuestos:" puede quedar sola al final de una página.
+
 ## Próximo paso
 
-Commit y evaluación de riesgo. Después: la pasada de mejoras con los seguimientos de las
+La pasada de mejoras con los seguimientos de las
 revisiones y, más adelante, el deploy (con `db push`), que decide el usuario.
