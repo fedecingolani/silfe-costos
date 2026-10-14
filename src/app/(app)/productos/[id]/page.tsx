@@ -30,8 +30,21 @@ import { CampoCantidadComponente, CampoMermaComponente, FormularioComponente, Fo
 
 export const dynamic = "force-dynamic";
 
-export default async function ProductoPage({ params }: { params: Promise<{ id: string }> }) {
+/** Avisos que llegan por ?aviso= desde las acciones del producto. */
+const AVISOS: Record<string, string> = {
+  "en-listas": "El producto está en listas de precios guardadas: desactivalo en lugar de borrarlo.",
+};
+
+export default async function ProductoPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ aviso?: string }>;
+}) {
   const { id } = await params;
+  const { aviso } = await searchParams;
+  const mensajeAviso = aviso && Object.hasOwn(AVISOS, aviso) ? AVISOS[aviso] : undefined;
   const supabase = await createClient();
 
   const [
@@ -103,6 +116,15 @@ export default async function ProductoPage({ params }: { params: Promise<{ id: s
           </>
         }
       />
+
+      {mensajeAviso && (
+        <div
+          role="alert"
+          className="mb-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
+        >
+          No se pudo eliminar. {mensajeAviso}
+        </div>
+      )}
 
       {faltanPrecios && (
         <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">

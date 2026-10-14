@@ -13,6 +13,9 @@ function refrescar(productoId?: string) {
 
 // ----- Producto -------------------------------------------------------
 
+/** Valor de ?aviso= cuando no se puede borrar un producto usado en listas de precios. */
+const AVISO_EN_LISTAS = "en-listas";
+
 function datosProducto(formData: FormData) {
   return {
     codigo: String(formData.get("codigo") ?? "").trim(),
@@ -48,8 +51,14 @@ export async function actualizarProducto(formData: FormData) {
 }
 
 export async function eliminarProducto(formData: FormData) {
+  const id = String(formData.get("id"));
   const supabase = await createClient();
-  const { error } = await supabase.from("producto").delete().eq("id", String(formData.get("id")));
+  const { error } = await supabase.from("producto").delete().eq("id", id);
+  // Next enmascara en producción los errores lanzados desde una acción: este
+  // caso se avisa en la página del producto con un parámetro de la URL.
+  if (error?.code === "23503" && error.message.includes("lista_precio_item")) {
+    redirect(`/productos/${id}?aviso=${AVISO_EN_LISTAS}`);
+  }
   if (error) {
     throw new Error(
       `No se pudo eliminar. Si es un subgrupo, puede estar usado en otro producto. Detalle: ${error.message}`,
