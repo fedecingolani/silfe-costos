@@ -21,7 +21,14 @@ Tomar el precio sugerido que ya calcula el sistema, permitir ajustarlo a mano y 
   - todos los productos `TERMINADO` activos;
   - todos los `SUBGRUPO` activos (los repuestos, por ejemplo lona interior o correaje);
   - el **precio sugerido** de cada uno como valor inicial, **editable**.
-- Posibilidad de **agregar ítems manuales** que no existen en el sistema.
+- Posibilidad de **agregar ítems manuales** que no existen en el sistema, por ejemplo
+  "Remeras SILFE $1000". Un ítem manual:
+  - no hace referencia a ningún producto, materia prima ni costo;
+  - existe solo dentro de esa lista y no crea nada en el resto del sistema;
+  - se carga a mano: descripción y precio obligatorios; código, presentación y alícuota de IVA
+    opcionales (IVA 21% por defecto);
+  - no tiene precio sugerido ni redondeo: el precio que se carga es el precio final;
+  - si se duplica la lista, se copia junto con los demás ítems.
 - Una lista guardada queda **congelada**: es una foto de los precios de ese momento y no cambia
   aunque después se modifiquen los costos.
 
