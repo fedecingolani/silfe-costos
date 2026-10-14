@@ -1,6 +1,6 @@
 /**
  * Mensajes legibles para los errores de la base al guardar clientes,
- * sucursales y contactos. Las acciones los devuelven en lugar de lanzarlos:
+ * sucursales, contactos e interacciones. Las acciones los devuelven en lugar de lanzarlos:
  * en producción Next reemplaza el mensaje de un error lanzado por uno genérico.
  */
 
@@ -68,4 +68,21 @@ const MENSAJES_CONTACTO: Mensajes = {
 
 export function mensajeErrorContacto(accion: string, error: ErrorBase): string {
   return traducir(error, MENSAJES_CONTACTO) ?? `No se pudo ${accion} el contacto: ${error.message}`;
+}
+
+const MENSAJES_INTERACCION: Mensajes = {
+  "23502": { resumen: "Escribí un resumen de la interacción." },
+  "23514": {
+    cliente_interaccion_resumen_check: "Escribí un resumen de la interacción.",
+    cliente_interaccion_tipo_check: "El tipo de interacción no es válido.",
+    cliente_interaccion_sentido_check: "El sentido de la interacción no es válido.",
+  },
+  "23503": {
+    cliente_interaccion_contacto_fk: "El contacto elegido ya no existe o es de otro cliente.",
+    cliente_interaccion_cliente_id_fkey: "El cliente ya no existe.",
+  },
+};
+
+export function mensajeErrorInteraccion(accion: string, error: ErrorBase): string {
+  return traducir(error, MENSAJES_INTERACCION) ?? `No se pudo ${accion} la interacción: ${error.message}`;
 }

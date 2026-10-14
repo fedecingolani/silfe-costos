@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { mensajeErrorCliente, mensajeErrorContacto, mensajeErrorSucursal } from "./errores";
+import {
+  mensajeErrorCliente,
+  mensajeErrorContacto,
+  mensajeErrorInteraccion,
+  mensajeErrorSucursal,
+} from "./errores";
 
 describe("mensajeErrorCliente", () => {
   it("traduce las restricciones de los datos bancarios y del IVA", () => {
@@ -106,6 +111,46 @@ describe("mensajeErrorContacto", () => {
   it("si no lo reconoce, dice qué acción falló", () => {
     expect(mensajeErrorContacto("eliminar", { code: "42501", message: "permiso denegado" })).toBe(
       "No se pudo eliminar el contacto: permiso denegado",
+    );
+  });
+});
+
+describe("mensajeErrorInteraccion", () => {
+  const error = (code: string, restriccion: string) => ({
+    code,
+    message: `violates constraint "${restriccion}"`,
+  });
+
+  it("avisa si el contacto elegido no es del cliente", () => {
+    expect(mensajeErrorInteraccion("registrar", error("23503", "cliente_interaccion_contacto_fk"))).toBe(
+      "El contacto elegido ya no existe o es de otro cliente.",
+    );
+  });
+
+  it("avisa si el cliente ya no existe", () => {
+    expect(mensajeErrorInteraccion("registrar", error("23503", "cliente_interaccion_cliente_id_fkey"))).toBe(
+      "El cliente ya no existe.",
+    );
+  });
+
+  it("traduce el resumen vacío, el tipo y el sentido", () => {
+    expect(mensajeErrorInteraccion("registrar", error("23514", "cliente_interaccion_resumen_check"))).toBe(
+      "Escribí un resumen de la interacción.",
+    );
+    expect(mensajeErrorInteraccion("registrar", error("23502", "resumen"))).toBe(
+      "Escribí un resumen de la interacción.",
+    );
+    expect(mensajeErrorInteraccion("registrar", error("23514", "cliente_interaccion_tipo_check"))).toBe(
+      "El tipo de interacción no es válido.",
+    );
+    expect(mensajeErrorInteraccion("registrar", error("23514", "cliente_interaccion_sentido_check"))).toBe(
+      "El sentido de la interacción no es válido.",
+    );
+  });
+
+  it("si no lo reconoce, dice qué acción falló", () => {
+    expect(mensajeErrorInteraccion("actualizar", { code: "42501", message: "permiso denegado" })).toBe(
+      "No se pudo actualizar la interacción: permiso denegado",
     );
   });
 });

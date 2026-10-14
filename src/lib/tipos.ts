@@ -111,6 +111,72 @@ export type ClienteContacto = {
   orden: number;
 };
 
+export const TIPOS_INTERACCION = ["LLAMADO", "VISITA", "WHATSAPP", "EMAIL", "OTRO"] as const;
+export type TipoInteraccion = (typeof TIPOS_INTERACCION)[number];
+
+export const ETIQUETAS_TIPO_INTERACCION: Record<TipoInteraccion, string> = {
+  LLAMADO: "Llamado",
+  VISITA: "Visita",
+  WHATSAPP: "WhatsApp",
+  EMAIL: "Email",
+  OTRO: "Otro",
+};
+
+export const SENTIDOS_INTERACCION = ["SALIENTE", "ENTRANTE"] as const;
+export type SentidoInteraccion = (typeof SENTIDOS_INTERACCION)[number];
+
+export const ETIQUETAS_SENTIDO_INTERACCION: Record<SentidoInteraccion, string> = {
+  SALIENTE: "Saliente (lo iniciamos nosotros)",
+  ENTRANTE: "Entrante (nos contactó el cliente)",
+};
+
+/** Contacto con un cliente (llamado, visita, mensaje) y el próximo paso. */
+export type ClienteInteraccion = {
+  id: string;
+  cliente_id: string;
+  /** Contacto del mismo cliente; null si no se eligió o se borró. */
+  contacto_id: string | null;
+  tipo: TipoInteraccion;
+  sentido: SentidoInteraccion;
+  /** timestamptz (ISO). */
+  fecha: string;
+  resumen: string;
+  notas: string | null;
+  /** YYYY-MM-DD. La agenda del cliente es la de su interacción más reciente. */
+  proximo_contacto: string | null;
+  proxima_accion: string | null;
+  realizado_por: string | null;
+  realizado_por_email: string | null;
+  creado_en: string;
+  actualizado_en: string;
+};
+
+/** Estado de seguimiento, calculado en v_cliente_seguimiento contra la fecha de Argentina. */
+export type EstadoSeguimiento = "atrasado" | "hoy" | "proximo" | "mas_adelante" | "sin_agenda";
+
+/** Fila de v_cliente_seguimiento: un cliente con su último y su próximo contacto. */
+export type ClienteSeguimiento = {
+  cliente_id: string;
+  codigo_legado: number | null;
+  razon_social: string;
+  cuit: string | null;
+  cuit_digitos: string | null;
+  localidad: string | null;
+  telefono: string | null;
+  zona_id: string | null;
+  /** Nombre de la zona. */
+  zona: string | null;
+  transporte_id: string | null;
+  activo: boolean;
+  ultima_interaccion_id: string | null;
+  ultima_interaccion_fecha: string | null;
+  ultima_interaccion_tipo: TipoInteraccion | null;
+  ultimo_resumen: string | null;
+  proximo_contacto: string | null;
+  proxima_accion: string | null;
+  estado_seguimiento: EstadoSeguimiento;
+};
+
 export type MateriaPrima = {
   id: string;
   codigo: string;
