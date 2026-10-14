@@ -106,6 +106,19 @@ un solo writer.
   - el detalle convierte en 404 los errores de la consulta;
   - la validación de `armarItems` no tiene tests.
 
+- Revisión de la rama completa (`review-2fe4fee01c4b9705`, con consentimiento): **aprobada y
+  confirmada**. Hallazgo nuevo con impacto real:
+  - `v_producto_costo` convierte en 0 los costos faltantes, así que `precio_sugerido` nunca es
+    null. Un producto con una materia prima sin precio sale con un precio sugerido bajo o en $0,
+    y el editor no lo marca. Por eso el criterio "ítems sin precio sugerido se marcan" **no se
+    cumple en la práctica**. Se reabre como T6.
+  - El detalle convierte en 404 los errores de la consulta. Se agrega como T7.
+
+| ID | Tarea | Ruta | Estado |
+| --- | --- | --- | --- |
+| T6 | Marcar los productos con costos faltantes (materias primas sin precio, también dentro de subgrupos, o costo 0) y exigir precio manual | pendiente | [ ] |
+| T7 | Mostrar los errores de consulta en el detalle y en el duplicado, en lugar de un 404 | pendiente | [ ] |
+
 ## Próximo paso
 
  Recorrido en el navegador con un usuario de prueba local, si el
