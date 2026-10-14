@@ -2,6 +2,8 @@ import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { Encabezado, Migas } from "@/components/ui";
 import type { ListaPrecio, ListaPrecioBase, ListaPrecioItem } from "@/lib/tipos";
+import { filasDeDuplicado, type BaseActual } from "@/lib/listas-precios/duplicar";
+import { esUuid } from "@/lib/listas-precios/uuid";
 import { EditorLista, type DatosIniciales, type FilaEditor } from "./EditorLista";
 
 export const dynamic = "force-dynamic";
@@ -32,9 +34,15 @@ export default async function NuevaListaPage({
   let origen: ListaPrecio | null = null;
 
   if (desde) {
-    const [{ data: lista, error: errorLista }, { data: itemsData, error: errorItems }] = await Promise.all([
+    if (!esUuid(desde)) notFound();
+    const [
+      { data: lista, error: errorLista },
+      { data: itemsData, error: errorItems },
+      { data: baseData, error: errorBase },
+    ] = await Promise.all([
       supabase.from("lista_precio").select("*").eq("id", desde).maybeSingle(),
       supabase.from("lista_precio_item").select("*").eq("lista_id", desde).order("orden"),
+      supabase.from("v_lista_precio_base").select("producto_id, precio_sugerido, costos_incompletos"),
     ]);
     // Un error de la consulta se muestra; sólo la ausencia de la fila es un 404.
     if (errorLista) {
@@ -44,25 +52,17 @@ export default async function NuevaListaPage({
     if (errorItems) {
       return <p className="text-sm text-red-700">Error al cargar los ítems de la lista: {errorItems.message}</p>;
     }
+    if (errorBase) {
+      return <p className="text-sm text-red-700">Error al cargar los precios actuales: {errorBase.message}</p>;
+    }
     origen = lista as ListaPrecio;
-    const items = (itemsData ?? []) as ListaPrecioItem[];
     iniciales = {
       nombre: `Copia de ${origen.nombre}`,
       titulo: origen.titulo ?? "",
       notas: origen.notas ?? "",
-      filas: items.map(
-        (it): FilaEditor => ({
-          clave: it.id,
-          es_repuesto: it.es_repuesto,
-          producto_id: it.producto_id,
-          codigo: it.codigo ?? "",
-          descripcion: it.descripcion,
-          presentacion: it.presentacion ?? "",
-          alicuota_iva: String(it.alicuota_iva),
-          precio_sugerido: it.precio_sugerido,
-          precio_final: textoPrecio(it.precio_final),
-        }),
-      ),
+      // Conserva descripción, orden y precio final; el sugerido y los costos
+      // incompletos son los actuales de cada producto.
+      filas: filasDeDuplicado((itemsData ?? []) as ListaPrecioItem[], (baseData ?? []) as BaseActual[]),
     };
   } else {
     const { data, error } = await supabase.from("v_lista_precio_base").select("*").order("orden");
@@ -106,7 +106,7 @@ export default async function NuevaListaPage({
         titulo={origen ? `Duplicar: ${origen.nombre}` : "Nueva lista de precios"}
         descripcion={
           origen
-            ? "Lista precargada con los ítems y precios finales de la lista original. Ajustá lo que haga falta y guardala como una lista nueva."
+            ? "Lista precargada con los ítems y precios finales de la lista original, y el precio sugerido actual de cada producto. Ajustá lo que haga falta y guardala como una lista nueva."
             : "Lista precargada con todos los productos activos y sus repuestos. Ajustá precios, agregá ítems manuales, quitá o reordená lo que haga falta."
         }
       />

@@ -5,13 +5,20 @@ import Link from "next/link";
 import { ModalError } from "@/components/ModalError";
 import { Tarjeta, Vacio, Pastilla } from "@/components/ui";
 import { aNumero, numero, pesos, porcentaje } from "@/lib/formato";
-import { crearListaPrecio, type ItemListaEnviado } from "../acciones";
+import type { ItemListaEnviado } from "@/lib/listas-precios/items";
+import { crearListaPrecio } from "../acciones";
 
 /**
  * Fila del editor. Los precios y el IVA se guardan como texto para aceptar coma decimal.
- * `costos_incompletos` sólo viene en las filas de v_lista_precio_base; no se envía al guardar.
+ * `costos_incompletos` y `producto_no_disponible` vienen de los datos actuales de
+ * v_lista_precio_base; no se envían al guardar.
  */
-export type FilaEditor = ItemListaEnviado & { clave: string; costos_incompletos?: boolean };
+export type FilaEditor = ItemListaEnviado & {
+  clave: string;
+  costos_incompletos?: boolean;
+  /** Al duplicar: el producto ya no está activo y el sugerido es el de la lista original. */
+  producto_no_disponible?: boolean;
+};
 
 export type DatosIniciales = {
   nombre: string;
@@ -50,12 +57,18 @@ function costosIncompletos(fila: FilaEditor) {
   return fila.costos_incompletos === true;
 }
 
+/** Ítem duplicado cuyo producto ya no está activo: el sugerido es el de la lista original. */
+function noDisponible(fila: FilaEditor) {
+  return fila.producto_no_disponible === true;
+}
+
 /** Ítem de producto que exige un precio cargado a mano. */
 function requierePrecioManual(fila: FilaEditor) {
   return sinSugerido(fila) || costosIncompletos(fila);
 }
 
 const MOTIVO_COSTOS_INCOMPLETOS = "Costos incompletos: revisá precios de materias primas";
+const MOTIVO_NO_DISPONIBLE = "El producto ya no está activo: el sugerido es el de la lista original";
 
 /** Devuelve el primer problema de una fila, o null si está bien. */
 function problemaDeFila(fila: FilaEditor): string | null {
@@ -67,6 +80,7 @@ function problemaDeFila(fila: FilaEditor): string | null {
   }
   if (precio < 0) return "el precio final no puede ser negativo";
   if (costosIncompletos(fila) && precio === 0) return "tiene costos incompletos: el precio tiene que ser mayor a 0";
+  if (noDisponible(fila) && precio === 0) return "el producto ya no está activo: el precio tiene que ser mayor a 0";
   const iva = aNumero(fila.alicuota_iva, 21);
   if (iva === null || iva < 0 || iva > 100) return "el IVA tiene que estar entre 0 y 100";
   return null;
@@ -143,7 +157,9 @@ export function EditorLista({ iniciales }: { iniciales: DatosIniciales }) {
     precio_sugerido: f.precio_sugerido,
     precio_final: f.precio_final,
   }));
-  const faltantes = filas.filter((f) => requierePrecioManual(f) && problemaDeFila(f) !== null).length;
+  const faltantes = filas.filter(
+    (f) => (requierePrecioManual(f) || noDisponible(f)) && problemaDeFila(f) !== null,
+  ).length;
 
   return (
     <form action={accion} onSubmit={validar} className="space-y-4" noValidate>
@@ -216,12 +232,13 @@ export function EditorLista({ iniciales }: { iniciales: DatosIniciales }) {
                 const manual = fila.producto_id === null;
                 const falta = requierePrecioManual(fila);
                 const incompletos = costosIncompletos(fila);
+                const inactivo = noDisponible(fila);
                 const marcada = conProblema.has(fila.clave) && problemaDeFila(fila) !== null;
                 const dif = diferencia(fila);
                 return (
                   <tr
                     key={fila.clave}
-                    className={marcada ? "bg-red-50" : falta ? "bg-amber-50" : undefined}
+                    className={marcada ? "bg-red-50" : falta || inactivo ? "bg-amber-50" : undefined}
                   >
                     <td className="text-xs text-stone-400">{i + 1}</td>
                     <td className="whitespace-nowrap">
@@ -250,6 +267,11 @@ export function EditorLista({ iniciales }: { iniciales: DatosIniciales }) {
                       {incompletos && (
                         <p className={`mt-1 text-xs text-amber-800 ${fila.es_repuesto ? "pl-6" : ""}`}>
                           {MOTIVO_COSTOS_INCOMPLETOS}
+                        </p>
+                      )}
+                      {inactivo && (
+                        <p className={`mt-1 text-xs text-amber-800 ${fila.es_repuesto ? "pl-6" : ""}`}>
+                          {MOTIVO_NO_DISPONIBLE}
                         </p>
                       )}
                     </td>
@@ -281,6 +303,11 @@ export function EditorLista({ iniciales }: { iniciales: DatosIniciales }) {
                     <td className="num whitespace-nowrap text-stone-500">
                       {sinSugerido(fila) ? (
                         <Pastilla tono="ambar">Sin precio</Pastilla>
+                      ) : inactivo ? (
+                        <span title={MOTIVO_NO_DISPONIBLE} className="flex items-center justify-end gap-2">
+                          <Pastilla tono="ambar">Inactivo</Pastilla>
+                          {pesos(fila.precio_sugerido)}
+                        </span>
                       ) : incompletos ? (
                         <span title={MOTIVO_COSTOS_INCOMPLETOS} className="flex items-center justify-end gap-2">
                           <Pastilla tono="ambar">Incompleto</Pastilla>
