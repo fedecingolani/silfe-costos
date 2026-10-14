@@ -38,7 +38,7 @@ una decisión de producto. También queda fuera todo lo relacionado con las tabl
 | T1 | Migración: `alicuota_iva`, `unidad_venta_id`, `factor_venta` en `producto` | delegada (writer) | [x] |
 | T2 | Vista de costeo: alícuota, unidad de venta, factor, `precio_presentacion` | delegada (writer) | [x] |
 | T3 | Tipos y ficha de producto (alta y edición) con los campos nuevos | delegada (writer) | [x] |
-| T4 | Agrupación para la lista (sección, orden, "repuesto de") | pendiente de decisión | [ ] |
+| T4 | Agrupación para la lista: decidido que sale sola de la estructura; se arma en la Fase 2, sin cambios en el producto | decisión | [x] |
 
 Ruta: T1 a T3 tocan 3 o más archivos no triviales (SQL, tipos, formularios y acciones), así que
 se delegan a un solo writer.
@@ -81,6 +81,9 @@ se delegan a un solo writer.
   rompía `lint` y `build`. Se resolvió con `npm ci`.
 - Pendiente: el README no documenta todavía las columnas nuevas de la vista.
 
+- Commit de T1 a T3: `b8895c8`. Evaluación de riesgo: `medium`, `review_due=false`
+  (`under_budget`). Queda pendiente dentro del tramo, con base de revisión `2265753`.
+
 ## Próximo paso
 
-Commit de T1 a T3. Después, decidir el modelo de agrupación (T4).
+Actualizar el README con las columnas nuevas. Fase 1 cerrada; sigue la Fase 2 (modelo de listas).

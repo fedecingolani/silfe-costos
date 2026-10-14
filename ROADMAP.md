@@ -81,7 +81,11 @@ Agregar al producto lo que la lista necesita y hoy no existe:
   - Precio de la presentación = `precio_sugerido` × `factor_venta`. Va como columna
     nueva en la vista de costeo, para no recalcular en la app.
   - Valor por defecto: unidad de venta = unidad de costeo, factor = 1.
-- [ ] Campos de agrupación para la lista: sección u orden, y la relación "repuesto de".
+- [x] ~~Campos de agrupación~~ **Resuelto sin cambios en el producto:** la agrupación sale sola
+      de la estructura. Cada `SUBGRUPO` aparece como repuesto ("Repuestos:") debajo de cada
+      `TERMINADO` que lo usa en `producto_componente`. Se arma al generar la lista (Fase 2).
+      Si un subgrupo lo usan varios productos, aparece debajo de cada uno. Si no lo usa
+      ninguno, va a una sección "Otros repuestos" al final. El orden es por código.
 - [ ] Mostrar y editar estos campos en la ficha del producto.
 
 ### Fase 2 — Modelo de listas (base de datos)
