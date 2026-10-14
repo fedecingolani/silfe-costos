@@ -85,6 +85,16 @@ Hoy el seguimiento comercial no queda registrado en el sistema: no se sabe cuán
   - en el formulario de contacto, las etiquetas se ven alineadas a la derecha y el texto de
     ayuda se sale del modal.
 
+- Commits `097828a` y `ca9bcba`. Revisión `review-915f8299a928b40f` (correcciones de la Fase 6 y
+  Fase 7): **aprobada y confirmada**. La revisión de la rama completa la omitió el usuario.
+- **Decisión del usuario:** la agenda la manda **lo último que se cargó** (`creado_en`), aunque
+  tenga una fecha anterior. El "último contacto" sigue siendo el de fecha más reciente.
+  - Migración `20261022000001_agenda_ultima_cargada.sql`: la vista tiene dos `lateral`, uno
+    para el último contacto y otro para la agenda, más un índice por `(cliente_id, creado_en)`.
+  - RED: 2 de 3 tests fallaron con la lógica anterior. GREEN: `supabase test db` con 203 tests y
+    `npm test` con 143. Los permisos de la vista se conservan (authenticated solo `SELECT`).
+  - Textos de la pantalla actualizados.
+
 ## Próximo paso
 
 Commits y revisión. Después, decidir el alcance de la Fase 8 (ventas) y la entrega (push,

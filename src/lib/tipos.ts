@@ -142,7 +142,7 @@ export type ClienteInteraccion = {
   fecha: string;
   resumen: string;
   notas: string | null;
-  /** YYYY-MM-DD. La agenda del cliente es la de su interacción más reciente. */
+  /** YYYY-MM-DD. La agenda del cliente es la de su interacción cargada más recientemente. */
   proximo_contacto: string | null;
   proxima_accion: string | null;
   realizado_por: string | null;

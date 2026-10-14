@@ -208,7 +208,7 @@ export function FormularioInteraccion({
           </div>
         </div>
         <p className="text-xs text-stone-500">
-          La agenda del cliente es la de su interacción más reciente: sin fecha de próximo contacto, queda sin
+          La agenda del cliente es la de lo último que se carga: sin fecha de próximo contacto, queda sin
           agenda.
         </p>
         <div className="flex gap-2">

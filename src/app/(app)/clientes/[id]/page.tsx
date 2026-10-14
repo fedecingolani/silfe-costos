@@ -174,7 +174,7 @@ export default async function ClientePage({
 
       <Tarjeta
         titulo="Seguimiento"
-        descripcion="Contactos con el cliente. La agenda es la de la interacción más reciente."
+        descripcion="Contactos con el cliente. La agenda es la de lo último que se cargó."
         className="mb-6"
         acciones={
           <Modal key={claveAlta} boton="+ Registrar contacto" titulo="Registrar contacto">
