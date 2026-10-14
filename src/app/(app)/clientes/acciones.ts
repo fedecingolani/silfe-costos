@@ -8,11 +8,14 @@ import { validarCbu, validarCvu } from "@/lib/clientes/validaciones";
 import {
   mensajeErrorCliente,
   mensajeErrorContacto,
+  mensajeErrorInteraccion,
   mensajeErrorSucursal,
 } from "@/lib/clientes/errores";
+import { fechaLocalAIso, rutaDeVuelta } from "@/lib/clientes/seguimiento";
 
 function refrescar(clienteId?: string) {
   revalidatePath("/clientes");
+  revalidatePath("/seguimiento");
   if (clienteId) revalidatePath(`/clientes/${clienteId}`);
 }
 
@@ -29,7 +32,8 @@ export type AvisoCliente =
   | "cliente-no-eliminado"
   | "sucursal-no-eliminada"
   | "principal-no-marcada"
-  | "contacto-no-eliminado";
+  | "contacto-no-eliminado"
+  | "interaccion-no-eliminada";
 
 /** CBU o CVU sin espacios ni guiones; si no tiene el formato, se manda tal cual y la base lo rechaza. */
 function cuenta(valor: FormDataEntryValue | null, validar: typeof validarCbu) {
@@ -232,6 +236,89 @@ export async function eliminarContacto(formData: FormData) {
     .delete()
     .eq("id", String(formData.get("id")));
   if (error) redirect(`/clientes/${clienteId}?aviso=${"contacto-no-eliminado" satisfies AvisoCliente}`);
+  refrescar(clienteId);
+  // Vuelve a la ficha sin ?aviso=, por si quedó de un error anterior.
+  redirect(`/clientes/${clienteId}`);
+}
+
+// ----- Seguimiento: interacciones con el cliente --------------------------
+
+/**
+ * Datos del formulario de interacción. La fecha llega de un input
+ * datetime-local en hora argentina. Devuelve el error legible si algo no
+ * se puede guardar, antes de ir a la base.
+ */
+function datosInteraccion(formData: FormData) {
+  const fecha = fechaLocalAIso(String(formData.get("fecha") ?? ""));
+  if (!fecha) return { error: "La fecha y hora no son válidas." } as const;
+  const resumen = String(formData.get("resumen") ?? "").trim();
+  if (resumen === "") return { error: "Escribí un resumen de la interacción." } as const;
+  return {
+    datos: {
+      tipo: String(formData.get("tipo") ?? ""),
+      sentido: String(formData.get("sentido") ?? "SALIENTE"),
+      fecha,
+      contacto_id: aTexto(formData.get("contacto_id")),
+      resumen,
+      notas: aTexto(formData.get("notas")),
+      proximo_contacto: aTexto(formData.get("proximo_contacto")),
+      proxima_accion: aTexto(formData.get("proxima_accion")),
+    },
+  } as const;
+}
+
+export async function registrarInteraccion(
+  _estado: EstadoFormularioCliente,
+  formData: FormData,
+): Promise<EstadoFormularioCliente> {
+  const clienteId = String(formData.get("cliente_id"));
+  const leido = datosInteraccion(formData);
+  if ("error" in leido) return { error: leido.error };
+  const supabase = await createClient();
+  // realizado_por lo completa la base con auth.uid(); el email se copia acá.
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  const { error } = await supabase.from("cliente_interaccion").insert({
+    cliente_id: clienteId,
+    ...leido.datos,
+    realizado_por_email: user?.email ?? null,
+  });
+  if (error) return { error: mensajeErrorInteraccion("registrar", error) };
+  refrescar(clienteId);
+  redirect(rutaDeVuelta(String(formData.get("volver") ?? ""), clienteId));
+}
+
+export async function actualizarInteraccion(
+  _estado: EstadoFormularioCliente,
+  formData: FormData,
+): Promise<EstadoFormularioCliente> {
+  const clienteId = String(formData.get("cliente_id"));
+  const leido = datosInteraccion(formData);
+  if ("error" in leido) return { error: leido.error };
+  const supabase = await createClient();
+  // Quién la registró no cambia al editarla.
+  const { data, error } = await supabase
+    .from("cliente_interaccion")
+    .update(leido.datos)
+    .eq("id", String(formData.get("id")))
+    .eq("cliente_id", clienteId)
+    .select("id");
+  if (error) return { error: mensajeErrorInteraccion("actualizar", error) };
+  if (!data || data.length === 0) return { error: "La interacción ya no existe." };
+  refrescar(clienteId);
+  redirect(rutaDeVuelta(String(formData.get("volver") ?? ""), clienteId));
+}
+
+export async function eliminarInteraccion(formData: FormData) {
+  const clienteId = String(formData.get("cliente_id"));
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("cliente_interaccion")
+    .delete()
+    .eq("id", String(formData.get("id")))
+    .eq("cliente_id", clienteId);
+  if (error) redirect(`/clientes/${clienteId}?aviso=${"interaccion-no-eliminada" satisfies AvisoCliente}`);
   refrescar(clienteId);
   // Vuelve a la ficha sin ?aviso=, por si quedó de un error anterior.
   redirect(`/clientes/${clienteId}`);

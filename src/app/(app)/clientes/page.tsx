@@ -2,8 +2,9 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { Encabezado, Tarjeta, Vacio } from "@/components/ui";
 import { Modal } from "@/components/Modal";
-import type { Cliente, Transporte, Zona } from "@/lib/tipos";
+import type { ClienteSeguimiento, Transporte, Zona } from "@/lib/tipos";
 import { filtroActivo, filtroBusquedaClientes } from "@/lib/clientes/busqueda";
+import { filtroSeguimiento } from "@/lib/clientes/seguimiento";
 import { crearCliente, eliminarCliente } from "./acciones";
 import { FilaCliente } from "./componentes";
 import { FormularioCliente } from "./FormularioCliente";
@@ -13,20 +14,24 @@ export const dynamic = "force-dynamic";
 export default async function ClientesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; zona?: string; estado?: string }>;
+  searchParams: Promise<{ q?: string; zona?: string; estado?: string; seguimiento?: string }>;
 }) {
-  const { q, zona, estado } = await searchParams;
+  const { q, zona, estado, seguimiento } = await searchParams;
   const texto = (q ?? "").trim();
   // Un valor que no es un uuid haría fallar la consulta: se ignora.
   const zonaId = /^[0-9a-f-]{36}$/i.test(zona ?? "") ? (zona as string) : "";
   const filtroEstado = filtroActivo(estado);
+  const filtroAgenda = filtroSeguimiento(seguimiento);
   const supabase = await createClient();
 
-  let consulta = supabase.from("cliente").select("*").order("razon_social");
+  // La vista trae los datos del listado más el último y el próximo contacto,
+  // así todos los filtros se aplican en la base en una sola consulta.
+  let consulta = supabase.from("v_cliente_seguimiento").select("*").order("razon_social");
   const busqueda = filtroBusquedaClientes(texto);
   if (busqueda) consulta = consulta.or(busqueda);
   if (zonaId) consulta = consulta.eq("zona_id", zonaId);
   if (filtroEstado.activo !== null) consulta = consulta.eq("activo", filtroEstado.activo);
+  if (filtroAgenda.estado) consulta = consulta.eq("estado_seguimiento", filtroAgenda.estado);
 
   const [{ data, error }, { data: zonasData }, { data: transportesData }] = await Promise.all([
     consulta,
@@ -38,12 +43,12 @@ export default async function ClientesPage({
     return <p className="text-sm text-red-700">Error al cargar clientes: {error.message}</p>;
   }
 
-  const clientes = (data ?? []) as Cliente[];
+  const clientes = (data ?? []) as ClienteSeguimiento[];
   const zonas = (zonasData ?? []) as Zona[];
   const transportes = (transportesData ?? []) as Transporte[];
-  const zonaPorId = new Map(zonas.map((z) => [z.id, z.nombre]));
   const transportePorId = new Map(transportes.map((t) => [t.id, t.nombre]));
-  const hayFiltros = texto !== "" || zonaId !== "" || filtroEstado.valor !== "activos";
+  const hayFiltros =
+    texto !== "" || zonaId !== "" || filtroEstado.valor !== "activos" || filtroAgenda.valor !== "todos";
 
   return (
     <>
@@ -58,7 +63,7 @@ export default async function ClientesPage({
       />
 
       <form method="get" className="tarjeta mb-4 grid gap-3 p-4 sm:grid-cols-12">
-        <div className="sm:col-span-6">
+        <div className="sm:col-span-4">
           <label className="etiqueta" htmlFor="buscar-clientes">
             Buscar
           </label>
@@ -94,6 +99,23 @@ export default async function ClientesPage({
             <option value="todos">Todos</option>
           </select>
         </div>
+        <div className="sm:col-span-2">
+          <label className="etiqueta" htmlFor="filtro-seguimiento">
+            Seguimiento
+          </label>
+          <select
+            id="filtro-seguimiento"
+            name="seguimiento"
+            defaultValue={filtroAgenda.valor}
+            className="campo"
+          >
+            <option value="todos">Todos</option>
+            <option value="atrasados">Atrasados</option>
+            <option value="hoy">Hoy</option>
+            <option value="proximos">Próximos 7 días</option>
+            <option value="sin-agenda">Sin agenda</option>
+          </select>
+        </div>
         <div className="flex items-end gap-2 sm:col-span-2">
           <button type="submit" className="boton-primario">
             Filtrar
@@ -117,6 +139,8 @@ export default async function ClientesPage({
                 <th>Localidad</th>
                 <th>Teléfono</th>
                 <th>Transporte</th>
+                <th>Último contacto</th>
+                <th>Próximo contacto</th>
                 <th>Estado</th>
                 <th />
               </tr>
@@ -129,14 +153,13 @@ export default async function ClientesPage({
                       ? "Ningún cliente coincide con la búsqueda."
                       : "Todavía no cargaste clientes."
                   }
-                  colSpan={8}
+                  colSpan={10}
                 />
               )}
               {clientes.map((c) => (
                 <FilaCliente
-                  key={c.id}
+                  key={c.cliente_id}
                   cliente={c}
-                  zona={c.zona_id ? (zonaPorId.get(c.zona_id) ?? null) : null}
                   transporte={c.transporte_id ? (transportePorId.get(c.transporte_id) ?? null) : null}
                   eliminar={eliminarCliente}
                 />
