@@ -284,4 +284,9 @@ export type ListaPrecioBase = {
   precio_sugerido: number | null;
   /** precio_sugerido redondeado hacia arriba a la centena. */
   precio_redondeado: number | null;
+  /**
+   * Falta el precio vigente de alguna materia prima (propia o de un subgrupo)
+   * o el precio sugerido es 0: hace falta un precio manual.
+   */
+  costos_incompletos: boolean;
 };

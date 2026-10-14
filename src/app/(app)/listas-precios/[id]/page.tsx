@@ -16,14 +16,18 @@ export default async function ListaPrecioPage({ params }: { params: Promise<{ id
   const { id } = await params;
   const supabase = await createClient();
 
-  const [{ data: lista }, { data: itemsData, error }] = await Promise.all([
+  const [{ data: lista, error: errorLista }, { data: itemsData, error: errorItems }] = await Promise.all([
     supabase.from("lista_precio").select("*").eq("id", id).maybeSingle(),
     supabase.from("lista_precio_item").select("*").eq("lista_id", id).order("orden"),
   ]);
 
+  // Un error de la consulta se muestra; sólo la ausencia de la fila es un 404.
+  if (errorLista) {
+    return <p className="text-sm text-red-700">Error al cargar la lista: {errorLista.message}</p>;
+  }
   if (!lista) notFound();
-  if (error) {
-    return <p className="text-sm text-red-700">Error al cargar los ítems de la lista: {error.message}</p>;
+  if (errorItems) {
+    return <p className="text-sm text-red-700">Error al cargar los ítems de la lista: {errorItems.message}</p>;
   }
 
   const datos = lista as ListaPrecio;

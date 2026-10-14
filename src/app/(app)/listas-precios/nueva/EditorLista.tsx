@@ -7,8 +7,11 @@ import { Tarjeta, Vacio, Pastilla } from "@/components/ui";
 import { aNumero, numero, pesos, porcentaje } from "@/lib/formato";
 import { crearListaPrecio, type ItemListaEnviado } from "../acciones";
 
-/** Fila del editor. Los precios y el IVA se guardan como texto para aceptar coma decimal. */
-export type FilaEditor = ItemListaEnviado & { clave: string };
+/**
+ * Fila del editor. Los precios y el IVA se guardan como texto para aceptar coma decimal.
+ * `costos_incompletos` sólo viene en las filas de v_lista_precio_base; no se envía al guardar.
+ */
+export type FilaEditor = ItemListaEnviado & { clave: string; costos_incompletos?: boolean };
 
 export type DatosIniciales = {
   nombre: string;
@@ -42,12 +45,28 @@ function sinSugerido(fila: FilaEditor) {
   return fila.producto_id !== null && fila.precio_sugerido === null;
 }
 
+/** Ítem de la vista base con costos faltantes o en 0: el sugerido no es confiable. */
+function costosIncompletos(fila: FilaEditor) {
+  return fila.costos_incompletos === true;
+}
+
+/** Ítem de producto que exige un precio cargado a mano. */
+function requierePrecioManual(fila: FilaEditor) {
+  return sinSugerido(fila) || costosIncompletos(fila);
+}
+
+const MOTIVO_COSTOS_INCOMPLETOS = "Costos incompletos: revisá precios de materias primas";
+
 /** Devuelve el primer problema de una fila, o null si está bien. */
 function problemaDeFila(fila: FilaEditor): string | null {
   if (fila.descripcion.trim() === "") return "falta la descripción";
   const precio = aNumero(fila.precio_final);
-  if (precio === null) return sinSugerido(fila) ? "no tiene precio sugerido: cargá el precio a mano" : "falta el precio final";
+  if (precio === null) {
+    if (costosIncompletos(fila)) return "tiene costos incompletos: cargá el precio a mano";
+    return sinSugerido(fila) ? "no tiene precio sugerido: cargá el precio a mano" : "falta el precio final";
+  }
   if (precio < 0) return "el precio final no puede ser negativo";
+  if (costosIncompletos(fila) && precio === 0) return "tiene costos incompletos: el precio tiene que ser mayor a 0";
   const iva = aNumero(fila.alicuota_iva, 21);
   if (iva === null || iva < 0 || iva > 100) return "el IVA tiene que estar entre 0 y 100";
   return null;
@@ -55,7 +74,8 @@ function problemaDeFila(fila: FilaEditor): string | null {
 
 function diferencia(fila: FilaEditor): number | null {
   const precio = aNumero(fila.precio_final);
-  if (precio === null || fila.precio_sugerido === null || fila.precio_sugerido <= 0) return null;
+  if (precio === null || costosIncompletos(fila)) return null;
+  if (fila.precio_sugerido === null || fila.precio_sugerido <= 0) return null;
   return ((precio - fila.precio_sugerido) / fila.precio_sugerido) * 100;
 }
 
@@ -123,7 +143,7 @@ export function EditorLista({ iniciales }: { iniciales: DatosIniciales }) {
     precio_sugerido: f.precio_sugerido,
     precio_final: f.precio_final,
   }));
-  const faltantes = filas.filter((f) => sinSugerido(f) && aNumero(f.precio_final) === null).length;
+  const faltantes = filas.filter((f) => requierePrecioManual(f) && problemaDeFila(f) !== null).length;
 
   return (
     <form action={accion} onSubmit={validar} className="space-y-4" noValidate>
@@ -164,7 +184,7 @@ export function EditorLista({ iniciales }: { iniciales: DatosIniciales }) {
         descripcion="Precios sin IVA. El precio final se precarga con el sugerido redondeado hacia arriba a la centena."
         acciones={
           <div className="flex items-center gap-2">
-            {faltantes > 0 && <Pastilla tono="ambar">{faltantes} sin precio sugerido</Pastilla>}
+            {faltantes > 0 && <Pastilla tono="ambar">{faltantes} sin precio confiable</Pastilla>}
             <button
               type="button"
               onClick={() => setFilas((actuales) => [...actuales, filaManualVacia()])}
@@ -194,7 +214,8 @@ export function EditorLista({ iniciales }: { iniciales: DatosIniciales }) {
               {filas.length === 0 && <Vacio mensaje="La lista no tiene ítems. Agregá uno." colSpan={9} />}
               {filas.map((fila, i) => {
                 const manual = fila.producto_id === null;
-                const falta = sinSugerido(fila);
+                const falta = requierePrecioManual(fila);
+                const incompletos = costosIncompletos(fila);
                 const marcada = conProblema.has(fila.clave) && problemaDeFila(fila) !== null;
                 const dif = diferencia(fila);
                 return (
@@ -226,6 +247,11 @@ export function EditorLista({ iniciales }: { iniciales: DatosIniciales }) {
                         />
                         {manual && <Pastilla>Manual</Pastilla>}
                       </div>
+                      {incompletos && (
+                        <p className={`mt-1 text-xs text-amber-800 ${fila.es_repuesto ? "pl-6" : ""}`}>
+                          {MOTIVO_COSTOS_INCOMPLETOS}
+                        </p>
+                      )}
                     </td>
                     <td className="whitespace-nowrap">
                       {manual ? (
@@ -253,7 +279,16 @@ export function EditorLista({ iniciales }: { iniciales: DatosIniciales }) {
                       )}
                     </td>
                     <td className="num whitespace-nowrap text-stone-500">
-                      {falta ? <Pastilla tono="ambar">Sin precio</Pastilla> : pesos(fila.precio_sugerido)}
+                      {sinSugerido(fila) ? (
+                        <Pastilla tono="ambar">Sin precio</Pastilla>
+                      ) : incompletos ? (
+                        <span title={MOTIVO_COSTOS_INCOMPLETOS} className="flex items-center justify-end gap-2">
+                          <Pastilla tono="ambar">Incompleto</Pastilla>
+                          {pesos(fila.precio_sugerido)}
+                        </span>
+                      ) : (
+                        pesos(fila.precio_sugerido)
+                      )}
                     </td>
                     <td className="num">
                       <input

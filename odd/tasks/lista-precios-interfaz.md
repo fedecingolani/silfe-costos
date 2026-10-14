@@ -116,10 +116,32 @@ un solo writer.
 
 | ID | Tarea | Ruta | Estado |
 | --- | --- | --- | --- |
-| T6 | Marcar los productos con costos faltantes (materias primas sin precio, también dentro de subgrupos, o costo 0) y exigir precio manual | pendiente | [ ] |
-| T7 | Mostrar los errores de consulta en el detalle y en el duplicado, en lugar de un 404 | pendiente | [ ] |
+| T6 | Marcar los productos con costos faltantes (materias primas sin precio, también dentro de subgrupos, o costo 0) y exigir precio manual | delegada (writer) | [x] |
+| T7 | Mostrar los errores de consulta en el detalle y en el duplicado, en lugar de un 404 | delegada (writer) | [x] |
+
+- T6 y T7:
+  - migración `20261016000001_costos_incompletos.sql`, que agrega la columna
+    `costos_incompletos` a `v_lista_precio_base`;
+  - el editor marca esos ítems, precarga el precio vacío y no deja guardar sin un precio
+    mayor a 0;
+  - el detalle y el duplicado muestran los errores de consulta.
+  - RED observado: la columna no existía. GREEN observado: 63 tests en verde, verificado también
+    desde el orquestador. Typecheck, lint y build OK.
+- Usuario de prueba solo local, agregado en `supabase/seed.sql`. El seed no corre en el remoto.
+- Recorrido en el navegador (dev server contra Supabase local, inicio de sesión con el usuario
+  de prueba), todo OK y sin errores en consola:
+  - el índice carga, incluida la cuenta de ítems: resuelve el hallazgo sobre PostgREST;
+  - la lista nueva carga 6 ítems con los repuestos indentados;
+  - un producto local de prueba sin precio (PT-900) aparece marcado como "Costos incompletos";
+  - guardar sin nombre ni precio muestra los dos errores;
+  - el precio "1500,50" se interpreta con coma decimal;
+  - el ítem manual "Remeras SILFE $1000" se agrega y se reordena con ↑;
+  - guardar redirige al detalle de solo lectura;
+  - Duplicar precarga "Copia de …" con 7 ítems y se guarda;
+  - el índice muestra 2 listas con 7 ítems cada una;
+  - un id inexistente da 404 y un id inválido muestra el error.
+- Detalle menor: un id que no es uuid muestra el error de Postgres en lugar de un 404.
 
 ## Próximo paso
 
- Recorrido en el navegador con un usuario de prueba local, si el
-usuario lo autoriza. Después, Fase 4 (descarga).
+ Fase 4 (descarga en PDF y Excel).

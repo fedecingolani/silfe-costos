@@ -32,13 +32,17 @@ export default async function NuevaListaPage({
   let origen: ListaPrecio | null = null;
 
   if (desde) {
-    const [{ data: lista }, { data: itemsData, error }] = await Promise.all([
+    const [{ data: lista, error: errorLista }, { data: itemsData, error: errorItems }] = await Promise.all([
       supabase.from("lista_precio").select("*").eq("id", desde).maybeSingle(),
       supabase.from("lista_precio_item").select("*").eq("lista_id", desde).order("orden"),
     ]);
+    // Un error de la consulta se muestra; sólo la ausencia de la fila es un 404.
+    if (errorLista) {
+      return <p className="text-sm text-red-700">Error al cargar la lista: {errorLista.message}</p>;
+    }
     if (!lista) notFound();
-    if (error) {
-      return <p className="text-sm text-red-700">Error al cargar la lista: {error.message}</p>;
+    if (errorItems) {
+      return <p className="text-sm text-red-700">Error al cargar los ítems de la lista: {errorItems.message}</p>;
     }
     origen = lista as ListaPrecio;
     const items = (itemsData ?? []) as ListaPrecioItem[];
@@ -81,7 +85,9 @@ export default async function NuevaListaPage({
           presentacion: b.presentacion ?? "",
           alicuota_iva: String(b.alicuota_iva),
           precio_sugerido: b.precio_sugerido,
-          precio_final: textoPrecio(b.precio_redondeado),
+          // Con costos incompletos el sugerido no es confiable: se exige un precio manual.
+          precio_final: b.costos_incompletos ? "" : textoPrecio(b.precio_redondeado),
+          costos_incompletos: b.costos_incompletos,
         }),
       ),
     };
