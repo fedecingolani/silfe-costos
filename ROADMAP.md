@@ -1,162 +1,106 @@
 # Roadmap — Silfe Costos
 
-Silfe Costos es el **primer módulo** de un programa más grande que se va a construir alrededor
-de este repo. Este roadmap ordena el trabajo que falta, empezando por la **lista de precios**,
-que es la prioridad actual.
+Silfe Costos es el **primer módulo** de un programa de uso interno que se va a construir
+alrededor de este repo. Este roadmap registra lo que ya está hecho y ordena lo que sigue.
 
-Referencia de formato: la lista de precios que se venía usando (`2023-DICIEMBRE.pdf`).
-
----
-
-## Objetivo: lista de precios
-
-Tomar el precio sugerido que ya calcula el sistema, permitir ajustarlo a mano y generar una
-**lista de precios descargable** que quede guardada como **historial**.
-
-### Qué tiene que hacer
-
-- Nueva opción de menú **Listas de precios**.
-- Índice de listas con **fecha de creación**, **nombre** y botón **Descargar**.
-- Botón **Nueva lista**, que precarga:
-  - todos los productos `TERMINADO` activos;
-  - todos los `SUBGRUPO` activos (los repuestos, por ejemplo lona interior o correaje);
-  - el **precio sugerido** de cada uno como valor inicial, **editable**.
-- Posibilidad de **agregar ítems manuales** que no existen en el sistema, por ejemplo
-  "Remeras SILFE $1000". Un ítem manual:
-  - no hace referencia a ningún producto, materia prima ni costo;
-  - existe solo dentro de esa lista y no crea nada en el resto del sistema;
-  - se carga a mano: descripción y precio obligatorios; código, presentación y alícuota de IVA
-    opcionales (IVA 21% por defecto);
-  - no tiene precio sugerido ni redondeo: el precio que se carga es el precio final;
-  - si se duplica la lista, se copia junto con los demás ítems.
-- Una lista guardada queda **congelada**: es una foto de los precios de ese momento y no cambia
-  aunque después se modifiquen los costos.
-
-### Lo que muestra el formato de referencia
-
-Cada renglón de la lista tiene:
-
-| Dato | Ejemplo | ¿Existe hoy? |
-| --- | --- | --- |
-| Código | `001` | Sí (`producto.codigo`) |
-| Descripción | Recolector grande de plástico acolchado completo | Sí (`producto.nombre`) |
-| Presentación de venta | `x docena` | **No.** Solo existe `producto.unidad_id`, sin cantidad por presentación |
-| Precio sin IVA | `$ 24500` | Parcial: hay `precio_sugerido` por unidad, no por presentación |
-| Alícuota de IVA | `10,5%` / `21%` | **No.** El producto no tiene alícuota |
-
-Además:
-
-- **Agrupación visual**: bloques separados por espacio, y repuestos debajo de su producto
-  ("Repuestos:").
-- **Encabezado** con el logo y el título ("LISTA DE PRECIOS DICIEMBRE 2023").
-- **Pie** con un texto destacado ("SIL – FE 30 AÑOS") y los datos de contacto.
-- Los precios están **redondeados** (24500, 84500), no son el valor exacto calculado.
+Producción: https://silfe-costos.fedechingo.workers.dev · Rama principal: `main`.
 
 ---
 
-## Fases
+## Hecho: lista de precios (Fases 0 a 4 y pasada de mejoras)
 
-### Fase 0 — Definiciones pendientes
+Toma el precio sugerido que calcula el sistema, permite ajustarlo y genera una **lista de precios
+descargable** que queda guardada como **historial inmutable**. El formato de referencia es la
+lista que se venía usando (`2023-DICIEMBRE.pdf`).
 
-Decisiones a cerrar antes de escribir código:
+### Decisiones tomadas (Fase 0)
 
-1. ~~**Presentación de venta.**~~ **Resuelto:** conviven los dos casos. Algunos productos se
-   costean directamente por docena y otros por unidad y se venden por docena (× 12). Se modela
-   con un factor por producto (ver Fase 1).
-2. ~~**Redondeo.**~~ **Resuelto:** al crear la lista, el precio de cada ítem se precarga
-   redondeado automáticamente a la centena, y se puede editar a mano. Se guardan los dos
-   valores: el sugerido exacto y el final. El redondeo es **siempre hacia arriba**, para no
-   perder margen: `ceil(precio / 100) * 100` (24.420 → 24.500).
-3. ~~**Edición después de guardar.**~~ **Resuelto:** una lista guardada es **inmutable**. Para
-   corregirla se **duplica** y se guarda como una lista nueva. No hay estado de borrador
-   persistido: la lista existe recién cuando se guarda.
-4. ~~**Formato de descarga.**~~ **Resuelto:** **PDF y Excel**. El botón Descargar del índice
-   ofrece los dos formatos.
-5. ~~**Integración con el programa principal.**~~ **Resuelto:** el programa principal todavía no
-   existe y **se va a construir alrededor de este repo**. Este repo es la base: comparte login,
-   base de datos y menú, y "Costos" es el primer módulo (ver "Transversal — Base del programa").
+1. **Presentación de venta:** algunos productos se costean por docena y otros por unidad y se
+   venden por docena. Cada producto tiene `unidad_venta_id` y `factor_venta`, y el precio de la
+   presentación es `precio_sugerido × factor_venta`.
+2. **Redondeo:** el precio se precarga redondeado **hacia arriba a la centena** y se puede editar
+   a mano. Se guardan el sugerido exacto y el final.
+3. **Inmutabilidad:** una lista guardada no se modifica ni se borra; para corregirla, se duplica.
+   Un producto que está en una lista guardada no se puede borrar, solo desactivar.
+4. **Formatos:** PDF y Excel, generados a pedido desde la foto guardada.
+5. **Programa:** el programa principal se construye alrededor de este repo; Costos es el primer
+   módulo.
+6. **Agrupación:** los repuestos (`SUBGRUPO`) aparecen solos debajo de cada producto que los usa,
+   según la estructura.
+7. **Ítems manuales:** se pueden cargar renglones libres (por ejemplo "Remeras SILFE $1000") que no
+   hacen referencia a nada del sistema y existen solo en esa lista.
 
-### Fase 1 — Datos de venta en el producto
+### Qué se construyó
 
-Agregar al producto lo que la lista necesita y hoy no existe:
+- [x] **Fase 1 — Datos de venta del producto:** alícuota de IVA (tope 100), presentación de venta
+      y factor, y el precio por presentación en la vista de costeo.
+- [x] **Fase 2 — Modelo:** tablas `lista_precio` y `lista_precio_item` (foto inmutable), vista
+      `v_lista_precio_base` y función `crear_lista_precio`, con RLS de solo lectura.
+- [x] **Fase 3 — Interfaz:** menú **Ventas → Listas de precios**, índice, nueva lista editable
+      (precio, ítems manuales, quitar y reordenar), detalle de solo lectura y **Duplicar**.
+      Los productos con costos incompletos se marcan y exigen un precio a mano.
+- [x] **Fase 4 — Descarga:** PDF con el formato de referencia (logo, título, repuestos,
+      "x docena", "+ IVA (n%)" y pie configurable en Parámetros) y Excel con números.
+- [x] **Mejoras:**
+  - protección de las listas al borrar productos;
+  - validación en el servidor;
+  - duplicado con datos actuales;
+  - descargas robustas;
+  - PDF sin superposiciones;
+  - permisos de `anon` revocados.
+- [x] **Calidad:** tests de base de datos (pgTAP, `supabase test db`) y de la app (Vitest,
+      `npm test`). Rama `main` creada y ramas viejas eliminadas.
 
-- [ ] `alicuota_iva` (10,5 / 21 / ...), con valor por defecto 21.
-- [ ] Presentación de venta: `unidad_venta_id` (`docena`, `unidad`) y
-      `factor_venta` = cuántas unidades de costeo entran en una presentación de venta.
-  - Costeado por docena y vendido por docena: unidad de costeo = docena, factor = 1.
-  - Costeado por unidad y vendido por docena: unidad de costeo = unidad, factor = 12.
-  - Precio de la presentación = `precio_sugerido` × `factor_venta`. Va como columna
-    nueva en la vista de costeo, para no recalcular en la app.
-  - Valor por defecto: unidad de venta = unidad de costeo, factor = 1.
-- [x] ~~Campos de agrupación~~ **Resuelto sin cambios en el producto:** la agrupación sale sola
-      de la estructura. Cada `SUBGRUPO` aparece como repuesto ("Repuestos:") debajo de cada
-      `TERMINADO` que lo usa en `producto_componente`. Se arma al generar la lista (Fase 2).
-      Si un subgrupo lo usan varios productos, aparece debajo de cada uno. Si no lo usa
-      ninguno, va a una sección "Otros repuestos" al final. El orden es por código.
-- [ ] Mostrar y editar estos campos en la ficha del producto.
+El detalle de cada fase está en `odd/tasks/`.
 
-### Fase 2 — Modelo de listas (base de datos)
+### Pendientes menores
 
-- [ ] Tabla `lista_precio`: nombre, fecha de creación, título, notas y usuario creador.
-- [ ] Tabla `lista_precio_item`, que guarda una **foto** de cada ítem:
-  - referencia opcional a `producto` (vacía en los ítems manuales);
-  - código, descripción, presentación y alícuota de IVA **copiados** al momento de crear la lista;
-  - `precio_sugerido` (el calculado) y `precio_final` (el editado);
-  - orden y sección.
-- [ ] RLS para las dos tablas, igual que en el resto del esquema.
-- [ ] Una función o acción que crea el borrador a partir de la vista de costeo.
+- [ ] Tests de la acción que guarda una lista: producto ausente tratado como incompleto y error
+      de FK.
+- [ ] Unificar el mensaje del servidor ("costos incompletos") con el de la pantalla ("Inactivo")
+      para productos desactivados.
 
-### Fase 3 — Interfaz
+---
 
-- [ ] Agregar la opción **Listas de precios** al menú.
-- [ ] Índice de listas: fecha, nombre y botón **Descargar**.
-- [ ] Pantalla **Nueva lista**:
-  - tabla con todos los ítems precargados y el precio editable en línea;
-  - comparación entre el precio sugerido y el precio final (diferencia en %);
-  - **agregar ítem manual**, quitar ítems y reordenarlos;
-  - botón **Guardar**, que congela la lista.
-- [ ] Ver el detalle de una lista histórica (solo lectura).
-- [ ] **Duplicar** una lista existente: abre la pantalla de nueva lista precargada con sus
-      ítems y precios finales. Es la única forma de corregir una lista, porque son inmutables.
-- [ ] La base impide modificar o borrar los ítems de una lista guardada (RLS sin `update` ni
-      `delete`, o un trigger).
+## Siguiente: CRM de clientes y ventas
 
-### Fase 4 — Descarga en PDF y Excel
+Seguimiento de clientes y de la gestión comercial. Parte del módulo de clientes que ya existe:
 
-- [ ] PDF con el formato de referencia: logo, título, renglones agrupados y pie con contacto.
-- [ ] Logo nuevo guardado en el repo o en Supabase Storage (falta descargarlo de Drive).
-- [ ] Encabezado y pie configurables desde **Configuración**: texto destacado y contacto.
-- [ ] **Restricción técnica:** el deploy corre en Cloudflare Workers, así que no se puede usar
-      Puppeteer ni Chrome headless. Hay que validar una librería compatible con Workers (por
-      ejemplo `pdf-lib` o `@react-pdf/renderer`) o generar una página imprimible y usar
-      "Imprimir → PDF" del navegador.
-- [ ] Excel (`.xlsx`) con las mismas columnas: código, descripción, presentación, precio sin
-      IVA y alícuota de IVA. Los precios van como números, no como texto, para poder operar con
-      ellos. También hay que validar una librería compatible con Workers (por ejemplo SheetJS).
-- [ ] Los dos archivos se generan **a pedido desde la foto guardada**. No hace falta almacenarlos:
-      el resultado es siempre el mismo porque la lista es inmutable.
+- `cliente`: razón social, CUIT, dirección, localidad, provincia, CP, teléfono, zona y código
+  legado;
+- `zona`: catálogo cerrado;
+- `cliente_contacto`: nombre, cargo y teléfono.
 
-### Fase 5 — Mejoras
+### Fase 6 — Ficha completa del cliente (ABM)
 
-- [ ] Comparar una lista contra la anterior: % de aumento por ítem.
-- [ ] Aumento masivo: aplicar un % a todos los ítems o a una sección.
+- [ ] Datos fiscales y comerciales: CUIT, condición frente al IVA, CBU, CVU o alias, y
+      observaciones.
+- [ ] **Transporte** habitual del cliente, tomado de un catálogo de transportes.
+- [ ] **Sucursales** y **direcciones de entrega**: varias por cliente, con una marcada como
+      principal.
+- [ ] **Contactos:** sumar email y WhatsApp a los que ya hay.
+- [ ] Búsqueda y filtros en el listado: zona, activo y texto.
 
-### Transversal — Base del programa
+### Fase 7 — Seguimiento (llamados, visitas, etc.)
 
-Este repo va a crecer hasta convertirse en el programa completo. No hace falta reestructurar ahora,
-pero conviene no cerrarse el camino:
+- [ ] Registro de **interacciones** por cliente: tipo (llamado, visita, WhatsApp, email), fecha,
+      contacto, resultado y notas.
+- [ ] **Próximo contacto:** fecha de seguimiento y una vista "a contactar hoy o atrasados".
+- [ ] Historial en la ficha del cliente, ordenado por fecha.
 
-- [ ] Agrupar el menú por módulo ("Costos" con sus pantallas actuales y "Listas de precios"),
-      para que los módulos que vengan después tengan su propio lugar.
-- [ ] Mantener la organización por feature en `src/app/(app)/`. Cada módulo nuevo es una
-      carpeta más, no una capa transversal.
-- [ ] Más adelante: roles y permisos por módulo. Hoy cualquier usuario logueado ve todo. No
-      bloquea la lista de precios.
-- [ ] Definir el nombre del programa y si el repo o el proyecto de Supabase se renombran.
+### Fase 8 — Ventas
 
-### Transversal — Calidad
+- [ ] Alcance a definir.
 
-- [ ] El proyecto no tiene tests. Arrancar con tests del armado de la lista (foto, precio
-      final, ítems manuales) y de las vistas de costeo de las que depende.
-- [ ] Mergear la rama de trabajo actual (`claude/product-cost-system-qcq2tf`) a una rama
-      principal antes de empezar a apilar features.
+---
+
+## Más adelante
+
+- **Lista de precios:**
+  - comparar contra la lista anterior (% de aumento por ítem);
+  - aumento masivo: aplicar un % a todos los ítems o a una sección.
+- Definir el nombre del programa y si conviene renombrar el repo y el proyecto de Supabase.
+
+## Fuera de alcance por ahora
+
+- **Roles y permisos:** es un sistema de uso interno. Todos los usuarios logueados ven todo.
