@@ -142,6 +142,15 @@ un solo writer.
   - un id inexistente da 404 y un id inválido muestra el error.
 - Detalle menor: un id que no es uuid muestra el error de Postgres en lugar de un 404.
 
+- Revisión de la rama completa `review-0509216238dc3ddd`, con consentimiento: **aprobada y
+  confirmada**. Seguimientos que no bloquean:
+  - el precio > 0 para ítems con costos incompletos se exige solo en el cliente;
+  - un `producto_id` inválido se convierte en null en silencio;
+  - `armarItems` no tiene tests;
+  - un duplicado no vuelve a marcar costos incompletos y usa el precio sugerido viejo;
+  - un id que no es uuid muestra el error de Postgres;
+  - el test de redondeo de la vista es tautológico.
+
 ## Próximo paso
 
  Fase 4 (descarga en PDF y Excel).
