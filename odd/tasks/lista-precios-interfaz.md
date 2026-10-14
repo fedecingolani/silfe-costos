@@ -95,7 +95,18 @@ un solo writer.
   - `aNumero` no interpreta separadores de miles ("24.500,50"). Es el comportamiento que ya
     tenía el helper.
 
+- Commit `9e1448f`. Evaluación de riesgo: `medium` (`slice_budget_reached`). Revisión nativa
+  `review-0d6a4ef3509d6eaa`, con consentimiento: **aprobada y confirmada**. Seguimientos que no
+  bloquean:
+  - la consulta del índice con `lista_precio_item(count)` no se verificó contra PostgREST; se
+    cubre con el recorrido en el navegador;
+  - `precio_sugerido` llega desde el cliente sin recalcularse en el servidor; afecta solo a la
+    columna informativa "Dif. %";
+  - el test de redondeo de la vista es tautológico;
+  - el detalle convierte en 404 los errores de la consulta;
+  - la validación de `armarItems` no tiene tests.
+
 ## Próximo paso
 
-Commit y evaluación de riesgo. Recorrido en el navegador con un usuario de prueba local, si el
+ Recorrido en el navegador con un usuario de prueba local, si el
 usuario lo autoriza. Después, Fase 4 (descarga).
