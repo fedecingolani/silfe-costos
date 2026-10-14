@@ -84,6 +84,13 @@ se delegan a un solo writer.
 - Commit de T1 a T3: `b8895c8`. Evaluación de riesgo: `medium`, `review_due=false`
   (`under_budget`). Queda pendiente dentro del tramo, con base de revisión `2265753`.
 
+- Revisión nativa (`review-c1cae0ff58da30ab`, riesgo medio, con consentimiento): **aprobada y
+  confirmada**. Quedaron dos hallazgos que no bloquean:
+  - Si se carga un valor no numérico en IVA o factor, se guarda en silencio el valor por defecto.
+    Las comas decimales sí se aceptan (`aNumero` reemplaza `,` por `.`).
+  - Faltan tests repetibles del precio por presentación y de la vista, que cubre la tarea
+    transversal de calidad del roadmap.
+
 ## Próximo paso
 
 Actualizar el README con las columnas nuevas. Fase 1 cerrada; sigue la Fase 2 (modelo de listas).
