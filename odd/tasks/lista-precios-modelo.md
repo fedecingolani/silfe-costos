@@ -96,6 +96,18 @@ Ruta: varios archivos SQL no triviales, más tests y tipos. Se delega a un solo 
 - Riesgo antes de `db push`: el tope de IVA falla si algún producto real ya tiene un valor mayor
   a 100.
 
+- Commit `8624470`. Evaluación de riesgo: `medium`, `review_due=true` (`slice_budget_reached`).
+- Revisión nativa `review-712b4993a3296b35`, con consentimiento: **aprobada y confirmada**.
+  Hallazgos que no bloquean:
+  - Si se mezcla `orden` explícito e implícito, puede chocar y devolver un error 23505 crudo.
+    Queda como seguimiento: la interfaz de la Fase 3 siempre manda `orden` explícito.
+  - `NaN` pasa la validación de `precio_final`, y `precio_sugerido` no se valida. Queda como
+    seguimiento.
+  - Subgrupos anidados: no aplica, porque un trigger de la base impide que un subgrupo contenga
+    otro.
+  - Tope de IVA en el remoto: no aplica, porque la columna `alicuota_iva` todavía no existe allá.
+    Se crea con default 21 en la misma tanda de `db push`.
+
 ## Próximo paso
 
-Commit y evaluación de riesgo. Después, Fase 3 (interfaz).
+Fase 3: la interfaz.
