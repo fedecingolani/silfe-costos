@@ -16,7 +16,29 @@ describe("filtroBusquedaClientes", () => {
 
   it("suma el código legado cuando el texto es un número entero", () => {
     expect(filtroBusquedaClientes("1234")).toBe(
-      'razon_social.ilike."%1234%",cuit.ilike."%1234%",codigo_legado.eq.1234',
+      'razon_social.ilike."%1234%",cuit.ilike."%1234%",cuit_digitos.ilike."%1234%",codigo_legado.eq.1234',
+    );
+  });
+
+  it("busca un CUIT sin guiones también entre los cargados con guiones", () => {
+    expect(filtroBusquedaClientes("20123456789")).toBe(
+      'razon_social.ilike."%20123456789%",cuit.ilike."%20123456789%",cuit_digitos.ilike."%20123456789%"',
+    );
+  });
+
+  it("busca un CUIT con guiones también entre los cargados sin guiones", () => {
+    expect(filtroBusquedaClientes("20-12345678-9")).toBe(
+      'razon_social.ilike."%20-12345678-9%",cuit.ilike."%20-12345678-9%",cuit_digitos.ilike."%20123456789%"',
+    );
+  });
+
+  it("acepta puntos y espacios como separadores del CUIT", () => {
+    expect(filtroBusquedaClientes("20.123 456")).toContain('cuit_digitos.ilike."%20123456%"');
+  });
+
+  it("no busca por dígitos del CUIT si el texto tiene letras", () => {
+    expect(filtroBusquedaClientes("Frutas 2")).toBe(
+      'razon_social.ilike."%Frutas 2%",cuit.ilike."%Frutas 2%"',
     );
   });
 

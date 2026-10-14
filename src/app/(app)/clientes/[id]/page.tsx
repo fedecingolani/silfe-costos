@@ -16,11 +16,20 @@ import {
   agregarContacto,
   actualizarContacto,
   eliminarContacto,
+  type AvisoCliente,
 } from "../acciones";
 import { FormularioCliente } from "../FormularioCliente";
 import { FormularioContacto, FormularioSucursal } from "./formularios";
 
 export const dynamic = "force-dynamic";
+
+/** Avisos que llegan por ?aviso= desde las acciones de la ficha. */
+const AVISOS: Record<AvisoCliente, string> = {
+  "cliente-no-eliminado": "No se pudo eliminar el cliente. Si ya tiene movimientos, desactivalo en lugar de borrarlo.",
+  "sucursal-no-eliminada": "No se pudo eliminar la sucursal. Volvé a intentarlo.",
+  "principal-no-marcada": "No se pudo marcar la sucursal como principal. Volvé a intentarlo.",
+  "contacto-no-eliminado": "No se pudo eliminar el contacto. Volvé a intentarlo.",
+};
 
 /** Un dato de la ficha, con un aviso amarillo opcional que no bloquea. */
 function Dato({ etiqueta, children, aviso }: { etiqueta: string; children: ReactNode; aviso?: string | null }) {
@@ -51,10 +60,11 @@ export default async function ClientePage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ editar?: string; sucursal?: string; contacto?: string }>;
+  searchParams: Promise<{ editar?: string; sucursal?: string; contacto?: string; aviso?: string }>;
 }) {
   const { id } = await params;
-  const { editar, sucursal: sucursalEnEdicionId, contacto: contactoEnEdicionId } = await searchParams;
+  const { editar, sucursal: sucursalEnEdicionId, contacto: contactoEnEdicionId, aviso } = await searchParams;
+  const mensajeAviso = aviso && Object.hasOwn(AVISOS, aviso) ? AVISOS[aviso as AvisoCliente] : undefined;
   const supabase = await createClient();
 
   const [
@@ -107,6 +117,15 @@ export default async function ClientePage({
           </>
         }
       />
+
+      {mensajeAviso && (
+        <div
+          role="alert"
+          className="mb-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
+        >
+          {mensajeAviso}
+        </div>
+      )}
 
       <Tarjeta titulo="Datos fiscales y comerciales" className="mb-6">
         <dl className="grid gap-4 p-4 sm:grid-cols-3">

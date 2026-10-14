@@ -18,6 +18,10 @@ function entreComillas(texto: string): string {
  * (contiene, sin distinguir mayúsculas) y, si es un número entero, también
  * por código legado exacto. null si no hay nada que buscar.
  *
+ * Si el texto parece un CUIT (dígitos con guiones, puntos o espacios), sus
+ * dígitos también se buscan en `cuit_digitos`: así "20123456789" encuentra
+ * "20-12345678-9" y al revés.
+ *
  * El asterisco se descarta porque PostgREST lo toma como comodín de LIKE.
  */
 export function filtroBusquedaClientes(texto: string | null | undefined): string | null {
@@ -25,6 +29,10 @@ export function filtroBusquedaClientes(texto: string | null | undefined): string
   if (limpio === "") return null;
   const patron = entreComillas(`%${escaparLike(limpio)}%`);
   const filtros = [`razon_social.ilike.${patron}`, `cuit.ilike.${patron}`];
+  if (/^[\d\s.-]+$/.test(limpio)) {
+    const digitos = limpio.replace(/\D/g, "");
+    if (digitos !== "") filtros.push(`cuit_digitos.ilike.${entreComillas(`%${digitos}%`)}`);
+  }
   if (/^\d{1,9}$/.test(limpio)) filtros.push(`codigo_legado.eq.${Number(limpio)}`);
   return filtros.join(",");
 }

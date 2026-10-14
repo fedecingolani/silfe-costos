@@ -3,63 +3,17 @@ import { createClient } from "@/lib/supabase/server";
 import { Encabezado, Tarjeta, Vacio, Pastilla, BotonEliminar } from "@/components/ui";
 import { Modal } from "@/components/Modal";
 import type { Transporte } from "@/lib/tipos";
+import { MENSAJE_TRANSPORTE_EN_USO } from "@/lib/transportes/errores";
 import { crearTransporte, actualizarTransporte, eliminarTransporte } from "./acciones";
+import { FormularioTransporte } from "./FormularioTransporte";
 
 export const dynamic = "force-dynamic";
 
 /** Avisos que llegan por ?aviso= desde las acciones de transportes. */
 const AVISOS: Record<string, string> = {
-  "en-uso": "El transporte está asignado a clientes o sucursales: desactivalo en lugar de borrarlo.",
+  "en-uso": MENSAJE_TRANSPORTE_EN_USO,
+  "no-eliminado": "Volvé a intentarlo.",
 };
-
-function Formulario({
-  accion,
-  transporte,
-}: {
-  accion: (formData: FormData) => Promise<void>;
-  transporte?: Transporte;
-}) {
-  return (
-    <form action={accion} className="space-y-3 p-4">
-      {transporte && <input type="hidden" name="id" value={transporte.id} />}
-      <div>
-        <label className="etiqueta">Nombre *</label>
-        <input
-          name="nombre"
-          required
-          defaultValue={transporte?.nombre ?? ""}
-          placeholder="Expreso del Valle"
-          className="campo"
-        />
-      </div>
-      <div>
-        <label className="etiqueta">Teléfono</label>
-        <input name="telefono" defaultValue={transporte?.telefono ?? ""} className="campo" />
-      </div>
-      <div>
-        <label className="etiqueta">Observaciones</label>
-        <textarea
-          name="observaciones"
-          rows={3}
-          defaultValue={transporte?.observaciones ?? ""}
-          className="campo"
-        />
-      </div>
-      <label className="flex items-center gap-2 text-sm text-stone-600">
-        <input type="checkbox" name="activo" defaultChecked={transporte?.activo ?? true} className="rounded" />
-        Activo
-      </label>
-      <div className="flex gap-2">
-        <button className="boton-primario">{transporte ? "Guardar cambios" : "Agregar transporte"}</button>
-        {transporte && (
-          <Link href="/transportes" className="boton-secundario">
-            Cancelar
-          </Link>
-        )}
-      </div>
-    </form>
-  );
-}
 
 export default async function TransportesPage({
   searchParams,
@@ -85,7 +39,7 @@ export default async function TransportesPage({
         descripcion="Expresos y fletes con los que se despacha. Se asignan como transporte habitual del cliente o de una sucursal."
         acciones={
           <Modal boton="+ Agregar transporte" titulo="Nuevo transporte">
-            <Formulario accion={crearTransporte} />
+            <FormularioTransporte accion={crearTransporte} />
           </Modal>
         }
       />
@@ -137,7 +91,7 @@ export default async function TransportesPage({
 
       {enEdicion && (
         <Modal titulo={`Editar: ${enEdicion.nombre}`} abierto hrefAlCerrar="/transportes">
-          <Formulario key={enEdicion.id} accion={actualizarTransporte} transporte={enEdicion} />
+          <FormularioTransporte key={enEdicion.id} accion={actualizarTransporte} transporte={enEdicion} />
         </Modal>
       )}
     </>

@@ -103,6 +103,32 @@ transporte y con quién se habla.
   - el contador dice "1 clientes";
   - los campos del alta de cliente no tienen las etiquetas asociadas (accesibilidad).
 
+- Commits `d92c6b1` y `7b4944b`. Revisiones `review-0dcac76f3e530a34` (el tramo) y
+  `review-c51d1185ed28fc3e` (la rama completa): **aprobadas y confirmadas**. El usuario pidió
+  corregir cinco hallazgos antes de pasar a la Fase 7:
+
+| ID | Tarea | Ruta | Estado |
+| --- | --- | --- | --- |
+| T7 | Buscar por CUIT con y sin guiones (columna normalizada a dígitos) | delegada (writer) | [x] |
+| T8 | Errores legibles en producción: sucursales, contactos y transporte con nombre repetido (23505) | delegada (writer) | [x] |
+| T9 | Alta de sucursal principal atómica (una sola transacción) | delegada (writer) | [x] |
+| T10 | El formulario del cliente conserva lo escrito después de un error | delegada (writer) | [x] |
+| T11 | `marcar_sucursal_principal` serializada por cliente (`for update`) y con tests como `authenticated` | delegada (writer) | [x] |
+
+- T7 a T11 implementados por un writer delegado:
+  - migración `20261020000001_crm_correcciones.sql` con `cuit_digitos`, `guardar_sucursal` y el
+    `for update` en `marcar_sucursal_principal`;
+  - mapeo de errores en `src/lib/clientes/errores.ts` y `src/lib/transportes/errores.ts`;
+  - formularios con `useActionState`;
+  - `FormularioCliente` controlado.
+- RED → GREEN: `supabase test db` con 160 tests y `npm test` con 117, todos en verde. Typecheck,
+  lint y build OK.
+- Recorrido en el navegador:
+  - buscar "20123456786" encuentra al cliente guardado como "20-12345678-6";
+  - un transporte con nombre repetido muestra "Ya existe un transporte con ese nombre.".
+- Pendiente menor: los formularios de sucursal, contacto y transporte se vacían después de un
+  error. Solo el formulario del cliente es controlado.
+
 ## Próximo paso
 
-Commits, evaluación de riesgo y revisión. Después, Fase 7 (seguimiento de llamados).
+Fase 7 (seguimiento de llamados).

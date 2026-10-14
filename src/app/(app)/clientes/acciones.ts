@@ -5,34 +5,31 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { aNumero, aTexto } from "@/lib/formato";
 import { validarCbu, validarCvu } from "@/lib/clientes/validaciones";
+import {
+  mensajeErrorCliente,
+  mensajeErrorContacto,
+  mensajeErrorSucursal,
+} from "@/lib/clientes/errores";
 
 function refrescar(clienteId?: string) {
   revalidatePath("/clientes");
   if (clienteId) revalidatePath(`/clientes/${clienteId}`);
 }
 
-/** Estado de los formularios de cliente que muestran el error en un modal. */
+/** Estado de los formularios de la ficha que muestran el error en un modal. */
 export type EstadoFormularioCliente = { error?: string } | undefined;
 
-/** Mensajes legibles para las restricciones de la base sobre el cliente. */
-const MENSAJES_RESTRICCION: Record<string, string> = {
-  cliente_cbu_check: "El CBU debe tener exactamente 22 dígitos.",
-  cliente_cvu_check: "El CVU debe tener exactamente 22 dígitos.",
-  cliente_alias_bancario_check:
-    "El alias lleva de 6 a 20 caracteres: letras, números, punto y guion.",
-  cliente_condicion_iva_check: "La condición frente al IVA no es válida.",
-};
-
-function mensajeErrorCliente(
-  accion: string,
-  error: { code?: string; message: string },
-): string {
-  if (error.code === "23514") {
-    const restriccion = Object.keys(MENSAJES_RESTRICCION).find((r) => error.message.includes(r));
-    if (restriccion) return MENSAJES_RESTRICCION[restriccion];
-  }
-  return `No se pudo ${accion} el cliente: ${error.message}`;
-}
+/**
+ * Valores de ?aviso= que muestran la ficha y el listado cuando falla una
+ * acción de un formulario sin estado (botones de eliminar o de marcar la
+ * principal). Next enmascara en producción los errores lanzados desde una
+ * acción, así que se avisan con un parámetro de la URL.
+ */
+export type AvisoCliente =
+  | "cliente-no-eliminado"
+  | "sucursal-no-eliminada"
+  | "principal-no-marcada"
+  | "contacto-no-eliminado";
 
 /** CBU o CVU sin espacios ni guiones; si no tiene el formato, se manda tal cual y la base lo rechaza. */
 function cuenta(valor: FormDataEntryValue | null, validar: typeof validarCbu) {
@@ -97,8 +94,9 @@ export async function actualizarCliente(
 
 export async function eliminarCliente(formData: FormData) {
   const supabase = await createClient();
-  const { error } = await supabase.from("cliente").delete().eq("id", String(formData.get("id")));
-  if (error) throw new Error(`No se pudo eliminar el cliente: ${error.message}`);
+  const id = String(formData.get("id"));
+  const { error } = await supabase.from("cliente").delete().eq("id", id);
+  if (error) redirect(`/clientes/${id}?aviso=${"cliente-no-eliminado" satisfies AvisoCliente}`);
   refrescar();
   redirect("/clientes");
 }
@@ -120,37 +118,38 @@ function datosSucursal(formData: FormData) {
   };
 }
 
-/** Marca la sucursal como principal y desmarca la anterior, en una sola transacción. */
-async function marcarPrincipal(supabase: Awaited<ReturnType<typeof createClient>>, sucursalId: string) {
-  const { error } = await supabase.rpc("marcar_sucursal_principal", { p_sucursal_id: sucursalId });
-  if (error) throw new Error(`No se pudo marcar la sucursal como principal: ${error.message}`);
+/** Guarda la sucursal con guardar_sucursal; si falla, devuelve el mensaje legible. */
+async function guardarSucursal(formData: FormData, accion: string): Promise<EstadoFormularioCliente> {
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("guardar_sucursal", {
+    p_id: aTexto(formData.get("id")),
+    p_cliente_id: String(formData.get("cliente_id")),
+    // Alta o edición y, si es la principal, desmarcar la anterior: todo en
+    // una sola transacción, dentro de la función.
+    p_datos: { ...datosSucursal(formData), principal: formData.get("principal") === "on" },
+  });
+  if (error) return { error: mensajeErrorSucursal(accion, error) };
+  return undefined;
 }
 
-export async function agregarSucursal(formData: FormData) {
+export async function agregarSucursal(
+  _estado: EstadoFormularioCliente,
+  formData: FormData,
+): Promise<EstadoFormularioCliente> {
   const clienteId = String(formData.get("cliente_id"));
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("cliente_sucursal")
-    .insert({ cliente_id: clienteId, ...datosSucursal(formData) })
-    .select("id")
-    .single();
-  if (error) throw new Error(`No se pudo agregar la sucursal: ${error.message}`);
-  if (formData.get("principal") === "on") await marcarPrincipal(supabase, data.id);
+  const estado = await guardarSucursal(formData, "agregar");
+  if (estado?.error) return estado;
   refrescar(clienteId);
   redirect(`/clientes/${clienteId}`);
 }
 
-export async function actualizarSucursal(formData: FormData) {
+export async function actualizarSucursal(
+  _estado: EstadoFormularioCliente,
+  formData: FormData,
+): Promise<EstadoFormularioCliente> {
   const clienteId = String(formData.get("cliente_id"));
-  const id = String(formData.get("id"));
-  const supabase = await createClient();
-  const principal = formData.get("principal") === "on";
-  const { error } = await supabase
-    .from("cliente_sucursal")
-    .update({ ...datosSucursal(formData), ...(principal ? {} : { principal: false }) })
-    .eq("id", id);
-  if (error) throw new Error(`No se pudo actualizar la sucursal: ${error.message}`);
-  if (principal) await marcarPrincipal(supabase, id);
+  const estado = await guardarSucursal(formData, "actualizar");
+  if (estado?.error) return estado;
   refrescar(clienteId);
   redirect(`/clientes/${clienteId}`);
 }
@@ -158,8 +157,13 @@ export async function actualizarSucursal(formData: FormData) {
 export async function hacerSucursalPrincipal(formData: FormData) {
   const clienteId = String(formData.get("cliente_id"));
   const supabase = await createClient();
-  await marcarPrincipal(supabase, String(formData.get("id")));
+  const { error } = await supabase.rpc("marcar_sucursal_principal", {
+    p_sucursal_id: String(formData.get("id")),
+  });
+  if (error) redirect(`/clientes/${clienteId}?aviso=${"principal-no-marcada" satisfies AvisoCliente}`);
   refrescar(clienteId);
+  // Vuelve a la ficha sin ?aviso=, por si quedó de un error anterior.
+  redirect(`/clientes/${clienteId}`);
 }
 
 export async function eliminarSucursal(formData: FormData) {
@@ -169,8 +173,10 @@ export async function eliminarSucursal(formData: FormData) {
     .from("cliente_sucursal")
     .delete()
     .eq("id", String(formData.get("id")));
-  if (error) throw new Error(`No se pudo eliminar la sucursal: ${error.message}`);
+  if (error) redirect(`/clientes/${clienteId}?aviso=${"sucursal-no-eliminada" satisfies AvisoCliente}`);
   refrescar(clienteId);
+  // Vuelve a la ficha sin ?aviso=, por si quedó de un error anterior.
+  redirect(`/clientes/${clienteId}`);
 }
 
 // ----- Contactos ---------------------------------------------------------
@@ -188,25 +194,32 @@ function datosContacto(formData: FormData) {
   };
 }
 
-export async function agregarContacto(formData: FormData) {
+export async function agregarContacto(
+  _estado: EstadoFormularioCliente,
+  formData: FormData,
+): Promise<EstadoFormularioCliente> {
   const clienteId = String(formData.get("cliente_id"));
   const supabase = await createClient();
   const { error } = await supabase
     .from("cliente_contacto")
     .insert({ cliente_id: clienteId, ...datosContacto(formData) });
-  if (error) throw new Error(`No se pudo agregar el contacto: ${error.message}`);
+  if (error) return { error: mensajeErrorContacto("agregar", error) };
   refrescar(clienteId);
   redirect(`/clientes/${clienteId}`);
 }
 
-export async function actualizarContacto(formData: FormData) {
+export async function actualizarContacto(
+  _estado: EstadoFormularioCliente,
+  formData: FormData,
+): Promise<EstadoFormularioCliente> {
   const clienteId = String(formData.get("cliente_id"));
   const supabase = await createClient();
   const { error } = await supabase
     .from("cliente_contacto")
     .update(datosContacto(formData))
-    .eq("id", String(formData.get("id")));
-  if (error) throw new Error(`No se pudo actualizar el contacto: ${error.message}`);
+    .eq("id", String(formData.get("id")))
+    .eq("cliente_id", clienteId);
+  if (error) return { error: mensajeErrorContacto("actualizar", error) };
   refrescar(clienteId);
   redirect(`/clientes/${clienteId}`);
 }
@@ -218,6 +231,8 @@ export async function eliminarContacto(formData: FormData) {
     .from("cliente_contacto")
     .delete()
     .eq("id", String(formData.get("id")));
-  if (error) throw new Error(`No se pudo eliminar el contacto: ${error.message}`);
+  if (error) redirect(`/clientes/${clienteId}?aviso=${"contacto-no-eliminado" satisfies AvisoCliente}`);
   refrescar(clienteId);
+  // Vuelve a la ficha sin ?aviso=, por si quedó de un error anterior.
+  redirect(`/clientes/${clienteId}`);
 }

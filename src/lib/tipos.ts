@@ -41,6 +41,8 @@ export type Cliente = {
   codigo_legado: number | null;
   razon_social: string;
   cuit: string | null;
+  /** Sólo los dígitos del CUIT: columna generada, de sólo lectura, para buscar con o sin guiones. */
+  cuit_digitos: string | null;
   direccion: string | null;
   localidad: string | null;
   provincia: string | null;
