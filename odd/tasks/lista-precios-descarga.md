@@ -107,6 +107,16 @@ con un texto destacado y los datos de contacto. El Excel sirve para operar con l
   - las rutas no tienen tests;
   - "Repuestos:" puede quedar sola al final de una página.
 
+- Revisión de la rama completa (Fases 1 a 4) `review-ba61cec4ddf59e41`, con consentimiento:
+  **aprobada y confirmada**. Hallazgos nuevos que no bloquean, para la pasada de mejoras:
+  - borrar un producto entre que se abre el editor y se guarda la lista devuelve un error de FK
+    (23503) crudo;
+  - el fetch del logo corre dentro del mismo `Promise.all` y sin timeout, así que puede trabar
+    la descarga;
+  - el PDF no es determinístico (`CreationDate`/`ModDate`);
+  - las palabras largas no se cortan;
+  - el test de varias páginas es débil.
+
 ## Próximo paso
 
 La pasada de mejoras con los seguimientos de las
