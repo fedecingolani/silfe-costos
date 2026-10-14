@@ -7,7 +7,7 @@
 begin;
 create extension if not exists pgtap with schema extensions;
 
-select plan(17);
+select plan(23);
 
 -- ---------------------------------------------------------------------
 -- Fixtures: se desactivan los productos del seed para que la vista sólo
@@ -162,6 +162,47 @@ select is(
   (select precio_redondeado from v_lista_precio_base where codigo = 'ZS-002'),
   0::numeric,
   'Un producto sin costos queda en 0'
+);
+
+-- ---------------------------------------------------------------------
+-- Redondeo: se redondea a centavos antes de subir a la centena, para que
+-- los decimales residuales de un cálculo no salten a la centena siguiente
+-- ---------------------------------------------------------------------
+
+select has_function(
+  'public', 'redondear_precio_lista', array['numeric'],
+  'Existe redondear_precio_lista(numeric)'
+);
+
+select is(
+  redondear_precio_lista(24500.0000001),
+  24500::numeric,
+  'Un decimal residual por debajo del centavo no sube a la centena siguiente'
+);
+
+select is(
+  redondear_precio_lista(24500.01),
+  24600::numeric,
+  'Un centavo por encima de la centena sube a la centena siguiente'
+);
+
+select is(
+  redondear_precio_lista(null),
+  null::numeric,
+  'Sin precio sugerido no hay precio redondeado'
+);
+
+select is(
+  (select count(*) from v_lista_precio_base
+   where precio_redondeado is distinct from redondear_precio_lista(precio_sugerido)),
+  0::bigint,
+  'La vista redondea con redondear_precio_lista'
+);
+
+select ok(
+  has_function_privilege('authenticated', 'public.redondear_precio_lista(numeric)', 'execute')
+  and not has_function_privilege('anon', 'public.redondear_precio_lista(numeric)', 'execute'),
+  'redondear_precio_lista la ejecuta authenticated y no anon'
 );
 
 -- ---------------------------------------------------------------------

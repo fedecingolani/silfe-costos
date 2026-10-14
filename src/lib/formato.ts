@@ -42,6 +42,16 @@ export function fecha(valor: string | null | undefined) {
   return new Intl.DateTimeFormat("es-AR", { dateStyle: "medium" }).format(new Date(`${valor}T00:00:00`));
 }
 
+/** Fecha y hora de una marca de tiempo (timestamptz), en la hora de Argentina. */
+export function fechaHora(valor: string | null | undefined) {
+  if (!valor) return "—";
+  return new Intl.DateTimeFormat("es-AR", {
+    dateStyle: "medium",
+    timeStyle: "short",
+    timeZone: "America/Argentina/Buenos_Aires",
+  }).format(new Date(valor));
+}
+
 /** Convierte strings de formulario a número, aceptando coma decimal. */
 export function aNumero(valor: FormDataEntryValue | null, porDefecto: number | null = null) {
   if (valor === null) return porDefecto;
