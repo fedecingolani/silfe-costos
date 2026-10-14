@@ -48,6 +48,51 @@ export type Cliente = {
   telefono: string | null;
   zona_id: string | null;
   activo: boolean;
+  condicion_iva: CondicionIva | null;
+  /** 22 dígitos; la base valida el formato y la app avisa si los verificadores no cierran. */
+  cbu: string | null;
+  /** 22 dígitos, empieza con 000. */
+  cvu: string | null;
+  alias_bancario: string | null;
+  /** Transporte habitual; una sucursal puede tener uno propio. */
+  transporte_id: string | null;
+  observaciones: string | null;
+};
+
+export const CONDICIONES_IVA = [
+  "Responsable Inscripto",
+  "Monotributista",
+  "Exento",
+  "Consumidor Final",
+] as const;
+
+export type CondicionIva = (typeof CONDICIONES_IVA)[number];
+
+export type Transporte = {
+  id: string;
+  nombre: string;
+  telefono: string | null;
+  observaciones: string | null;
+  activo: boolean;
+};
+
+/** Sucursal o dirección de entrega de un cliente. */
+export type ClienteSucursal = {
+  id: string;
+  cliente_id: string;
+  nombre: string;
+  direccion: string | null;
+  localidad: string | null;
+  provincia: string | null;
+  codigo_postal: string | null;
+  telefono: string | null;
+  observaciones: string | null;
+  recibe_entregas: boolean;
+  /** Dirección de entrega principal; una sola por cliente. */
+  principal: boolean;
+  /** Transporte propio; null = el habitual del cliente. */
+  transporte_id: string | null;
+  orden: number;
 };
 
 export type ClienteContacto = {
@@ -56,6 +101,11 @@ export type ClienteContacto = {
   nombre: string;
   cargo: string | null;
   telefono: string | null;
+  email: string | null;
+  whatsapp: string | null;
+  observaciones: string | null;
+  /** Sucursal del mismo cliente donde trabaja el contacto. */
+  sucursal_id: string | null;
   orden: number;
 };
 

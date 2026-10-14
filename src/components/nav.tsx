@@ -14,7 +14,10 @@ const SECCIONES: { titulo: string; items: { href: string; texto: string }[] }[] 
   },
   {
     titulo: "Ventas",
-    items: [{ href: "/listas-precios", texto: "Listas de precios" }],
+    items: [
+      { href: "/listas-precios", texto: "Listas de precios" },
+      { href: "/transportes", texto: "Transportes" },
+    ],
   },
   {
     titulo: "Insumos",
