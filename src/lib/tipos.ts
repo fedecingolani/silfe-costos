@@ -239,3 +239,49 @@ export type ParametroCosteo = {
   gastos_generales_pct: number;
   margen_pct: number;
 };
+
+/** Lista de precios guardada. Inmutable: para corregirla se duplica. */
+export type ListaPrecio = {
+  id: string;
+  nombre: string;
+  /** Encabezado impreso (ej. "LISTA DE PRECIOS DICIEMBRE 2023"). */
+  titulo: string | null;
+  notas: string | null;
+  creado_en: string;
+  creado_por: string | null;
+};
+
+/** Ítem de una lista guardada: foto de los datos al crear la lista. */
+export type ListaPrecioItem = {
+  id: string;
+  lista_id: string;
+  orden: number;
+  es_repuesto: boolean;
+  /** null en los ítems manuales. */
+  producto_id: string | null;
+  codigo: string | null;
+  descripcion: string;
+  /** Nombre de la unidad de la presentación de venta (ej. "Docena"). */
+  presentacion: string | null;
+  alicuota_iva: number;
+  /** Precio de la presentación calculado, sin redondear; null en los manuales. */
+  precio_sugerido: number | null;
+  precio_final: number;
+};
+
+/** Fila de v_lista_precio_base: punto de partida de una lista nueva. */
+export type ListaPrecioBase = {
+  orden: number;
+  es_repuesto: boolean;
+  producto_id: string;
+  /** TERMINADO debajo del cual va el repuesto; null en productos y otros repuestos. */
+  padre_producto_id: string | null;
+  codigo: string;
+  descripcion: string;
+  presentacion: string | null;
+  alicuota_iva: number;
+  /** precio_presentacion de v_producto_costo. */
+  precio_sugerido: number | null;
+  /** precio_sugerido redondeado hacia arriba a la centena. */
+  precio_redondeado: number | null;
+};
