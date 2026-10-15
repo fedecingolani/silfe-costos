@@ -50,7 +50,7 @@ Un spike (2026-10-14/15) confirmó que desde Cloudflare Workers (local y edge, c
 | ID | Tarea | Ruta | Estado |
 | --- | --- | --- | --- |
 | T1 | Migraciones `arca_emisor`, `arca_credencial` y RLS (tests pgTAP en rojo primero) | delegada (writer) | [x] |
-| T2 | `src/lib/arca/`: CUIT, cifrado, WSAA (TRA, firma CMS, parseo), WSFE (SOAP) y certificado, con Vitest | delegada (writer) | [ ] |
+| T2 | `src/lib/arca/`: CUIT, cifrado, WSAA (TRA, firma CMS, parseo), WSFE (SOAP) y certificado, con Vitest | delegada (writer) | [x] |
 | T3 | Pantalla y acciones: datos del emisor, subir credenciales, probar conexión, ticket reutilizado con bloqueo | delegada (writer) | [ ] |
 | T4 | Menú, `.dev.vars.example`, AGENTS.md/README (secreto `ARCA_CLAVE_CIFRADO`) | delegada (writer) | [ ] |
 | T5 | Recorrido en el navegador contra homologación con el certificado real | orquestador | [ ] |
@@ -80,7 +80,8 @@ Las rutas de T1–T4 son delegadas porque cada una toca 2 o más archivos no tri
 ## Progreso
 
 - Rama `feat/arca-configuracion` creada desde `main` (54c1e07).
-- T1: migraciones `20261023000001_arca_configuracion.sql` y `20261023000002_rls_arca_configuracion.sql`. RED observado (31/31 fallan sin tablas), GREEN con `supabase test db` (12 archivos, 234 tests).
+- T1: migraciones `20261023000001_arca_configuracion.sql` y `20261023000002_rls_arca_configuracion.sql`. RED observado (31/31 fallan sin tablas), GREEN con `supabase test db` (12 archivos, 234 tests). Commit d547e47.
+- T2: `src/lib/arca/` (cuit, cifrado, certificado, wsaa, wsfe, ticket, xml) con `node-forge` 1.3.1. RED observado (6 archivos sin módulos), GREEN: `npm test` 194 tests, `npm run typecheck`, `npm run lint` y `npm run build` OK. El build todavía no importa `node-forge` desde ninguna ruta: el empaquetado en el Worker se confirma en T3.
 
 ## Próximo paso
 

@@ -412,3 +412,48 @@ export type ListaPrecioBase = {
    */
   costos_incompletos: boolean;
 };
+
+// ---------------------------------------------------------------------
+// ARCA (facturación electrónica)
+// ---------------------------------------------------------------------
+
+export type AmbienteArca = "homologacion" | "produccion";
+
+export type CondicionIvaEmisor = "Responsable Inscripto" | "Monotributista" | "Exento";
+
+/** Fila única de arca_emisor. */
+export type ArcaEmisor = {
+  id: true;
+  /** 11 dígitos sin guiones; null hasta configurarla. */
+  cuit: string | null;
+  razon_social: string | null;
+  condicion_iva: CondicionIvaEmisor | null;
+  punto_venta: number | null;
+  ambiente: AmbienteArca;
+  actualizado_en: string;
+};
+
+/**
+ * Fila de arca_credencial. clave_cifrada y ta_cifrado son texto cifrado
+ * (AES-256-GCM, "v1.<iv>.<datos>") y no deben salir hacia el navegador.
+ */
+export type ArcaCredencial = {
+  ambiente: AmbienteArca;
+  certificado_pem: string;
+  certificado_titular: string | null;
+  certificado_cuit: string;
+  certificado_vence: string;
+  clave_cifrada: string;
+  ta_cifrado: string | null;
+  ta_expira: string | null;
+  ta_bloqueado_hasta: string | null;
+  creado_en: string;
+  actualizado_en: string;
+};
+
+/** Ticket de acceso de WSAA para un servicio (12 h de vigencia). */
+export type TicketAcceso = {
+  token: string;
+  sign: string;
+  expira: Date;
+};
