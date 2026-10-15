@@ -1,7 +1,8 @@
 "use client";
 
-import { startTransition, useActionState, useState, type ChangeEvent, type FormEvent } from "react";
+import { useActionState, useState, type ChangeEvent } from "react";
 import { ModalError } from "@/components/ModalError";
+import { enviarSinReiniciar } from "@/lib/formularios";
 import { AMBIENTES_ARCA, CONDICIONES_IVA_EMISOR, NOMBRES_AMBIENTE_ARCA, type ArcaEmisor } from "@/lib/tipos";
 import type { EstadoFormularioArca } from "./acciones";
 
@@ -15,8 +16,7 @@ export function FormularioEmisor({
   emisor: Omit<ArcaEmisor, "id" | "actualizado_en"> | null;
 }) {
   const [estado, accionFormulario, pendiente] = useActionState(accion, undefined);
-  // Campos controlados y envío por onSubmit: con <form action> React 19 resetea el formulario
-  // después de cada acción, y el <select> vuelve a "Elegí una" aunque el estado tenga el valor.
+  // Campos controlados y envío por onSubmit (ver enviarSinReiniciar).
   const [valores, setValores] = useState({
     cuit: emisor?.cuit ?? "",
     razon_social: emisor?.razon_social ?? "",
@@ -26,14 +26,9 @@ export function FormularioEmisor({
   });
   const cambiar = (e: ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
     setValores((v) => ({ ...v, [e.target.name]: e.target.value }));
-  const enviar = (e: FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    const datos = new FormData(e.currentTarget);
-    startTransition(() => accionFormulario(datos));
-  };
   return (
     <>
-      <form onSubmit={enviar} className="space-y-3 p-4">
+      <form onSubmit={enviarSinReiniciar(accionFormulario)} className="space-y-3 p-4">
         <div>
           <label className="etiqueta">CUIT *</label>
           <input
