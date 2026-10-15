@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useActionState } from "react";
 import { ModalError } from "@/components/ModalError";
 import type { ClienteContacto, ClienteSucursal, Transporte } from "@/lib/tipos";
+import { enviarSinReiniciar } from "@/lib/formularios";
 import type { EstadoFormularioCliente } from "../acciones";
 
 /** Acción de servidor que devuelve el error en lugar de lanzarlo (Next lo enmascara en producción). */
@@ -27,7 +28,7 @@ export function FormularioSucursal({
   const opciones = transportes.filter((t) => t.activo || t.id === sucursal?.transporte_id);
   return (
     <>
-      <form action={accionFormulario} className="space-y-3 p-4">
+      <form onSubmit={enviarSinReiniciar(accionFormulario)} className="space-y-3 p-4">
         <input type="hidden" name="cliente_id" value={clienteId} />
         {sucursal && <input type="hidden" name="id" value={sucursal.id} />}
         <div className="grid grid-cols-3 gap-3">
@@ -133,7 +134,7 @@ export function FormularioContacto({
   const [estado, accionFormulario, pendiente] = useActionState(accion, undefined);
   return (
     <>
-      <form action={accionFormulario} className="space-y-3 p-4">
+      <form onSubmit={enviarSinReiniciar(accionFormulario)} className="space-y-3 p-4">
         <input type="hidden" name="cliente_id" value={clienteId} />
         {contacto && <input type="hidden" name="id" value={contacto.id} />}
         <div className="grid grid-cols-3 gap-3">
