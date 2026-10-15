@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { startTransition, useActionState, useState, type ChangeEvent, type FormEvent } from "react";
 import { ModalError } from "@/components/ModalError";
 import { AMBIENTES_ARCA, CONDICIONES_IVA_EMISOR, NOMBRES_AMBIENTE_ARCA, type ArcaEmisor } from "@/lib/tipos";
 import type { EstadoFormularioArca } from "./acciones";
@@ -15,27 +15,44 @@ export function FormularioEmisor({
   emisor: Omit<ArcaEmisor, "id" | "actualizado_en"> | null;
 }) {
   const [estado, accionFormulario, pendiente] = useActionState(accion, undefined);
+  // Campos controlados y envío por onSubmit: con <form action> React 19 resetea el formulario
+  // después de cada acción, y el <select> vuelve a "Elegí una" aunque el estado tenga el valor.
+  const [valores, setValores] = useState({
+    cuit: emisor?.cuit ?? "",
+    razon_social: emisor?.razon_social ?? "",
+    condicion_iva: emisor?.condicion_iva ?? "",
+    punto_venta: emisor?.punto_venta != null ? String(emisor.punto_venta) : "",
+    ambiente: emisor?.ambiente ?? "homologacion",
+  });
+  const cambiar = (e: ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
+    setValores((v) => ({ ...v, [e.target.name]: e.target.value }));
+  const enviar = (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const datos = new FormData(e.currentTarget);
+    startTransition(() => accionFormulario(datos));
+  };
   return (
     <>
-      <form action={accionFormulario} className="space-y-3 p-4">
+      <form onSubmit={enviar} className="space-y-3 p-4">
         <div>
           <label className="etiqueta">CUIT *</label>
           <input
             name="cuit"
             required
             inputMode="numeric"
-            defaultValue={emisor?.cuit ?? ""}
+            value={valores.cuit}
+            onChange={cambiar}
             placeholder="30-12345678-9"
             className="campo"
           />
         </div>
         <div>
           <label className="etiqueta">Razón social *</label>
-          <input name="razon_social" required defaultValue={emisor?.razon_social ?? ""} className="campo" />
+          <input name="razon_social" required value={valores.razon_social} onChange={cambiar} className="campo" />
         </div>
         <div>
           <label className="etiqueta">Condición frente al IVA *</label>
-          <select name="condicion_iva" required defaultValue={emisor?.condicion_iva ?? ""} className="campo">
+          <select name="condicion_iva" required value={valores.condicion_iva} onChange={cambiar} className="campo">
             <option value="" disabled>
               Elegí una
             </option>
@@ -55,7 +72,8 @@ export function FormularioEmisor({
             name="punto_venta"
             required
             inputMode="numeric"
-            defaultValue={emisor?.punto_venta ?? ""}
+            value={valores.punto_venta}
+            onChange={cambiar}
             className="campo"
           />
           <p className="mt-1 text-xs text-stone-500">
@@ -64,7 +82,7 @@ export function FormularioEmisor({
         </div>
         <div>
           <label className="etiqueta">Ambiente activo</label>
-          <select name="ambiente" defaultValue={emisor?.ambiente ?? "homologacion"} className="campo">
+          <select name="ambiente" value={valores.ambiente} onChange={cambiar} className="campo">
             {AMBIENTES_ARCA.map((a) => (
               <option key={a} value={a}>
                 {NOMBRES_AMBIENTE_ARCA[a]}
