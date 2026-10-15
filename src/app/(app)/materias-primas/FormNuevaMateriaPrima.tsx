@@ -3,6 +3,7 @@
 import { useActionState } from "react";
 import { ModalError } from "@/components/ModalError";
 import type { Proveedor, UnidadMedida } from "@/lib/tipos";
+import { enviarSinReiniciar } from "@/lib/formularios";
 import { crearMateriaPrima } from "./acciones";
 
 export function FormNuevaMateriaPrima({
@@ -18,7 +19,7 @@ export function FormNuevaMateriaPrima({
 
   return (
     <>
-      <form action={accion} className="space-y-3 p-4">
+      <form onSubmit={enviarSinReiniciar(accion)} className="space-y-3 p-4">
         <div className="grid grid-cols-3 gap-3">
           <div>
             <label className="etiqueta">Código *</label>
