@@ -77,7 +77,7 @@ export async function guardarEmisor(
   }
 
   const supabase = await createClient();
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from("arca_emisor")
     .update({
       cuit,
@@ -86,8 +86,11 @@ export async function guardarEmisor(
       punto_venta: puntoVenta,
       ambiente,
     })
-    .eq("id", true);
+    .eq("id", true)
+    .select("id");
   if (error) return { error: `No se pudieron guardar los datos del emisor: ${error.message}` };
+  // Sin filas actualizadas (fila única ausente o RLS) no hay que informar éxito.
+  if ((data ?? []).length !== 1) return { error: "No se pudieron guardar los datos del emisor: no se actualizó ningún registro." };
   revalidatePath(RUTA);
   return { ok: "Datos del emisor guardados." };
 }
@@ -162,7 +165,7 @@ type Supabase = Awaited<ReturnType<typeof createClient>>;
 
 function almacenTicket(supabase: Supabase, ambiente: AmbienteArca): AlmacenTicket {
   const tabla = () => supabase.from("arca_credencial");
-  return {
+  const almacen: AlmacenTicket = {
     async leer() {
       const { data, error } = await tabla()
         .select("ta_cifrado, ta_expira, ta_bloqueado_hasta")
@@ -179,13 +182,23 @@ function almacenTicket(supabase: Supabase, ambiente: AmbienteArca): AlmacenTicke
         .or(`ta_bloqueado_hasta.is.null,ta_bloqueado_hasta.lt.${ahora.toISOString()}`)
         .select("ambiente");
       if (error) throw new Error(`No se pudo reservar el pedido de ticket: ${error.message}`);
-      return (data ?? []).length === 1;
+      if ((data ?? []).length === 1) return true;
+      // Cero filas: sólo es "otro pedido tiene el bloqueo" si el bloqueo está tomado y vigente.
+      // Si está libre, el update falló por otra causa (RLS, fila inexistente) y hay que decirlo.
+      const actual = await almacen.leer();
+      const bloqueado = actual.taBloqueadoHasta !== null && new Date(actual.taBloqueadoHasta) >= ahora;
+      if (!bloqueado) throw new Error("No se pudo reservar el pedido de ticket: no se actualizó ningún registro.");
+      return false;
     },
     async guardar(taCifrado, expira) {
-      const { error } = await tabla()
+      const { data, error } = await tabla()
         .update({ ta_cifrado: taCifrado, ta_expira: expira.toISOString(), ta_bloqueado_hasta: null })
-        .eq("ambiente", ambiente);
+        .eq("ambiente", ambiente)
+        .select("ambiente");
       if (error) throw new Error(`No se pudo guardar el ticket de acceso: ${error.message}`);
+      if ((data ?? []).length !== 1) {
+        throw new Error("No se pudo guardar el ticket de acceso: no se actualizó ningún registro.");
+      }
     },
     async liberarBloqueo(hasta) {
       await tabla()
@@ -194,6 +207,7 @@ function almacenTicket(supabase: Supabase, ambiente: AmbienteArca): AlmacenTicke
         .eq("ta_bloqueado_hasta", hasta.toISOString());
     },
   };
+  return almacen;
 }
 
 // ----- Probar conexión ---------------------------------------------------
