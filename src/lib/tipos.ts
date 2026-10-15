@@ -412,3 +412,66 @@ export type ListaPrecioBase = {
    */
   costos_incompletos: boolean;
 };
+
+// ---------------------------------------------------------------------
+// ARCA (facturación electrónica)
+// ---------------------------------------------------------------------
+
+export const AMBIENTES_ARCA = ["homologacion", "produccion"] as const;
+
+export type AmbienteArca = (typeof AMBIENTES_ARCA)[number];
+
+export const NOMBRES_AMBIENTE_ARCA: Record<AmbienteArca, string> = {
+  homologacion: "Homologación",
+  produccion: "Producción",
+};
+
+export const CONDICIONES_IVA_EMISOR = ["Responsable Inscripto", "Monotributista", "Exento"] as const;
+
+export type CondicionIvaEmisor = (typeof CONDICIONES_IVA_EMISOR)[number];
+
+/** Fila única de arca_emisor. */
+export type ArcaEmisor = {
+  id: true;
+  /** 11 dígitos sin guiones; null hasta configurarla. */
+  cuit: string | null;
+  razon_social: string | null;
+  condicion_iva: CondicionIvaEmisor | null;
+  punto_venta: number | null;
+  ambiente: AmbienteArca;
+  actualizado_en: string;
+};
+
+/**
+ * Fila de arca_credencial. clave_cifrada y ta_cifrado son texto cifrado
+ * (AES-256-GCM, "v1.<iv>.<datos>") y no deben salir hacia el navegador.
+ */
+export type ArcaCredencial = {
+  ambiente: AmbienteArca;
+  certificado_pem: string;
+  certificado_titular: string | null;
+  certificado_cuit: string;
+  certificado_vence: string;
+  clave_cifrada: string;
+  ta_cifrado: string | null;
+  ta_expira: string | null;
+  ta_bloqueado_hasta: string | null;
+  creado_en: string;
+  actualizado_en: string;
+};
+
+/**
+ * Lo que la pantalla de ARCA lee de arca_credencial: nunca la clave cifrada
+ * ni el ticket, sólo el vencimiento del ticket para mostrar si está vigente.
+ */
+export type ArcaCredencialVisible = Pick<
+  ArcaCredencial,
+  "ambiente" | "certificado_titular" | "certificado_cuit" | "certificado_vence" | "ta_expira" | "actualizado_en"
+>;
+
+/** Ticket de acceso de WSAA para un servicio (12 h de vigencia). */
+export type TicketAcceso = {
+  token: string;
+  sign: string;
+  expira: Date;
+};

@@ -1,0 +1,9 @@
+# Variables y secretos del Worker para desarrollo local (`next dev` y `npm run preview`).
+# Copiá este archivo a .dev.vars (está en .gitignore) y completá los valores.
+
+# Clave que cifra la clave privada y el ticket de acceso de ARCA en la base (AES-256-GCM).
+# 32 bytes en base64. Generala con:
+#   openssl rand -base64 32
+# En producción va como secreto del Worker: `npx wrangler secret put ARCA_CLAVE_CIFRADO`.
+# Si se pierde o se cambia, las claves guardadas no se pueden descifrar: hay que volver a subir las credenciales.
+ARCA_CLAVE_CIFRADO=

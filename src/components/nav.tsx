@@ -39,12 +39,26 @@ const SECCIONES: { titulo: string; items: { href: string; texto: string }[] }[] 
     items: [
       { href: "/unidades", texto: "Unidades" },
       { href: "/configuracion", texto: "Parámetros" },
+      { href: "/configuracion/arca", texto: "ARCA" },
     ],
   },
 ];
 
+const HREFS = SECCIONES.flatMap((seccion) => seccion.items.map((item) => item.href));
+
+/**
+ * Ítem activo: el href más largo que coincide con la ruta, para que
+ * "/configuracion/arca" marque "ARCA" y no también "Parámetros".
+ */
+function hrefActivo(pathname: string): string | undefined {
+  return HREFS.filter((href) => (href === "/" ? pathname === "/" : pathname.startsWith(href))).sort(
+    (a, b) => b.length - a.length,
+  )[0];
+}
+
 export function Nav() {
   const pathname = usePathname();
+  const activoHref = hrefActivo(pathname);
 
   return (
     <nav className="space-y-5">
@@ -55,8 +69,7 @@ export function Nav() {
           </p>
           <ul className="space-y-0.5">
             {seccion.items.map((item) => {
-              const activo =
-                item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
+              const activo = item.href === activoHref;
               return (
                 <li key={item.href}>
                   <Link

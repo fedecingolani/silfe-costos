@@ -3,6 +3,7 @@
 import { useActionState } from "react";
 import { ModalError } from "@/components/ModalError";
 import type { MateriaPrima, UnidadMedida } from "@/lib/tipos";
+import { enviarSinReiniciar } from "@/lib/formularios";
 import { actualizarMateriaPrima } from "../acciones";
 
 export function FormEditarMateriaPrima({
@@ -16,7 +17,7 @@ export function FormEditarMateriaPrima({
 
   return (
     <>
-      <form action={accion} className="space-y-3 p-4">
+      <form onSubmit={enviarSinReiniciar(accion)} className="space-y-3 p-4">
         <input type="hidden" name="id" value={materia.id} />
         <div className="grid grid-cols-3 gap-3">
           <div>

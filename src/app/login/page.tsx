@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
+import { enviarSinReiniciar } from "@/lib/formularios";
 import { iniciarSesion } from "./acciones";
 
 export default function LoginPage() {
@@ -12,7 +13,7 @@ export default function LoginPage() {
         <h1 className="text-xl font-semibold text-marca-700">Silfe Costos</h1>
         <p className="mt-1 text-sm text-stone-500">Sistema de costeo de productos.</p>
 
-        <form action={accion} className="mt-6 space-y-4">
+        <form onSubmit={enviarSinReiniciar(accion)} className="mt-6 space-y-4">
           <div>
             <label className="etiqueta" htmlFor="email">
               Email

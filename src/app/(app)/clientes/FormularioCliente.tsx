@@ -5,6 +5,7 @@ import { useActionState, useState, type ChangeEvent } from "react";
 import { ModalError } from "@/components/ModalError";
 import { CONDICIONES_IVA, type Cliente, type Transporte, type Zona } from "@/lib/tipos";
 import { validarCbu, validarCuit, validarCvu, type Validacion } from "@/lib/clientes/validaciones";
+import { enviarSinReiniciar } from "@/lib/formularios";
 import type { EstadoFormularioCliente } from "./acciones";
 
 type AccionConEstado = (
@@ -118,7 +119,7 @@ export function FormularioCliente({
 
   return (
     <>
-      <form action={accionFormulario} className="space-y-3 p-4">
+      <form onSubmit={enviarSinReiniciar(accionFormulario)} className="space-y-3 p-4">
         {cliente && <input type="hidden" name="id" value={cliente.id} />}
         <div>
           <label className="etiqueta">Razón social *</label>

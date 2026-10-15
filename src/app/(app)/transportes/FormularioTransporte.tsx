@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useActionState } from "react";
 import { ModalError } from "@/components/ModalError";
 import type { Transporte } from "@/lib/tipos";
+import { enviarSinReiniciar } from "@/lib/formularios";
 import type { EstadoFormularioTransporte } from "./acciones";
 
 /** Acción de servidor que devuelve el error en lugar de lanzarlo (Next lo enmascara en producción). */
@@ -13,7 +14,7 @@ export function FormularioTransporte({ accion, transporte }: { accion: Accion; t
   const [estado, accionFormulario, pendiente] = useActionState(accion, undefined);
   return (
     <>
-      <form action={accionFormulario} className="space-y-3 p-4">
+      <form onSubmit={enviarSinReiniciar(accionFormulario)} className="space-y-3 p-4">
         {transporte && <input type="hidden" name="id" value={transporte.id} />}
         <div>
           <label className="etiqueta">Nombre *</label>

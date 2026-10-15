@@ -12,6 +12,7 @@ import {
   type ClienteInteraccion,
 } from "@/lib/tipos";
 import { fechaLocalArgentina } from "@/lib/clientes/seguimiento";
+import { enviarSinReiniciar } from "@/lib/formularios";
 import type { EstadoFormularioCliente } from "./acciones";
 
 type AccionConEstado = (
@@ -80,7 +81,7 @@ export function FormularioInteraccion({
 
   return (
     <>
-      <form action={accionFormulario} className="space-y-3 p-4">
+      <form onSubmit={enviarSinReiniciar(accionFormulario)} className="space-y-3 p-4">
         <input type="hidden" name="cliente_id" value={clienteId} />
         {interaccion && <input type="hidden" name="id" value={interaccion.id} />}
         {volver && <input type="hidden" name="volver" value={volver} />}
