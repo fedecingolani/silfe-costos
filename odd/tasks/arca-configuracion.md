@@ -53,7 +53,7 @@ Un spike (2026-10-14/15) confirmó que desde Cloudflare Workers (local y edge, c
 | T2 | `src/lib/arca/`: CUIT, cifrado, WSAA (TRA, firma CMS, parseo), WSFE (SOAP) y certificado, con Vitest | delegada (writer) | [x] |
 | T3 | Pantalla y acciones: datos del emisor, subir credenciales, probar conexión, ticket reutilizado con bloqueo | delegada (writer) | [x] |
 | T4 | Menú, `.dev.vars.example`, AGENTS.md/README (secreto `ARCA_CLAVE_CIFRADO`) | delegada (writer) | [x] |
-| T5 | Recorrido en el navegador contra homologación con el certificado real | orquestador | [ ] |
+| T5 | Recorrido en el navegador contra homologación con el certificado real | orquestador | [x] |
 
 Las rutas de T1–T4 son delegadas porque cada una toca 2 o más archivos no triviales.
 
@@ -92,8 +92,8 @@ Las rutas de T1–T4 son delegadas porque cada una toca 2 o más archivos no tri
   - Certificado de otra CUIT + clave que no corresponde → rechazo legible con ambos motivos.
   - Credencial descartable de la CUIT correcta → guardada; en la base `clave_cifrada` empieza con `v1.` y no contiene "PRIVATE"; el HTML de la página no contiene "PRIVATE KEY".
   - "Probar conexión" → servidores App/Base/Auth OK y mensaje legible de certificado no reconocido (`cms.cert.untrusted`); el bloqueo del ticket quedó liberado.
-  - Pendiente: login OK y reutilización del ticket con el certificado real de homologación (lo sube el usuario; el ticket del spike vence 13:20 del 15/10).
+  - Certificado real `silfeerphomo` subido por el usuario (15/10 15:06): guardado con clave cifrada. "Probar conexión": servidores OK, login WSAA OK, segunda prueba con "ticket reutilizado" (vence 16/10 03:12), último comprobante Factura A punto de venta 7 = 0 (emisor Responsable Inscripto). En la base `ta_cifrado` empieza con `v1.` y no contiene el token en claro; bloqueo liberado. Todos los criterios de aceptación cumplidos.
 
 ## Próximo paso
 
-El usuario sube `silfe-homo.crt` + `silfe.key` en homologación (después de las 13:20) y prueba la conexión dos veces: la primera pide ticket, la segunda lo reutiliza. Después: decidir la entrega (PR) y la condición IVA real del emisor.
+Decidir la entrega (PR de `feat/arca-configuracion`) y el pase a producción: `supabase db push`, `wrangler secret put ARCA_CLAVE_CIFRADO`, deploy, y certificado de producción. Después: emisión de comprobantes (CAE).
