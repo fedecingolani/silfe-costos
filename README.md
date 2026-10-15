@@ -107,6 +107,22 @@ supabase db push
 Los datos de ejemplo están en `supabase/seed.sql` y se pueden volver a correr: son idempotentes
 por código.
 
+## ARCA (factura electrónica)
+
+En **Configuración → ARCA** (`/configuracion/arca`) se cargan los datos del emisor (CUIT,
+razón social, condición frente al IVA, punto de venta y ambiente activo) y, por ambiente
+(homologación y producción), el certificado de ARCA y su clave privada. "Probar conexión"
+consulta el estado de los servidores, hace login en WSAA y lee el último comprobante autorizado.
+
+- La clave privada y el ticket de acceso se guardan cifrados (AES-256-GCM) con el secreto
+  `ARCA_CLAVE_CIFRADO`. La clave privada nunca vuelve al navegador.
+- En local, el secreto va en `.dev.vars` (ver `.dev.vars.example`; se genera con
+  `openssl rand -base64 32`). En producción: `npx wrangler secret put ARCA_CLAVE_CIFRADO`.
+- Si el secreto se pierde o se cambia, las claves guardadas no se pueden recuperar: hay que
+  volver a subir las credenciales.
+- El ticket de WSAA dura 12 horas y se reutiliza. Si ARCA responde que ya entregó uno que la
+  app no guardó, hay que esperar a que venza.
+
 ## Seguridad
 
 Todas las tablas tienen RLS activo. El rol `anon` no tiene acceso a nada; el rol `authenticated`

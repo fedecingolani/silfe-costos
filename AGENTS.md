@@ -68,11 +68,19 @@ npm run deploy       # build + deploy a Cloudflare Workers
 
 ## Variables de entorno
 
-Solo dos, en `.env.local` (ver `.env.example`):
+Dos públicas, en `.env.local` (ver `.env.example`):
 - `NEXT_PUBLIC_SUPABASE_URL`
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
 
 En `wrangler.jsonc`, `NEXT_PUBLIC_SUPABASE_URL` está además hardcodeada en `vars` porque el Worker de Cloudflare no lee `.env` al deployar — si cambia la URL del proyecto Supabase, hay que actualizarla ahí también.
+
+Secreto del Worker (no va en `.env.local` ni en `wrangler.jsonc`):
+- `ARCA_CLAVE_CIFRADO`: 32 bytes en base64 (`openssl rand -base64 32`). Cifra con AES-256-GCM la clave privada del certificado de ARCA y el ticket de WSAA guardados en `arca_credencial`.
+  - Local: en `.dev.vars` (gitignored; ver `.dev.vars.example`). `initOpenNextCloudflareForDev` (en `next.config.ts`) lo carga en `getCloudflareContext().env` durante `next dev`.
+  - Producción: `npx wrangler secret put ARCA_CLAVE_CIFRADO`. En el Worker, OpenNext lo expone en `getCloudflareContext().env` y en `process.env`.
+  - Se lee sólo en `src/lib/arca/secreto.ts`. Si falta, la pantalla de ARCA muestra un error de configuración.
+  - Si se pierde o se cambia, las claves guardadas quedan irrecuperables: hay que volver a subir las credenciales de cada ambiente.
+  - La clave privada nunca sale del servidor: las consultas de la pantalla no seleccionan `clave_cifrada` ni `ta_cifrado`, y las Server Actions no devuelven clave, token ni sign.
 
 ## Estado del proyecto (a la fecha de este archivo)
 
