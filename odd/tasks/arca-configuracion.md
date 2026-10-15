@@ -81,7 +81,8 @@ Las rutas de T1–T4 son delegadas porque cada una toca 2 o más archivos no tri
 
 - Rama `feat/arca-configuracion` creada desde `main` (54c1e07).
 - T1: migraciones `20261023000001_arca_configuracion.sql` y `20261023000002_rls_arca_configuracion.sql`. RED observado (31/31 fallan sin tablas), GREEN con `supabase test db` (12 archivos, 234 tests). Commit d547e47.
-- T2: `src/lib/arca/` (cuit, cifrado, certificado, wsaa, wsfe, ticket, xml) con `node-forge` 1.3.1. RED observado (6 archivos sin módulos), GREEN: `npm test` 194 tests, `npm run typecheck`, `npm run lint` y `npm run build` OK. El build todavía no importa `node-forge` desde ninguna ruta: el empaquetado en el Worker se confirma en T3.
+- T2: `src/lib/arca/` (cuit, cifrado, certificado, wsaa, wsfe, ticket, xml) con `node-forge` 1.3.1. RED observado (6 archivos sin módulos), GREEN: `npm test` 194 tests, `npm run typecheck`, `npm run lint` y `npm run build` OK. El build todavía no importa `node-forge` desde ninguna ruta: el empaquetado en el Worker se confirma en T3. Commit 94f5f9f.
+- Revisión nativa de T1+T2: aprobada, con 1 warning y 3 sugerencias no bloqueantes, corregidas con tests en rojo primero: `CbteNro` ausente o vacío ya no se lee como 0, `validarCredencial` rechaza un certificado que todavía no empezó a valer, y la firma CMS usa la hora inyectada como `signingTime`. Tests nuevos también para el `faultstring` de WSFE y el sufijo `(HTTP n)` de `solicitarTicket`. RED observado (4 tests), GREEN: `npm test` 202 tests, `npm run typecheck` y `npm run lint` OK.
 
 ## Próximo paso
 

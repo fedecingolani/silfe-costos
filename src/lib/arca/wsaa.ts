@@ -44,10 +44,10 @@ export function armarTra(servicio: string, ahora: Date): string {
 
 /**
  * Firma el TRA como CMS SignedData con el contenido incluido, el certificado
- * adjunto y los atributos contentType, messageDigest y signingTime.
+ * adjunto y los atributos contentType, messageDigest y signingTime (= ahora).
  * Devuelve el CMS en base64 (DER).
  */
-export function firmarTra(tra: string, certificadoPem: string, clavePem: string): string {
+export function firmarTra(tra: string, certificadoPem: string, clavePem: string, ahora: Date): string {
   const cert = forge.pki.certificateFromPem(certificadoPem);
   const p7 = forge.pkcs7.createSignedData();
   p7.content = forge.util.createBuffer(tra, "utf8");
@@ -60,7 +60,7 @@ export function firmarTra(tra: string, certificadoPem: string, clavePem: string)
       { type: forge.pki.oids.contentType, value: forge.pki.oids.data },
       { type: forge.pki.oids.messageDigest },
       // forge acepta un Date en signingTime aunque los tipos digan string.
-      { type: forge.pki.oids.signingTime, value: new Date() as unknown as string },
+      { type: forge.pki.oids.signingTime, value: ahora as unknown as string },
     ],
   });
   p7.sign();
@@ -110,7 +110,7 @@ export async function solicitarTicket(
   clavePem: string,
   ahora: Date,
 ): Promise<RespuestaLogin> {
-  const cms = firmarTra(armarTra("wsfe", ahora), certificadoPem, clavePem);
+  const cms = firmarTra(armarTra("wsfe", ahora), certificadoPem, clavePem, ahora);
   const respuesta = await fetchArca(URL_WSAA[ambiente], {
     method: "POST",
     headers: { "Content-Type": "text/xml; charset=utf-8", SOAPAction: '""' },

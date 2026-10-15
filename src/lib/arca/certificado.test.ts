@@ -74,6 +74,13 @@ describe("validarCredencial", () => {
     ]);
   });
 
+  it("informa un certificado que todavía no empezó a valer", () => {
+    const futuro = generarParPrueba("principal", { desde: new Date("2026-11-20T15:00:00Z") });
+    expect(validarCredencial({ ...base, certificadoPem: futuro.certificadoPem })).toEqual([
+      "El certificado empieza a valer el 20/11/2026.",
+    ]);
+  });
+
   it("junta varios errores", () => {
     expect(validarCredencial({ ...base, clavePem: otroPar.clavePem, cuitEmisor: "20123456786" })).toHaveLength(2);
   });

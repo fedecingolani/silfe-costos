@@ -90,9 +90,10 @@ export async function feCompUltimoAutorizado(
   );
   const error = errorArca(resultado);
   if (error) throw new Error(error);
-  const numero = Number(etiqueta(resultado, "CbteNro"));
-  if (!Number.isInteger(numero)) {
+  // Number(null) y Number("") dan 0: se exige el texto con dígitos antes de convertir.
+  const numero = etiqueta(resultado, "CbteNro");
+  if (numero === null || !/^\d+$/.test(numero)) {
     throw new Error("WSFE no informó el número del último comprobante.");
   }
-  return numero;
+  return Number(numero);
 }

@@ -49,7 +49,7 @@ describe("armarTra", () => {
 describe("firmarTra", () => {
   it("devuelve un CMS firmado con SHA-256 que incluye el TRA y el certificado", () => {
     const tra = armarTra("wsfe", AHORA);
-    const cms = firmarTra(tra, par.certificadoPem, par.clavePem);
+    const cms = firmarTra(tra, par.certificadoPem, par.clavePem, AHORA);
     const p7 = forge.pkcs7.messageFromAsn1(
       forge.asn1.fromDer(forge.util.decode64(cms)),
     ) as forge.pkcs7.PkcsSignedData & {
@@ -65,6 +65,21 @@ describe("firmarTra", () => {
     expect(p7.certificates).toHaveLength(1);
     expect(forge.asn1.derToOid(p7.rawCapture.digestAlgorithm)).toBe(forge.pki.oids.sha256);
     expect(p7.rawCapture.authenticatedAttributes).toHaveLength(3);
+  });
+
+  it("usa la hora recibida como signingTime", () => {
+    const ahora = new Date("2026-03-02T08:30:00Z");
+    const cms = firmarTra(armarTra("wsfe", ahora), par.certificadoPem, par.clavePem, ahora);
+    const p7 = forge.pkcs7.messageFromAsn1(forge.asn1.fromDer(forge.util.decode64(cms))) as forge.pkcs7.PkcsSignedData & {
+      rawCapture: { authenticatedAttributes: forge.asn1.Asn1[] };
+    };
+    const atributo = p7.rawCapture.authenticatedAttributes.find((a) => {
+      const [oid] = a.value as forge.asn1.Asn1[];
+      return forge.asn1.derToOid(oid.value as string) === forge.pki.oids.signingTime;
+    });
+    const [, valores] = atributo!.value as forge.asn1.Asn1[];
+    const [hora] = valores.value as forge.asn1.Asn1[];
+    expect(forge.asn1.utcTimeToDate(hora.value as string)).toEqual(ahora);
   });
 });
 
@@ -135,6 +150,16 @@ describe("solicitarTicket", () => {
       new Response(falla("ns1:coe.alreadyAuthenticated", "El CEE ya posee un TA valido"), { status: 500 });
     const r = await solicitarTicket(fetchFalso, "produccion", par.certificadoPem, par.clavePem, AHORA);
     expect(r).toMatchObject({ ok: false, codigo: "coe.alreadyAuthenticated" });
+  });
+
+  it("agrega el status HTTP cuando la respuesta no se entiende", async () => {
+    const fetchFalso = async () => new Response("<html>Bad Gateway</html>", { status: 502 });
+    const r = await solicitarTicket(fetchFalso, "homologacion", par.certificadoPem, par.clavePem, AHORA);
+    expect(r).toEqual({
+      ok: false,
+      codigo: "respuesta.invalida",
+      mensaje: "WSAA devolvió una respuesta que no se pudo leer. (HTTP 502)",
+    });
   });
 
   it("usa la URL de producción", () => {

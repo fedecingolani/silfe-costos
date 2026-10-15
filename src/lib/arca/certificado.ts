@@ -110,6 +110,10 @@ export function validarCredencial(datos: {
     if (vence.getTime() <= datos.ahora.getTime()) {
       errores.push(`El certificado venció el ${fechaAr.format(vence)}.`);
     }
+    const desde = cert.validity.notBefore;
+    if (desde.getTime() > datos.ahora.getTime()) {
+      errores.push(`El certificado empieza a valer el ${fechaAr.format(desde)}.`);
+    }
   }
 
   return errores;

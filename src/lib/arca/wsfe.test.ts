@@ -43,6 +43,14 @@ describe("feDummy", () => {
     const { fetchFalso } = fetchQueResponde("<html>Service Unavailable</html>", 503);
     await expect(feDummy(fetchFalso, "produccion")).rejects.toThrow(/WSFE respondió 503/);
   });
+
+  it("informa la falla SOAP con su faultstring", async () => {
+    const { fetchFalso } = fetchQueResponde(
+      sobre("<soap:Fault><faultcode>soap:Server</faultcode><faultstring>Servidor no disponible</faultstring></soap:Fault>"),
+      500,
+    );
+    await expect(feDummy(fetchFalso, "homologacion")).rejects.toThrow("WSFE rechazó FEDummy: Servidor no disponible");
+  });
 });
 
 describe("feCompUltimoAutorizado", () => {
@@ -62,6 +70,35 @@ describe("feCompUltimoAutorizado", () => {
     await expect(feCompUltimoAutorizado(fetchFalso, "homologacion", AUTH, 3, 1)).rejects.toThrow(
       "ARCA respondió 602: No existen datos en nuestros registros para los parametros ingresados.",
     );
+  });
+
+  it("falla si no informa el número del último comprobante", async () => {
+    const sinNumero = ULTIMO_OK.replace("<CbteNro>0</CbteNro>", "");
+    const { fetchFalso } = fetchQueResponde(sinNumero);
+    await expect(feCompUltimoAutorizado(fetchFalso, "homologacion", AUTH, 3, 1)).rejects.toThrow(
+      "WSFE no informó el número del último comprobante.",
+    );
+  });
+
+  it("falla si el número del último comprobante viene vacío", async () => {
+    const vacio = ULTIMO_OK.replace("<CbteNro>0</CbteNro>", "<CbteNro></CbteNro>");
+    const { fetchFalso } = fetchQueResponde(vacio);
+    await expect(feCompUltimoAutorizado(fetchFalso, "homologacion", AUTH, 3, 1)).rejects.toThrow(
+      "WSFE no informó el número del último comprobante.",
+    );
+  });
+
+  it("falla si el número del último comprobante no es un número", async () => {
+    const raro = ULTIMO_OK.replace("<CbteNro>0</CbteNro>", "<CbteNro>abc</CbteNro>");
+    const { fetchFalso } = fetchQueResponde(raro);
+    await expect(feCompUltimoAutorizado(fetchFalso, "homologacion", AUTH, 3, 1)).rejects.toThrow(
+      "WSFE no informó el número del último comprobante.",
+    );
+  });
+
+  it("devuelve números mayores a cero", async () => {
+    const { fetchFalso } = fetchQueResponde(ULTIMO_OK.replace("<CbteNro>0</CbteNro>", "<CbteNro>152</CbteNro>"));
+    expect(await feCompUltimoAutorizado(fetchFalso, "homologacion", AUTH, 3, 1)).toBe(152);
   });
 
   it("escapa el token y el sign en el XML", async () => {
