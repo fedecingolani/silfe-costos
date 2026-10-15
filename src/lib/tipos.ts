@@ -417,9 +417,18 @@ export type ListaPrecioBase = {
 // ARCA (facturación electrónica)
 // ---------------------------------------------------------------------
 
-export type AmbienteArca = "homologacion" | "produccion";
+export const AMBIENTES_ARCA = ["homologacion", "produccion"] as const;
 
-export type CondicionIvaEmisor = "Responsable Inscripto" | "Monotributista" | "Exento";
+export type AmbienteArca = (typeof AMBIENTES_ARCA)[number];
+
+export const NOMBRES_AMBIENTE_ARCA: Record<AmbienteArca, string> = {
+  homologacion: "Homologación",
+  produccion: "Producción",
+};
+
+export const CONDICIONES_IVA_EMISOR = ["Responsable Inscripto", "Monotributista", "Exento"] as const;
+
+export type CondicionIvaEmisor = (typeof CONDICIONES_IVA_EMISOR)[number];
 
 /** Fila única de arca_emisor. */
 export type ArcaEmisor = {
@@ -450,6 +459,15 @@ export type ArcaCredencial = {
   creado_en: string;
   actualizado_en: string;
 };
+
+/**
+ * Lo que la pantalla de ARCA lee de arca_credencial: nunca la clave cifrada
+ * ni el ticket, sólo el vencimiento del ticket para mostrar si está vigente.
+ */
+export type ArcaCredencialVisible = Pick<
+  ArcaCredencial,
+  "ambiente" | "certificado_titular" | "certificado_cuit" | "certificado_vence" | "ta_expira" | "actualizado_en"
+>;
 
 /** Ticket de acceso de WSAA para un servicio (12 h de vigencia). */
 export type TicketAcceso = {

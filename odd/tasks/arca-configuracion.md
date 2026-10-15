@@ -51,7 +51,7 @@ Un spike (2026-10-14/15) confirmó que desde Cloudflare Workers (local y edge, c
 | --- | --- | --- | --- |
 | T1 | Migraciones `arca_emisor`, `arca_credencial` y RLS (tests pgTAP en rojo primero) | delegada (writer) | [x] |
 | T2 | `src/lib/arca/`: CUIT, cifrado, WSAA (TRA, firma CMS, parseo), WSFE (SOAP) y certificado, con Vitest | delegada (writer) | [x] |
-| T3 | Pantalla y acciones: datos del emisor, subir credenciales, probar conexión, ticket reutilizado con bloqueo | delegada (writer) | [ ] |
+| T3 | Pantalla y acciones: datos del emisor, subir credenciales, probar conexión, ticket reutilizado con bloqueo | delegada (writer) | [x] |
 | T4 | Menú, `.dev.vars.example`, AGENTS.md/README (secreto `ARCA_CLAVE_CIFRADO`) | delegada (writer) | [ ] |
 | T5 | Recorrido en el navegador contra homologación con el certificado real | orquestador | [ ] |
 
@@ -83,6 +83,7 @@ Las rutas de T1–T4 son delegadas porque cada una toca 2 o más archivos no tri
 - T1: migraciones `20261023000001_arca_configuracion.sql` y `20261023000002_rls_arca_configuracion.sql`. RED observado (31/31 fallan sin tablas), GREEN con `supabase test db` (12 archivos, 234 tests). Commit d547e47.
 - T2: `src/lib/arca/` (cuit, cifrado, certificado, wsaa, wsfe, ticket, xml) con `node-forge` 1.3.1. RED observado (6 archivos sin módulos), GREEN: `npm test` 194 tests, `npm run typecheck`, `npm run lint` y `npm run build` OK. El build todavía no importa `node-forge` desde ninguna ruta: el empaquetado en el Worker se confirma en T3. Commit 94f5f9f.
 - Revisión nativa de T1+T2: aprobada, con 1 warning y 3 sugerencias no bloqueantes, corregidas con tests en rojo primero: `CbteNro` ausente o vacío ya no se lee como 0, `validarCredencial` rechaza un certificado que todavía no empezó a valer, y la firma CMS usa la hora inyectada como `signingTime`. Tests nuevos también para el `faultstring` de WSFE y el sufijo `(HTTP n)` de `solicitarTicket`. RED observado (4 tests), GREEN: `npm test` 202 tests, `npm run typecheck` y `npm run lint` OK.
+- T3: `/configuracion/arca` (page + acciones + FormularioEmisor/FormularioCredencial/PruebaConexion), `src/lib/arca/acceso.ts` (ticket guardado: reutilizar, bloqueo condicional, espera acotada de 3 s, mensajes de WSAA), `vencimiento.ts` y `secreto.ts`. RED observado (acceso y vencimiento sin módulos), GREEN: `npm test` 215 tests, `npm run typecheck`, `npm run lint`, `npm run build` OK. `node-forge` queda sólo en el bundle del servidor (`.next/server/app/(app)/configuracion/arca/page.js`, nada en `.next/static`) y `opennextjs-cloudflare build` lo empaqueta en `.open-next/server-functions/default/handler.mjs` sin errores. ~1050 líneas: supera la heurística de 400 porque la pantalla, las acciones y la orquestación del ticket con sus tests forman una sola unidad usable.
 
 ## Próximo paso
 
