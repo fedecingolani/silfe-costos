@@ -646,6 +646,19 @@ describe("autorizar: notas de crédito y débito", () => {
     expect(estado.verificando).toBeUndefined();
   });
 
+  it("si el asociado de la base desaparece entre la carga y el bloqueo, no sigue sin controlar el saldo", async () => {
+    const { deps, eventos, estado } = escenario({
+      datos: nota({ saldoNotaCredito: { saldo: 1320.5, asociado: "A-00007-00000361" } }),
+      saldoBajoBloqueo: null,
+    });
+    expect(await autorizar(ID, deps)).toEqual({
+      error: "El comprobante asociado A-00007-00000361 ya no está disponible: revisá la nota de crédito.",
+    });
+    expect(eventos).toEqual(["cargar", "guardar", "bloqueo", "saldo", "liberar"]);
+    expect(estado.bloqueoTomado).toBe(false);
+    expect(estado.verificando).toBeUndefined();
+  });
+
   it("la nota de débito y la factura no releen el saldo", async () => {
     const { deps, eventos } = escenario({ datos: nota({}, "nota_debito") });
     expect((await autorizar(ID, deps)).estado).toBe("autorizado");

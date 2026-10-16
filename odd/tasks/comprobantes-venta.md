@@ -486,6 +486,7 @@ Menú **Ventas → Comprobantes**.
   - RED observado (4 pgTAP, 2 Vitest) y luego GREEN; los tests del repositorio cubren código existente (sin RED).
   - Checks: `npm test` (449), `npm run typecheck`, `npm run lint`, `npm run build`, `supabase migration up --local` y
     `supabase test db` (380) en verde.
+- Revisión nativa de las correcciones de T6 (a1c32f5): aprobada con 2 sugerencias. Corregida: si el asociado de la base desaparece entre la carga y el bloqueo, la nota de crédito se frena (antes seguía a ARCA sin control de saldo); test en rojo primero. Pendiente (sugerencia): pgTAP de pasar a `factura` una nota con asociados guardados y de la derivación del ambiente con `p_asociados` null.
 
 ## Próximo paso
 

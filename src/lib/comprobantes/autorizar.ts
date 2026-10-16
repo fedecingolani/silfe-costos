@@ -448,6 +448,12 @@ async function emitir(
       if (saldo) {
         const excede = mensajeExcedeSaldo(borrador.total, saldo.saldo, saldo.asociado);
         if (excede) return { error: excede };
+      } else if (datos.saldoNotaCredito) {
+        // Al cargar tenía un asociado de la base y bajo el bloqueo ya no: no se
+        // sigue a ARCA sin el control de saldo.
+        return {
+          error: `El comprobante asociado ${datos.saldoNotaCredito.asociado} ya no está disponible: revisá la nota de crédito.`,
+        };
       }
     }
     const auth = await ctx.arca.autenticar(ambiente, credencial, cuitEmisor);
