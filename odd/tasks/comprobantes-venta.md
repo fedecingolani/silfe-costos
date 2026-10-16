@@ -129,8 +129,11 @@ Según la condición IVA del receptor (emisor Responsable Inscripto):
 
 ### Notas de crédito / débito
 
-- Se crean desde una factura autorizada ("Generar nota de crédito"). Copia los ítems para
-  ajustar cantidades o precios.
+- Se crean desde una factura autorizada ("Generar nota de crédito" / "Generar nota de débito"). Copia los
+  ítems para ajustar cantidades o precios. Desde una nota de débito autorizada, sólo la nota de crédito.
+- Llevan la letra del comprobante asociado (ARCA rechaza otra), aunque la condición IVA del cliente haya cambiado.
+- Una nota de crédito no supera el total de la factura menos sus otras notas de crédito (sólo asociados de la
+  base: de los cargados a mano no se conoce el importe).
 - Llevan comprobante asociado (`CbtesAsoc`: tipo, punto de venta, número, CUIT, fecha).
 - **Facturas viejas** (1 a 360, emitidas con el sistema anterior): no están en la base. Para
   una NC sobre ellas se cargan a mano los datos del comprobante asociado.
@@ -263,7 +266,7 @@ Menú **Ventas → Comprobantes**.
 | T3 | Autorización: bloqueo por punto de venta y tipo, último + 1, reintento correlativo, estado `verificando` y reconciliación | delegada (writer) | [x] |
 | T4 | Pantallas: listado, alta/edición de borrador y detalle | delegada (writer) | [x] |
 | T5 | Impresión: PDF completo con QR para comprobantes electrónicos | delegada (writer) | [x] |
-| T6 | Notas de crédito/débito con comprobante asociado | delegada (writer) | [ ] |
+| T6 | Notas de crédito/débito con comprobante asociado | delegada (writer) | [x] |
 | T7 | Recorrido en homologación: Factura A, Factura B, NC parcial, rechazo de ARCA y respuesta perdida simulada | orquestador | [ ] |
 | T8 | **Segunda etapa:** punto de venta no electrónico (numeración propia, sin ARCA) e impresión en formulario preimpreso | delegada (writer) | [ ] |
 
@@ -415,6 +418,56 @@ Menú **Ventas → Comprobantes**.
   - Sin prueba automática de la ruta contra la base: el recorrido real queda para T7.
   - Commit `3b708a5`.
 
+- Revisión nativa de T5: **aprobada**, con una advertencia y una sugerencia no bloqueantes, corregidas en T6
+  (unidad A, delegada, writer). Commit `c5686aa`:
+  - advertencia: el PDF recalculaba el IVA por alícuota de los ítems mientras bruto, impuestos y total salían de lo
+    guardado. Ahora `comprobante.iva_detalle` (migración `20261024000005_comprobantes_notas.sql`) guarda el array `Iva`
+    enviado a ARCA, escrito en el mismo update que pasa a `verificando`. Queda fijo: CM004 en verificación, CM001 en un
+    autorizado (`fn_comprobante_validar` reemplazada con el campo nuevo). El PDF y el detalle usan lo guardado y
+    recalculan sólo en comprobantes anteriores (`iva_detalle` nulo); si la suma no da el IVA guardado, la ruta lo deja
+    en el log (`console.warn`) sin cortar la impresión;
+  - sugerencia: `puedeImprimir` (pura, en `pdf-datos.ts`) es la única regla para la ruta del PDF y el botón del
+    detalle: estado, punto de venta electrónico, CAE y CUIT del emisor. El botón deshabilitado muestra el motivo.
+  - RED observado (4 pgTAP, 10 Vitest) y luego GREEN.
+
+- T6, unidad B (delegada, writer: lógica pura, función SQL, acciones y pantallas). Commit `4d99500`:
+  - "Generar nota de crédito / débito" en el detalle de una factura autorizada (`notasPermitidas`): borrador con el
+    mismo cliente, punto de venta (o el electrónico activo más bajo), lista y condición de pago, fecha de hoy, ítems
+    copiados y la factura como asociado (`armarNota`, acción `generarNota`); abre el editor.
+  - Desde una nota de débito autorizada sólo se genera la **nota de crédito** que la anula. No hay nota de débito
+    sobre una nota de débito (el ajuste nuevo se asocia a la factura) ni ninguna nota sobre una nota de crédito.
+  - **Letra:** la nota hereda la del asociado (`letraYTipoNota`), no la de la condición IVA actual del cliente; si
+    difiere, el editor avisa. Con asociado a mano, la letra sale de su tipo. La misma regla en `armarBorrador` y en
+    `autorizar` (que además valida asociado obligatorio, clase admitida y una sola letra: `validarAsociadosNota`).
+  - **Asociado a mano** (sistema anterior): en el editor, si la clase es nota y no hay asociado de la base, sección
+    "Comprobante asociado" con tipo (Factura A/B; también ND A/B para una nota de crédito), punto de venta, número y
+    fecha. La CUIT es la del emisor. La nota de crédito ya se puede cargar desde "Nuevo comprobante" para esto.
+  - `guardar_borrador_comprobante(p_id, p_comprobante, p_items, p_asociados default null)` reemplaza a la de tres
+    parámetros: `null` no toca los asociados guardados, un array los reemplaza en la misma transacción. Valida (CM007,
+    mensaje legible) que un asociado de la base esté autorizado, sea de una clase admitida y de un mismo ambiente; la
+    nota toma **el ambiente del asociado** (no el activo del emisor). Una factura no lleva asociados. Limpia
+    `iva_detalle` de un intento anterior.
+  - **Saldo:** una nota de crédito con asociados de la base no supera su total menos las otras notas de crédito
+    autorizadas **o en verificación** (éstas pueden quedar autorizadas: se descuentan para no pasarse). Se bloquea al
+    autorizar con el saldo disponible en el mensaje; el editor lo muestra y avisa si se pasa. Con asociado a mano no
+    hay control (no se conoce el importe): el editor lo aclara.
+  - Detalle: "Comprobante asociado" enlazado (o "(sistema anterior)"); en una factura, sus notas con estado, total y
+    enlace, y el saldo para notas de crédito. PDF: "Comprobante asociado: A-00007-00000361 del 10/10/2026" debajo del
+    receptor, a la derecha. Títulos y códigos verificados: NC 3/8 (`003`/`008`) y ND 2/7 (`002`/`007`).
+  - `CbtesAsoc` con `Tipo`, `PtoVta`, `Nro`, `Cuit` (emisor) y `CbteFch` para asociados de la base y a mano: test sobre
+    el cuerpo SOAP de `feCAESolicitar`. "Duplicar" copia los asociados.
+  - Lectura compartida en `asociados-carga.ts` (dos consultas en lugar de un embed: `comprobante_asociado` tiene dos
+    claves foráneas a `comprobante`).
+  - RED observado (14 pgTAP; 38 Vitest y el módulo `notas` inexistente) y luego GREEN. `asociados-carga.ts` se escribió
+    junto con sus tests (lectura y armado, sin RED propio).
+  - Tamaño: ~1.900 líneas agregadas (720 de tests, ~280 de SQL), más que la guía de 400: la regla de la letra, el
+    asociado, el saldo y la función SQL se tocan entre sí y no quedaban comprobables por separado.
+  - Checks: `npm test` (440), `npm run typecheck`, `npm run lint`, `npm run build` y `supabase test db` (374) en verde.
+    La migración 000005 se aplicó con `supabase migration up --local` tras la unidad A; la parte de la unidad B se
+    volvió a aplicar con `psql` en la base local. Consultas y función verificadas contra PostgREST local con un JWT de
+    `authenticated` firmado localmente (filas temporales borradas). `next dev` con Supabase local: 307 a /login en las
+    rutas de comprobantes, sin 500.
+
 ## Próximo paso
 
-T6: notas de crédito/débito con comprobante asociado.
+T7: recorrido en homologación (Factura A, Factura B, NC parcial, rechazo de ARCA y respuesta perdida simulada).
