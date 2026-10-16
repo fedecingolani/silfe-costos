@@ -2,23 +2,27 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { autorizarComprobante, duplicarComprobante, type EstadoAccionComprobante } from "../acciones";
+import { NOMBRES_CLASE_COMPROBANTE, type ClaseComprobante } from "@/lib/tipos";
+import { autorizarComprobante, duplicarComprobante, generarNota, type EstadoAccionComprobante } from "../acciones";
 
 /**
  * Botones del detalle: "Verificar con ARCA" (sólo en verificación, corre la
  * reconciliación de autorizarComprobante), "Duplicar", "PDF" (según
  * puedeImprimir, la misma regla que la ruta del PDF; si no se puede, el
- * motivo queda en el título del botón deshabilitado) y el lugar de la nota
- * de crédito (T6), todavía sin funcionar.
+ * motivo queda en el título del botón deshabilitado) y "Generar nota de
+ * crédito / débito" (las de `notas`: notasPermitidas), que crea el borrador
+ * de la nota y abre el editor.
  */
 export function AccionesDetalle({
   id,
   verificando,
   pdf,
+  notas,
 }: {
   id: string;
   verificando: boolean;
   pdf: { ok: true } | { ok: false; motivo: string };
+  notas: ClaseComprobante[];
 }) {
   const router = useRouter();
   const [pendiente, iniciar] = useTransition();
@@ -28,6 +32,12 @@ export function AccionesDetalle({
     iniciar(async () => {
       setResultado(await autorizarComprobante(id));
       router.refresh();
+    });
+
+  const generar = (clase: ClaseComprobante) =>
+    iniciar(async () => {
+      const r = await generarNota(id, clase);
+      if (r?.error) setResultado(r);
     });
 
   const duplicar = () =>
@@ -61,10 +71,11 @@ export function AccionesDetalle({
             PDF
           </button>
         )}
-        {/* Lugar reservado: la nota de crédito llega en T6. */}
-        <button type="button" disabled title="Próximamente (T6)" className="boton-secundario opacity-50">
-          Generar nota de crédito (próximamente)
-        </button>
+        {notas.map((clase) => (
+          <button key={clase} type="button" disabled={pendiente} onClick={() => generar(clase)} className="boton-secundario">
+            Generar {NOMBRES_CLASE_COMPROBANTE[clase].toLowerCase()}
+          </button>
+        ))}
       </div>
       {resultado?.error && (
         <div role="alert" className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">

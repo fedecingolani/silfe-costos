@@ -14,6 +14,7 @@ import {
   type ComprobanteItem,
   type IvaAutorizado,
 } from "@/lib/tipos";
+import { textoAsociado } from "./asociados";
 import { calcularTotales } from "./calculo";
 import { formatearNumero } from "./numero";
 import { urlQrArca } from "./qr";
@@ -124,6 +125,8 @@ export type DatosPdfComprobante = {
   homologacion: boolean;
   /** Sin extensión: "Factura A-00007-00000361". */
   nombreArchivo: string;
+  /** Notas: "A-00007-00000361 del 16/10/2026" por cada comprobante asociado (vacío en una factura). */
+  asociados: string[];
   /** Diferencias entre el IVA por alícuota impreso y el IVA guardado (para el log; vacío si coinciden). */
   inconsistencias: string[];
 };
@@ -239,14 +242,24 @@ export function ivaDelComprobante(
  * Arma los datos del PDF. Supone un comprobante que pasó puedeImprimir
  * (si falta algo, queda vacío en lugar de fallar).
  */
+/** Comprobante asociado para el PDF: tipo, punto de venta, número y fecha. */
+export type AsociadoPdf = {
+  tipo_arca: number | string | null;
+  punto_venta: number | string | null;
+  numero: number | string | null;
+  fecha: string | null;
+};
+
 export function armarDatosPdf({
   comprobante: c,
   items,
   emisor,
+  asociados = [],
 }: {
   comprobante: FilaComprobantePdf;
   items: readonly FilaItemPdf[];
   emisor: FilaEmisorPdf;
+  asociados?: readonly AsociadoPdf[];
 }): DatosPdfComprobante {
   const letra = c.letra ?? "";
   const numero = c.letra && c.numero !== null ? formatearNumero(c.letra, Number(c.punto_venta), Number(c.numero)) : "";
@@ -314,6 +327,7 @@ export function armarDatosPdf({
     }),
     homologacion: c.ambiente === "homologacion",
     nombreArchivo: `${NOMBRES_CLASE_COMPROBANTE[c.clase]} ${numero}`.trim(),
+    asociados: c.clase === "factura" ? [] : asociados.map(textoAsociado),
     inconsistencias: iva.inconsistencia ? [`${numero}: ${iva.inconsistencia}`] : [],
   };
 }

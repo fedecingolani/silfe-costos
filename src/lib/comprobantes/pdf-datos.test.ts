@@ -278,3 +278,39 @@ describe("dispositionEnLinea", () => {
     );
   });
 });
+
+describe("notas de crédito y débito en el PDF", () => {
+  const ASOCIADO = { tipo_arca: 1, punto_venta: 7, numero: 361, fecha: "2026-10-10" };
+
+  it.each([
+    ["nota_credito", "A", 3, "NOTA DE CRÉDITO", "003"],
+    ["nota_credito", "B", 8, "NOTA DE CRÉDITO", "008"],
+    ["nota_debito", "A", 2, "NOTA DE DÉBITO", "002"],
+    ["nota_debito", "B", 7, "NOTA DE DÉBITO", "007"],
+  ] as const)("%s %s: título y código de ARCA %i", (clase, letra, tipo, titulo, codigo) => {
+    const datos = armarDatosPdf({
+      comprobante: { ...COMPROBANTE_EJEMPLO, clase, letra, tipo_arca: tipo },
+      items: [ITEM_EJEMPLO],
+      emisor: EMISOR_EJEMPLO,
+      asociados: [ASOCIADO],
+    });
+    expect(datos.titulo).toBe(titulo);
+    expect(datos.codigoArca).toBe(codigo);
+  });
+
+  it("lista los comprobantes asociados con su número y fecha", () => {
+    const datos = armarDatosPdf({
+      comprobante: { ...COMPROBANTE_EJEMPLO, clase: "nota_credito", tipo_arca: 3 },
+      items: [ITEM_EJEMPLO],
+      emisor: EMISOR_EJEMPLO,
+      asociados: [ASOCIADO, { tipo_arca: 1, punto_venta: 7, numero: "150", fecha: "2026-01-09" }],
+    });
+    expect(datos.asociados).toEqual(["A-00007-00000361 del 10/10/2026", "A-00007-00000150 del 09/01/2026"]);
+  });
+
+  it("una factura no lleva asociados", () => {
+    expect(armarDatosPdf({ comprobante: COMPROBANTE_EJEMPLO, items: [ITEM_EJEMPLO], emisor: EMISOR_EJEMPLO }).asociados).toEqual(
+      [],
+    );
+  });
+});

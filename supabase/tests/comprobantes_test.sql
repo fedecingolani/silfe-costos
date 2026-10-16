@@ -9,7 +9,7 @@
 begin;
 create extension if not exists pgtap with schema extensions;
 
-select plan(126);
+select plan(140);
 
 -- ---------------------------------------------------------------------
 -- Estructura
@@ -640,14 +640,152 @@ select is(
   'Un borrador de un punto de venta no electrónico no lleva ambiente'
 );
 
+-- ---------------------------------------------------------------------
+-- guardar_borrador_comprobante: comprobantes asociados de las notas
+-- ---------------------------------------------------------------------
+
+update arca_emisor set ambiente = 'produccion' where id;
+
+-- Una nota de crédito ya autorizada (punto de venta no electrónico) para
+-- probar que no se asocia una nota de crédito a otra.
+insert into comprobante (id, punto_venta, clase, letra, tipo_arca, cliente_id)
+values ('a0000000-0000-0000-0000-000000000009', 9099, 'nota_credito', 'A', 3,
+        'c0000000-0000-0000-0000-000000000001');
+update comprobante set estado = 'autorizado', numero = 1 where id = 'a0000000-0000-0000-0000-000000000009';
+
+create temp table nota_rpc (id uuid);
+select lives_ok(
+  $$insert into nota_rpc
+    select guardar_borrador_comprobante(
+      null,
+      '{"punto_venta": 9007, "clase": "nota_credito", "letra": "A", "tipo_arca": 3, "fecha": "2026-10-18",
+        "fecha_vencimiento_pago": "2026-10-18", "cliente_id": "c0000000-0000-0000-0000-000000000001",
+        "condicion_pago": "contado", "neto": 100, "iva": 21, "total": 121}'::jsonb,
+      '[{"descripcion": "Devolución", "cantidad": 1, "precio_unitario": 100, "descuento_pct": 0,
+         "alicuota_iva": 21, "importe": 100, "iva": 21}]'::jsonb,
+      '[{"asociado_id": "a0000000-0000-0000-0000-000000000001"}]'::jsonb
+    )$$,
+  'guardar_borrador_comprobante crea una nota de crédito con su factura asociada'
+);
+select is(
+  (select ambiente from comprobante where id = (select id from nota_rpc)),
+  'homologacion',
+  'La nota toma el ambiente de su asociado, no el activo del emisor'
+);
+select results_eq(
+  $$select asociado_id from comprobante_asociado where comprobante_id = (select id from nota_rpc)$$,
+  $$values ('a0000000-0000-0000-0000-000000000001'::uuid)$$,
+  'Se guarda el asociado de la base'
+);
+
+update comprobante set iva_detalle = '[]' where id = (select id from nota_rpc);
+select lives_ok(
+  $$select guardar_borrador_comprobante((select id from nota_rpc), '{"punto_venta": 9007, "clase": "nota_credito", "letra": "A", "tipo_arca": 3, "fecha": "2026-10-18",
+        "fecha_vencimiento_pago": "2026-10-18", "cliente_id": "c0000000-0000-0000-0000-000000000001",
+        "condicion_pago": "contado", "neto": 100, "iva": 21, "total": 121}'::jsonb, '[{"descripcion": "Devolución", "cantidad": 1, "precio_unitario": 100, "descuento_pct": 0,
+         "alicuota_iva": 21, "importe": 100, "iva": 21}]'::jsonb, null)$$,
+  'Sin asociados en el pedido, se guarda la nota'
+);
+select results_eq(
+  $$select (select count(*)::int from comprobante_asociado a where a.comprobante_id = c.id), c.iva_detalle
+    from comprobante c where c.id = (select id from nota_rpc)$$,
+  $$values (1, null::jsonb)$$,
+  'Sin asociados en el pedido no se tocan los guardados, y se limpia el IVA de un intento anterior'
+);
+
+select throws_ok(
+  $$select guardar_borrador_comprobante(
+      (select id from nota_rpc),
+      '{"punto_venta": 9007, "clase": "nota_credito", "letra": "A", "tipo_arca": 3, "fecha": "2026-10-18",
+        "fecha_vencimiento_pago": "2026-10-18", "cliente_id": "c0000000-0000-0000-0000-000000000001",
+        "condicion_pago": "contado", "neto": 100, "iva": 21, "total": 121}'::jsonb,
+      '[{"descripcion": "Devolución", "cantidad": 1, "precio_unitario": 100, "descuento_pct": 0,
+         "alicuota_iva": 21, "importe": 100, "iva": 21}]'::jsonb,
+      '[{"tipo_arca": 1, "punto_venta": 7, "numero": 150, "fecha": "2026-01-10", "cuit": "123"}]'::jsonb
+    )$$,
+  '23514', null, 'Un asociado inválido hace fallar todo el guardado'
+);
+select is(
+  (select asociado_id from comprobante_asociado where comprobante_id = (select id from nota_rpc)),
+  'a0000000-0000-0000-0000-000000000001'::uuid,
+  'Si el guardado falla, los asociados quedan como estaban'
+);
+
+select throws_ok(
+  $$select guardar_borrador_comprobante(
+      (select id from nota_rpc),
+      '{"punto_venta": 9007, "clase": "factura", "letra": "A", "tipo_arca": 1, "fecha": "2026-10-18",
+        "fecha_vencimiento_pago": "2026-10-18", "cliente_id": "c0000000-0000-0000-0000-000000000001",
+        "condicion_pago": "contado", "neto": 100, "iva": 21, "total": 121}'::jsonb,
+      '[{"descripcion": "Devolución", "cantidad": 1, "precio_unitario": 100, "descuento_pct": 0,
+         "alicuota_iva": 21, "importe": 100, "iva": 21}]'::jsonb,
+      null
+    )$$,
+  'CM007', null, 'Una factura no lleva comprobante asociado'
+);
+
+select lives_ok(
+  $$select guardar_borrador_comprobante(
+      (select id from nota_rpc),
+      '{"punto_venta": 9007, "clase": "nota_credito", "letra": "A", "tipo_arca": 3, "fecha": "2026-10-18",
+        "fecha_vencimiento_pago": "2026-10-18", "cliente_id": "c0000000-0000-0000-0000-000000000001",
+        "condicion_pago": "contado", "neto": 100, "iva": 21, "total": 121}'::jsonb,
+      '[{"descripcion": "Devolución", "cantidad": 1, "precio_unitario": 100, "descuento_pct": 0,
+         "alicuota_iva": 21, "importe": 100, "iva": 21}]'::jsonb,
+      '[{"tipo_arca": 1, "punto_venta": 7, "numero": 150, "fecha": "2026-01-10", "cuit": "30712345671"}]'::jsonb
+    )$$,
+  'El asociado cargado a mano reemplaza a los guardados'
+);
+select results_eq(
+  $$select asociado_id, tipo_arca, numero from comprobante_asociado where comprobante_id = (select id from nota_rpc)$$,
+  $$values (null::uuid, 1, 150::bigint)$$,
+  'Queda sólo el asociado cargado a mano'
+);
+
+select throws_ok(
+  $$select guardar_borrador_comprobante(
+      (select id from nota_rpc), '{"punto_venta": 9007, "clase": "nota_credito", "letra": "A", "tipo_arca": 3, "fecha": "2026-10-18",
+        "fecha_vencimiento_pago": "2026-10-18", "cliente_id": "c0000000-0000-0000-0000-000000000001",
+        "condicion_pago": "contado", "neto": 100, "iva": 21, "total": 121}'::jsonb, '[{"descripcion": "Devolución", "cantidad": 1, "precio_unitario": 100, "descuento_pct": 0,
+         "alicuota_iva": 21, "importe": 100, "iva": 21}]'::jsonb,
+      jsonb_build_array(jsonb_build_object('asociado_id', (select id from borrador_rpc)))
+    )$$,
+  'CM007', null, 'Sólo se asocia un comprobante autorizado'
+);
+select throws_ok(
+  $$select guardar_borrador_comprobante(
+      (select id from nota_rpc), '{"punto_venta": 9007, "clase": "nota_credito", "letra": "A", "tipo_arca": 3, "fecha": "2026-10-18",
+        "fecha_vencimiento_pago": "2026-10-18", "cliente_id": "c0000000-0000-0000-0000-000000000001",
+        "condicion_pago": "contado", "neto": 100, "iva": 21, "total": 121}'::jsonb, '[{"descripcion": "Devolución", "cantidad": 1, "precio_unitario": 100, "descuento_pct": 0,
+         "alicuota_iva": 21, "importe": 100, "iva": 21}]'::jsonb,
+      '[{"asociado_id": "a0000000-0000-0000-0000-000000000009"}]'::jsonb
+    )$$,
+  'CM007', null, 'Una nota de crédito no se asocia a otra nota de crédito'
+);
+select throws_ok(
+  $$select guardar_borrador_comprobante(
+      (select id from nota_rpc), '{"punto_venta": 9007, "clase": "nota_credito", "letra": "A", "tipo_arca": 3, "fecha": "2026-10-18",
+        "fecha_vencimiento_pago": "2026-10-18", "cliente_id": "c0000000-0000-0000-0000-000000000001",
+        "condicion_pago": "contado", "neto": 100, "iva": 21, "total": 121}'::jsonb, '[{"descripcion": "Devolución", "cantidad": 1, "precio_unitario": 100, "descuento_pct": 0,
+         "alicuota_iva": 21, "importe": 100, "iva": 21}]'::jsonb,
+      '[{"asociado_id": "a0000000-0000-0000-0000-000000000001"},
+        {"asociado_id": "a0000000-0000-0000-0000-000000000003"}]'::jsonb
+    )$$,
+  'CM007', null, 'Los asociados de la base son todos del mismo ambiente'
+);
+select has_function('public', 'guardar_borrador_comprobante', array['uuid', 'jsonb', 'jsonb', 'jsonb'],
+  'guardar_borrador_comprobante recibe los asociados');
+
+update arca_emisor set ambiente = 'homologacion' where id;
+
 reset role;
 
 select ok(
-  not has_function_privilege('anon', 'public.guardar_borrador_comprobante(uuid, jsonb, jsonb)', 'execute'),
+  not has_function_privilege('anon', 'public.guardar_borrador_comprobante(uuid, jsonb, jsonb, jsonb)', 'execute'),
   'anon no ejecuta guardar_borrador_comprobante'
 );
 select ok(
-  has_function_privilege('authenticated', 'public.guardar_borrador_comprobante(uuid, jsonb, jsonb)', 'execute'),
+  has_function_privilege('authenticated', 'public.guardar_borrador_comprobante(uuid, jsonb, jsonb, jsonb)', 'execute'),
   'authenticated ejecuta guardar_borrador_comprobante'
 );
 

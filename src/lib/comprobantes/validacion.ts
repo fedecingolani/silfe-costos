@@ -4,7 +4,7 @@
  * las vuelve a correr al autorizar: lo que valida la pantalla no alcanza.
  */
 import { validarCuit } from "@/lib/clientes/validaciones";
-import type { ClaseComprobante, CondicionIva } from "@/lib/tipos";
+import type { ClaseComprobante, CondicionIva, LetraComprobante } from "@/lib/tipos";
 import { calcularTotales, type ItemACalcular } from "./calculo";
 import { MENSAJE_SIN_CONDICION_IVA, letraDe } from "./letra";
 
@@ -13,6 +13,8 @@ export const DIAS_TOLERANCIA_FECHA = 5;
 
 export type BorradorAValidar = {
   clase: ClaseComprobante;
+  /** Letra ya resuelta (una nota hereda la del asociado). Si falta, la de la condición IVA. */
+  letra?: LetraComprobante | null;
   /** yyyy-mm-dd */
   fecha: string;
   receptor: { razonSocial: string | null; condicionIva: CondicionIva | null; cuit: string | null };
@@ -59,7 +61,10 @@ export function validarParaAutorizar(borrador: BorradorAValidar, hoy: string): s
   if (!receptor.razonSocial?.trim()) errores.push("Falta la razón social del cliente.");
   if (!receptor.condicionIva) {
     errores.push(MENSAJE_SIN_CONDICION_IVA);
-  } else if (letraDe(receptor.condicionIva) === "A" && !(receptor.cuit && validarCuit(receptor.cuit).valido)) {
+  } else if (
+    (borrador.letra ?? letraDe(receptor.condicionIva)) === "A" &&
+    !(receptor.cuit && validarCuit(receptor.cuit).valido)
+  ) {
     errores.push("Para un comprobante A el cliente necesita una CUIT válida.");
   }
 

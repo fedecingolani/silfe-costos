@@ -48,6 +48,35 @@ export function letraYTipo(
   return { letra, tipoArca: TIPO_ARCA[letra][clase] };
 }
 
+/** Código de ARCA de una clase con una letra dada. */
+export function tipoArcaDe(letra: LetraComprobante, clase: ClaseComprobante): TipoComprobanteArca {
+  return TIPO_ARCA[letra][clase];
+}
+
+/**
+ * Letra y código de una nota de crédito o débito: la letra del comprobante
+ * asociado (ARCA exige la misma), no la que daría hoy la condición IVA del
+ * cliente; si difieren, devuelve un aviso. Sin asociado, o en una factura,
+ * es la del cliente (letraYTipo).
+ */
+export function letraYTipoNota(
+  condicionIva: CondicionIva | null | undefined,
+  clase: ClaseComprobante,
+  letraAsociado: LetraComprobante | null,
+): { letra: LetraComprobante; tipoArca: TipoComprobanteArca; aviso: string | null } {
+  if (clase === "factura" || !letraAsociado) return { ...letraYTipo(condicionIva, clase), aviso: null };
+  const letraCliente = condicionIva ? letraDe(condicionIva) : null;
+  return {
+    letra: letraAsociado,
+    tipoArca: TIPO_ARCA[letraAsociado][clase],
+    aviso:
+      letraCliente && letraCliente !== letraAsociado
+        ? `El cliente hoy es ${condicionIva} (letra ${letraCliente}), pero la nota lleva la letra ${letraAsociado} ` +
+          "del comprobante asociado, como exige ARCA."
+        : null,
+  };
+}
+
 export function condicionIvaReceptorId(condicionIva: CondicionIva): number {
   return CONDICION_IVA_RECEPTOR_ID[condicionIva];
 }

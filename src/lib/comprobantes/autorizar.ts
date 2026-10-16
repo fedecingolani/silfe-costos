@@ -7,6 +7,9 @@
  * Flujo (borrador o rechazado):
  *  1. Recalcula en el servidor letra, tipo, receptor y totales, valida y lo
  *     guarda en el borrador. Con errores de validación no se toca ARCA.
+ *     Una nota de crédito o débito necesita su comprobante asociado, lleva
+ *     la letra del asociado (no la de la condición IVA actual del cliente) y
+ *     una nota de crédito no supera el saldo de los asociados de la base.
  *  2. Toma el bloqueo de numeración (ambiente, punto de venta, tipo); si
  *     otro pedido lo tiene, espera un poco y se rinde.
  *  3. Pide el ticket, consulta el último autorizado y numera último + 1.
@@ -47,8 +50,9 @@ import {
   type LetraComprobante,
   type TipoComprobanteArca,
 } from "@/lib/tipos";
+import { mensajeExcedeSaldo, validarAsociadosNota } from "./asociados";
 import { calcularItem, calcularTotales, type ItemACalcular } from "./calculo";
-import { condicionIvaReceptorId, documentoReceptor, letraYTipo } from "./letra";
+import { condicionIvaReceptorId, documentoReceptor, letraYTipoNota } from "./letra";
 import { formatearNumero } from "./numero";
 import { validarParaAutorizar } from "./validacion";
 
@@ -92,6 +96,13 @@ export type DatosAutorizacion = {
   cuitEmisor: string | null;
   puntoVentaElectronico: boolean;
   credencial: CredencialArca | null;
+  /**
+   * Nota de crédito con asociados de la base: lo que queda para acreditar
+   * (total de los asociados menos otras notas de crédito sobre ellos) y el
+   * número del asociado para el mensaje. null si no aplica (factura, nota
+   * de débito o asociado cargado a mano: no se conoce su importe).
+   */
+  saldoNotaCredito: { saldo: number; asociado: string } | null;
 };
 
 export type BorradorRecalculado = {
@@ -272,9 +283,9 @@ function documento(valor: string | null | undefined): string {
 
 // ----- Recalcular ----------------------------------------------------------
 
-function recalcular(datos: DatosAutorizacion) {
+function recalcular(datos: DatosAutorizacion, letraAsociado: LetraComprobante | null) {
   const { comprobante, cliente, items } = datos;
-  const { letra, tipoArca } = letraYTipo(cliente.condicionIva, comprobante.clase);
+  const { letra, tipoArca } = letraYTipoNota(cliente.condicionIva, comprobante.clase, letraAsociado);
   const condicionIva = cliente.condicionIva!;
   const doc = documentoReceptor(cliente.cuit, condicionIva, letra);
   const totales = calcularTotales(items);
@@ -387,9 +398,15 @@ async function emitir(
   cuitEmisor: string,
 ): Promise<ResultadoAutorizacion> {
   const { comprobante: c, cliente } = datos;
+  const asociados = validarAsociadosNota(
+    c.clase,
+    datos.asociados.map((a) => a.tipo),
+  );
+  if ("error" in asociados) return { error: asociados.error };
   const errores = validarParaAutorizar(
     {
       clase: c.clase,
+      letra: asociados.letra,
       fecha: c.fecha,
       receptor: { razonSocial: cliente.razonSocial, condicionIva: cliente.condicionIva, cuit: cliente.cuit },
       items: datos.items,
@@ -398,7 +415,11 @@ async function emitir(
   );
   if (errores.length > 0) return { error: errores.join(" ") };
 
-  const { borrador, solicitud, ivaDetalle } = recalcular(datos);
+  const { borrador, solicitud, ivaDetalle } = recalcular(datos, asociados.letra);
+  if (c.clase === "nota_credito" && datos.saldoNotaCredito) {
+    const excede = mensajeExcedeSaldo(borrador.total, datos.saldoNotaCredito.saldo, datos.saldoNotaCredito.asociado);
+    if (excede) return { error: excede };
+  }
   await ctx.repositorio.guardarRecalculado(c.id, borrador);
 
   const { letra, tipoArca } = borrador;

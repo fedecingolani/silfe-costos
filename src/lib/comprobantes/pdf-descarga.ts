@@ -6,6 +6,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { MS_LOGO } from "@/lib/listas-precios/cargar-descarga";
 import { esUuid } from "@/lib/listas-precios/uuid";
+import { datosAsociado, leerAsociados } from "./asociados-carga";
 import {
   COLUMNAS_COMPROBANTE_PDF,
   COLUMNAS_EMISOR_PDF,
@@ -98,11 +99,15 @@ export async function cargarPdfComprobante({
   });
   if (!imprimible.ok) return respuestaError(imprimible.motivo, imprimible.status);
 
+  const asociados = c.clase === "factura" ? [] : await leerAsociados(cliente, id);
+  if (typeof asociados === "string") return respuestaError(asociados, 500);
+
   const logo = await cargarLogo(url, fetchLogo, msLogo);
   const datos = armarDatosPdf({
     comprobante: c,
     items: (items.data ?? []) as unknown as FilaItemPdf[],
     emisor: datosEmisor!,
+    asociados: asociados.map(datosAsociado),
   });
   // No se corta la impresión: se deja rastro para revisar el comprobante.
   for (const aviso of datos.inconsistencias) console.warn(`PDF del comprobante ${c.id}: ${aviso}`);

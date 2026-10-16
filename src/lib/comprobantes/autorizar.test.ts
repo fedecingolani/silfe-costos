@@ -44,6 +44,7 @@ const datosBase = (): DatosAutorizacion => ({
   cuitEmisor: "23334771229",
   puntoVentaElectronico: true,
   credencial: { certificadoPem: "CERT", claveCifrada: "CLAVE-CIFRADA" },
+  saldoNotaCredito: null,
 });
 
 const APROBADO = (numero = 0): RespuestaCae => ({
@@ -562,5 +563,61 @@ describe("autorizar: validaciones y casos que no llegan a ARCA", () => {
       error: "El comprobante se está verificando con ARCA: sus datos no se pueden cambiar hasta terminar la verificación.",
     });
     expect(eventos).not.toContain("bloqueo");
+  });
+});
+
+describe("autorizar: notas de crédito y débito", () => {
+  const FACTURA_A = { tipo: 1, puntoVenta: 7, numero: 361, fecha: "2026-10-10", cuit: "23334771229" };
+  const nota = (cambios: Partial<DatosAutorizacion> = {}, clase: "nota_credito" | "nota_debito" = "nota_credito") => {
+    const datos = datosBase();
+    datos.comprobante.clase = clase;
+    datos.asociados = [FACTURA_A];
+    return { ...datos, ...cambios };
+  };
+
+  it("pide el comprobante asociado antes de tocar ARCA", async () => {
+    const { deps, eventos } = escenario({ datos: nota({ asociados: [] }) });
+    expect(await autorizar(ID, deps)).toEqual({
+      error: "Una nota de crédito necesita el comprobante asociado (la factura que corrige).",
+    });
+    expect(eventos).toEqual(["cargar"]);
+  });
+
+  it("no autoriza una nota de crédito asociada a otra nota de crédito", async () => {
+    const { deps, eventos } = escenario({ datos: nota({ asociados: [{ ...FACTURA_A, tipo: 3 }] }) });
+    expect((await autorizar(ID, deps)).error).toMatch(/no puede asociarse a una nota de crédito/);
+    expect(eventos).toEqual(["cargar"]);
+  });
+
+  it("hereda la letra del asociado aunque el cliente hoy dé otra, y manda los CbtesAsoc", async () => {
+    const datos = nota();
+    datos.cliente.condicionIva = "Consumidor Final";
+    const { deps, solicitudes, estado } = escenario({ datos });
+    expect((await autorizar(ID, deps)).estado).toBe("autorizado");
+    expect(estado.recalculado).toMatchObject({ letra: "A", tipoArca: 3 });
+    expect(solicitudes[0]).toMatchObject({ tipoComprobante: 3, condicionIvaReceptorId: 5, asociados: [FACTURA_A] });
+  });
+
+  it("la nota de débito B sobre una factura B usa el código 7", async () => {
+    const datos = nota({ asociados: [{ ...FACTURA_A, tipo: 6 }] }, "nota_debito");
+    const { deps, solicitudes } = escenario({ datos });
+    await autorizar(ID, deps);
+    expect(solicitudes[0].tipoComprobante).toBe(7);
+  });
+
+  it("no autoriza una nota de crédito que supera el saldo de la factura, y muestra el saldo", async () => {
+    // Los ítems de datosBase suman 1.320,50 con IVA.
+    const { deps, eventos } = escenario({
+      datos: nota({ saldoNotaCredito: { saldo: 1000, asociado: "A-00007-00000361" } }),
+    });
+    expect(await autorizar(ID, deps)).toEqual({
+      error: "La nota de crédito ($ 1.320,50) supera el saldo disponible de A-00007-00000361: $ 1.000,00.",
+    });
+    expect(eventos).toEqual(["cargar"]);
+  });
+
+  it("autoriza una nota de crédito por el saldo justo", async () => {
+    const { deps } = escenario({ datos: nota({ saldoNotaCredito: { saldo: 1320.5, asociado: "A-00007-00000361" } }) });
+    expect((await autorizar(ID, deps)).estado).toBe("autorizado");
   });
 });

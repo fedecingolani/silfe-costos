@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { ReactNode } from "react";
 import { createClient } from "@/lib/supabase/server";
@@ -5,6 +6,15 @@ import { Encabezado, Migas, Pastilla, Tarjeta } from "@/components/ui";
 import { fecha, fechaHora, numero, pesos } from "@/lib/formato";
 import { hoyArgentina } from "@/lib/clientes/seguimiento";
 import { ivaDelComprobante, puedeImprimir } from "@/lib/comprobantes/pdf-datos";
+import { nombreTipoArca, notasPermitidas, textoAsociado } from "@/lib/comprobantes/asociados";
+import {
+  datosAsociado,
+  leerAsociados,
+  leerNotasSobre,
+  saldoDe,
+  type AsociadoLeido,
+  type ComprobanteRelacionado,
+} from "@/lib/comprobantes/asociados-carga";
 import { NOMBRES_ESTADO, TONO_ESTADO, nombreComprobante, numeroVisible } from "@/lib/comprobantes/listado";
 import {
   NOMBRES_AMBIENTE_ARCA,
@@ -12,6 +22,7 @@ import {
   type Comprobante,
   type ComprobanteItem,
   type MensajeArca,
+  type TipoComprobanteArca,
 } from "@/lib/tipos";
 import type { ClienteEncontrado } from "../acciones";
 import { cargarContextoEditor, cargarPrecios } from "../datos";
@@ -54,6 +65,22 @@ function Mensajes({ titulo, mensajes, tono }: { titulo: string; mensajes: Mensaj
   );
 }
 
+/** "Factura A A-00007-00000361 del 10/10/2026", con enlace si está en la base. */
+function Asociado({ asociado }: { asociado: AsociadoLeido }) {
+  const datos = datosAsociado(asociado);
+  const tipo = datos.tipo_arca ? nombreTipoArca(datos.tipo_arca as TipoComprobanteArca) : "Comprobante";
+  const texto = `${tipo} ${textoAsociado(datos)}`;
+  return asociado.interno ? (
+    <Link href={`/comprobantes/${asociado.interno.id}`} className="text-marca-700 hover:underline">
+      {texto}
+    </Link>
+  ) : (
+    <span>
+      {texto} <span className="text-xs text-stone-500">(sistema anterior)</span>
+    </span>
+  );
+}
+
 function Dato({ etiqueta, children }: { etiqueta: string; children: ReactNode }) {
   return (
     <div>
@@ -78,6 +105,11 @@ export default async function ComprobantePage({ params }: { params: Promise<{ id
   if (!data) notFound();
   const c = data as unknown as ComprobanteLeido;
   const items = (itemsData ?? []) as unknown as ItemLeido[];
+
+  // Asociados de una nota (los de la base, con su comprobante).
+  const asociados = c.clase === "factura" ? [] : await leerAsociados(supabase, c.id);
+  if (typeof asociados === "string") return <p className="text-sm text-red-700">{asociados}</p>;
+  const asociadosBase = asociados.map((a) => a.asociado_id).filter((v): v is string => Boolean(v));
 
   const { data: clienteData } = await supabase
     .from("cliente")
@@ -104,6 +136,14 @@ export default async function ComprobantePage({ params }: { params: Promise<{ id
     if (!cliente) return <p className="text-sm text-red-700">No se encontró el cliente del comprobante.</p>;
     const precios = await cargarPrecios(supabase, c.lista_precio_id);
     const errores = c.arca_errores ?? [];
+    const interno = asociados.find((a) => a.interno)?.interno ?? null;
+    const manual = asociados.find((a) => !a.asociado_id) ?? null;
+    let saldo: number | null = null;
+    if (c.clase === "nota_credito" && interno) {
+      const notas = await leerNotasSobre(supabase, asociadosBase, c.id);
+      if (typeof notas === "string") return <p className="text-sm text-red-700">{notas}</p>;
+      saldo = saldoDe(asociados, notas)?.saldo ?? null;
+    }
     const observaciones = c.arca_observaciones ?? [];
 
     return (
@@ -133,6 +173,27 @@ export default async function ComprobantePage({ params }: { params: Promise<{ id
             observaciones: c.observaciones,
             ambiente: c.ambiente,
             cliente,
+            asociado: {
+              interno:
+                interno && interno.tipo_arca && interno.letra
+                  ? {
+                      id: interno.id,
+                      texto: `${nombreTipoArca(interno.tipo_arca)} ${textoAsociado(interno)}`,
+                      letra: interno.letra,
+                      tipoArca: interno.tipo_arca,
+                      saldo,
+                    }
+                  : null,
+              manual:
+                manual && !interno
+                  ? {
+                      tipo_arca: manual.tipo_arca,
+                      punto_venta: manual.punto_venta,
+                      numero: manual.numero,
+                      fecha: manual.fecha,
+                    }
+                  : null,
+            },
             items: items.map((i) => ({
               producto_id: i.producto_id,
               codigo: i.codigo,
@@ -168,6 +229,20 @@ export default async function ComprobantePage({ params }: { params: Promise<{ id
   const observaciones = c.arca_observaciones ?? [];
   const verificando = c.estado === "verificando";
 
+  // Notas que asocian este comprobante y, en una factura, lo que queda para acreditar.
+  const notas: ComprobanteRelacionado[] | string = c.clase === "nota_credito" ? [] : await leerNotasSobre(supabase, [c.id]);
+  if (typeof notas === "string") return <p className="text-sm text-red-700">{notas}</p>;
+  const esteComoAsociado: AsociadoLeido = {
+    asociado_id: c.id,
+    tipo_arca: null,
+    punto_venta: null,
+    numero: null,
+    fecha: null,
+    cuit: null,
+    interno: { ...c, punto_venta: Number(c.punto_venta), total: Number(c.total) },
+  };
+  const saldo = c.estado === "autorizado" && c.clase !== "nota_credito" ? saldoDe([esteComoAsociado], notas) : null;
+
   return (
     <>
       {migas}
@@ -195,6 +270,7 @@ export default async function ComprobantePage({ params }: { params: Promise<{ id
           id={c.id}
           verificando={verificando}
           pdf={imprimible.ok ? { ok: true } : { ok: false, motivo: imprimible.motivo }}
+          notas={notasPermitidas(c)}
         />
       </div>
 
@@ -215,6 +291,17 @@ export default async function ComprobantePage({ params }: { params: Promise<{ id
             <Dato etiqueta="CAE">{c.cae ?? "—"}</Dato>
             <Dato etiqueta="Vencimiento del CAE">{fecha(c.cae_vencimiento)}</Dato>
             <Dato etiqueta="Autorizado el">{fechaHora(c.autorizado_en)}</Dato>
+            {asociados.length > 0 && (
+              <div className="col-span-2">
+                <Dato etiqueta="Comprobante asociado">
+                  <span className="flex flex-col">
+                    {asociados.map((a, i) => (
+                      <Asociado key={i} asociado={a} />
+                    ))}
+                  </span>
+                </Dato>
+              </div>
+            )}
             {c.observaciones && (
               <div className="col-span-2">
                 <Dato etiqueta="Observaciones">{c.observaciones}</Dato>
@@ -236,6 +323,32 @@ export default async function ComprobantePage({ params }: { params: Promise<{ id
           </dl>
         </Tarjeta>
       </div>
+
+      {(notas.length > 0 || saldo) && (
+        <Tarjeta
+          titulo="Notas de crédito y débito"
+          descripcion={saldo ? `Saldo para notas de crédito: ${pesos(saldo.saldo)}` : undefined}
+          className="mt-4"
+        >
+          {notas.length === 0 ? (
+            <p className="p-4 text-sm text-stone-500">Todavía no tiene notas asociadas.</p>
+          ) : (
+            <ul className="divide-y divide-stone-100 text-sm">
+              {notas.map((n) => (
+                <li key={n.id} className="flex items-center justify-between gap-2 px-4 py-2">
+                  <Link href={`/comprobantes/${n.id}`} className="text-marca-700 hover:underline">
+                    {nombreComprobante(n.clase, n.letra)} {n.numero !== null ? numeroVisible(n) : ""}
+                  </Link>
+                  <span className="flex items-center gap-2">
+                    <span className="tabular-nums">{pesos(n.total)}</span>
+                    <Pastilla tono={TONO_ESTADO[n.estado]}>{NOMBRES_ESTADO[n.estado]}</Pastilla>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Tarjeta>
+      )}
 
       <Tarjeta titulo="Ítems" className="mt-4">
         <div className="overflow-x-auto">

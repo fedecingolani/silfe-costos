@@ -7,7 +7,13 @@ import { Pastilla, Tarjeta, Vacio } from "@/components/ui";
 import { numero, pesos } from "@/lib/formato";
 import { validarCuit } from "@/lib/clientes/validaciones";
 import { calcularItem, calcularTotales } from "@/lib/comprobantes/calculo";
-import { letraYTipo } from "@/lib/comprobantes/letra";
+import { letraYTipoNota } from "@/lib/comprobantes/letra";
+import {
+  TIPOS_ASOCIADO_MANUAL,
+  letraDeTipoArca,
+  nombreTipoArca,
+  type AsociadoManualEnviado,
+} from "@/lib/comprobantes/asociados";
 import {
   buscarProductos,
   itemParaCalcular,
@@ -26,6 +32,7 @@ import {
   type AmbienteArca,
   type ClaseComprobante,
   type CondicionPago,
+  type LetraComprobante,
 } from "@/lib/tipos";
 import {
   autorizarComprobante,
@@ -58,6 +65,19 @@ export type ComprobanteEditable = {
   observaciones: string | null;
   ambiente: AmbienteArca | null;
   cliente: ClienteEncontrado;
+  /** Comprobante asociado de una nota: de la base (lo puso "Generar nota") o cargado a mano. */
+  asociado?: {
+    interno: {
+      id: string;
+      /** "Factura A A-00007-00000361 del 10/10/2026" */
+      texto: string;
+      letra: LetraComprobante;
+      tipoArca: number;
+      /** Lo que queda para acreditar (sólo notas de crédito). */
+      saldo: number | null;
+    } | null;
+    manual: { tipo_arca: number | null; punto_venta: number | null; numero: number | null; fecha: string | null } | null;
+  };
   items: {
     producto_id: string | null;
     codigo: string | null;
@@ -88,8 +108,12 @@ const filaVacia = (): Fila => ({
   aviso: null,
 });
 
-/** Clases que se cargan desde esta pantalla: la nota de crédito sale de una factura (T6). */
-const CLASES_NUEVAS: ClaseComprobante[] = ["factura", "nota_debito"];
+/**
+ * Clases que se cargan desde esta pantalla. Una nota sobre un comprobante de
+ * la app se genera desde su detalle ("Generar nota de crédito"); acá se carga
+ * la que asocia a mano un comprobante del sistema anterior.
+ */
+const CLASES_NUEVAS: ClaseComprobante[] = ["factura", "nota_credito", "nota_debito"];
 
 export function EditorComprobante({
   comprobante,
@@ -121,6 +145,14 @@ export function EditorComprobante({
     comprobante?.punto_venta ?? contexto.puntosVenta[0] ?? null,
   );
   const [observaciones, setObservaciones] = useState(comprobante?.observaciones ?? "");
+  const interno = comprobante?.asociado?.interno ?? null;
+  const manualGuardado = comprobante?.asociado?.manual ?? null;
+  const [manual, setManual] = useState<AsociadoManualEnviado>({
+    tipoArca: manualGuardado?.tipo_arca ? String(manualGuardado.tipo_arca) : "",
+    puntoVenta: manualGuardado?.punto_venta ? String(manualGuardado.punto_venta) : "",
+    numero: manualGuardado?.numero ? String(manualGuardado.numero) : "",
+    fecha: manualGuardado?.fecha ?? "",
+  });
   const [masOpciones, setMasOpciones] = useState(Boolean(comprobante?.observaciones));
   const [precios, setPrecios] = useState(() => mapaPrecios(preciosIniciales));
   const [filas, setFilas] = useState<Fila[]>(() =>
@@ -146,22 +178,31 @@ export function EditorComprobante({
 
   // ----- Datos calculados ---------------------------------------------------
 
+  // Una nota lleva la letra de su asociado (ARCA exige la misma), no la de la condición IVA actual del cliente.
+  const esNota = clase !== "factura";
+  const letraAsociado: LetraComprobante | null = esNota
+    ? (interno?.letra ?? letraDeTipoArca(manual.tipoArca || null))
+    : null;
   let letra: string | null = null;
   const avisos: string[] = [];
-  if (cliente) {
-    if (!cliente.condicion_iva) {
-      avisos.push("El cliente no tiene condición frente al IVA: completala en su ficha antes de autorizar.");
-    } else {
-      letra = letraYTipo(cliente.condicion_iva, clase).letra;
-      if (letra === "A" && !(cliente.cuit && validarCuit(cliente.cuit).valido)) {
-        avisos.push("Para un comprobante A el cliente necesita una CUIT válida: corregila en su ficha.");
-      }
+  if (cliente && !cliente.condicion_iva) {
+    avisos.push("El cliente no tiene condición frente al IVA: completala en su ficha antes de autorizar.");
+  }
+  if (cliente && (cliente.condicion_iva || letraAsociado)) {
+    const resultado = letraYTipoNota(cliente.condicion_iva, clase, letraAsociado);
+    letra = resultado.letra;
+    if (resultado.aviso) avisos.push(resultado.aviso);
+    if (letra === "A" && !(cliente.cuit && validarCuit(cliente.cuit).valido)) {
+      avisos.push("Para un comprobante A el cliente necesita una CUIT válida: corregila en su ficha.");
     }
   }
   const ambiente: AmbienteArca | null = comprobante?.ambiente ?? contexto.ambienteActivo;
   const calculables = filas.map(itemParaCalcular);
   const totales = calcularTotales(calculables.filter((c) => c !== null));
-  const clases = comprobante && !CLASES_NUEVAS.includes(comprobante.clase) ? [comprobante.clase] : CLASES_NUEVAS;
+  // Una nota generada desde otro comprobante no cambia de clase.
+  const clases = interno && comprobante ? [comprobante.clase] : CLASES_NUEVAS;
+  const superaSaldo =
+    clase === "nota_credito" && interno?.saldo !== null && interno?.saldo !== undefined && totales.total > interno.saldo + 0.005;
 
   // ----- Cambios ------------------------------------------------------------
 
@@ -214,6 +255,7 @@ export function EditorComprobante({
       listaPrecioId: listaId,
       puntoVenta: puntoVenta ?? "",
       observaciones,
+      asociadoManual: esNota && !interno ? manual : null,
       items: filas.map((f) => ({
         productoId: f.productoId,
         descripcion: f.descripcion,
@@ -458,6 +500,95 @@ export function EditorComprobante({
           </div>
         </div>
       </Tarjeta>
+
+      {esNota && (
+        <Tarjeta
+          titulo="Comprobante asociado"
+          descripcion={
+            interno
+              ? "La nota lleva la letra de este comprobante."
+              : "Para notas sobre comprobantes del sistema anterior: se informan a ARCA con la CUIT del emisor."
+          }
+        >
+          {interno ? (
+            <div className="space-y-1 p-4 text-sm">
+              <p>
+                <Link href={`/comprobantes/${interno.id}`} className="text-marca-700 hover:underline">
+                  {interno.texto}
+                </Link>
+              </p>
+              {clase === "nota_credito" && interno.saldo !== null && (
+                <p className={superaSaldo ? "text-red-700" : "text-stone-500"}>
+                  Saldo disponible para notas de crédito: {pesos(interno.saldo)}
+                  {superaSaldo && " — la nota lo supera: no se va a poder autorizar."}
+                </p>
+              )}
+            </div>
+          ) : (
+            <div className="grid gap-3 p-4 sm:grid-cols-4">
+              <div>
+                <label className="etiqueta" htmlFor="asociado-tipo">
+                  Tipo *
+                </label>
+                <select
+                  id="asociado-tipo"
+                  value={manual.tipoArca}
+                  onChange={(e) => setManual((m) => ({ ...m, tipoArca: e.target.value }))}
+                  className="campo"
+                >
+                  <option value="">Elegí…</option>
+                  {TIPOS_ASOCIADO_MANUAL[clase as "nota_credito" | "nota_debito"].map((t) => (
+                    <option key={t} value={String(t)}>
+                      {nombreTipoArca(t)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="etiqueta" htmlFor="asociado-punto-venta">
+                  Punto de venta *
+                </label>
+                <input
+                  id="asociado-punto-venta"
+                  inputMode="numeric"
+                  value={manual.puntoVenta}
+                  onChange={(e) => setManual((m) => ({ ...m, puntoVenta: e.target.value }))}
+                  className="campo"
+                />
+              </div>
+              <div>
+                <label className="etiqueta" htmlFor="asociado-numero">
+                  Número *
+                </label>
+                <input
+                  id="asociado-numero"
+                  inputMode="numeric"
+                  value={manual.numero}
+                  onChange={(e) => setManual((m) => ({ ...m, numero: e.target.value }))}
+                  className="campo"
+                />
+              </div>
+              <div>
+                <label className="etiqueta" htmlFor="asociado-fecha">
+                  Fecha *
+                </label>
+                <input
+                  id="asociado-fecha"
+                  type="date"
+                  value={manual.fecha}
+                  max={fecha}
+                  onChange={(e) => setManual((m) => ({ ...m, fecha: e.target.value }))}
+                  className="campo"
+                />
+              </div>
+              <p className="text-xs text-stone-500 sm:col-span-4">
+                Sin control de importe: el comprobante no está en la base, así que no se sabe cuánto queda por
+                acreditar. Revisá que la nota no supere el comprobante original.
+              </p>
+            </div>
+          )}
+        </Tarjeta>
+      )}
 
       <Tarjeta
         titulo="Ítems"

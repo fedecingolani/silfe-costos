@@ -126,6 +126,8 @@ describe("armarBorrador", () => {
     const resultado = armarBorrador(enviado(), contexto);
     expect(resultado).toEqual({
       borrador: {
+        // Una factura no lleva asociados: se guardan vacíos.
+        asociados: [],
         cabecera: {
           punto_venta: 7,
           clase: "factura",
@@ -261,5 +263,54 @@ describe("buscarProductos", () => {
   it("sin texto no devuelve nada y respeta el límite", () => {
     expect(buscarProductos(catalogo, "  ")).toEqual([]);
     expect(buscarProductos(catalogo, "o", 2)).toHaveLength(2);
+  });
+});
+
+describe("armarBorrador: notas con comprobante asociado", () => {
+  const manual = { tipoArca: "6", puntoVenta: "7", numero: "150", fecha: "2026-01-10" };
+  const armar = (cambios: Partial<BorradorEnviado>, extra: Partial<Parameters<typeof armarBorrador>[1]> = {}) =>
+    armarBorrador(enviado(cambios), { ...contexto, cuitEmisor: "23334771229", ...extra });
+
+  it("con un asociado de la base, la letra es la del asociado aunque el cliente hoy dé otra, y no se tocan los asociados", () => {
+    const r = armar(
+      { clase: "nota_credito" },
+      { condicionIvaCliente: "Consumidor Final", asociadoInterno: { tipoArca: 1 } },
+    );
+    if ("errores" in r) throw new Error(r.errores.join(" "));
+    expect(r.borrador.cabecera).toMatchObject({ letra: "A", tipo_arca: 3 });
+    expect(r.borrador.asociados).toBeNull();
+  });
+
+  it("no deja pasar a factura un comprobante asociado a otro", () => {
+    expect(armar({ clase: "factura" }, { asociadoInterno: { tipoArca: 1 } })).toEqual({
+      errores: ["Una factura no lleva comprobante asociado."],
+    });
+  });
+
+  it("con un asociado cargado a mano, la letra sale de su tipo y se guarda con la CUIT del emisor", () => {
+    const r = armar({ clase: "nota_credito", asociadoManual: manual });
+    if ("errores" in r) throw new Error(r.errores.join(" "));
+    expect(r.borrador.cabecera).toMatchObject({ letra: "B", tipo_arca: 8 });
+    expect(r.borrador.asociados).toEqual([
+      { tipo_arca: 6, punto_venta: 7, numero: 150, fecha: "2026-01-10", cuit: "23334771229" },
+    ]);
+  });
+
+  it("una nota sin asociado se guarda como borrador (la letra sale del cliente) y queda sin asociados", () => {
+    const r = armar({ clase: "nota_debito", asociadoManual: null });
+    if ("errores" in r) throw new Error(r.errores.join(" "));
+    expect(r.borrador.cabecera).toMatchObject({ letra: "A", tipo_arca: 2 });
+    expect(r.borrador.asociados).toEqual([]);
+  });
+
+  it("una factura descarta el asociado cargado a mano", () => {
+    const r = armar({ clase: "factura", asociadoManual: manual });
+    if ("errores" in r) throw new Error(r.errores.join(" "));
+    expect(r.borrador.asociados).toEqual([]);
+  });
+
+  it("informa los errores del asociado cargado a mano", () => {
+    const r = armar({ clase: "nota_credito", asociadoManual: { ...manual, numero: "0" } });
+    expect(r).toEqual({ errores: ["Comprobante asociado: el número tiene que ser un entero mayor a cero."] });
   });
 });

@@ -15,8 +15,15 @@ import {
   type LetraComprobante,
   type TipoComprobanteArca,
 } from "@/lib/tipos";
+import {
+  leerAsociadoManual,
+  letraDeTipoArca,
+  validarAsociadosNota,
+  type AsociadoGuardado,
+  type AsociadoManualEnviado,
+} from "./asociados";
 import { calcularItem, calcularTotales, type ItemACalcular } from "./calculo";
-import { letraYTipo } from "./letra";
+import { letraYTipoNota } from "./letra";
 import { esFechaValida } from "./validacion";
 
 // ----- Lo que manda la pantalla ---------------------------------------------
@@ -43,6 +50,11 @@ export type BorradorEnviado = {
   puntoVenta: number | string;
   observaciones: string;
   items: FilaItemEnviada[];
+  /**
+   * Comprobante asociado cargado a mano (notas sobre comprobantes del
+   * sistema anterior). Se ignora si la nota ya tiene un asociado de la base.
+   */
+  asociadoManual?: AsociadoManualEnviado | null;
 };
 
 /** Producto del catálogo, con los datos que se copian al renglón. */
@@ -87,7 +99,12 @@ export type ItemGuardado = {
   iva: number;
 };
 
-export type BorradorArmado = { cabecera: CabeceraGuardada; items: ItemGuardado[] };
+export type BorradorArmado = {
+  cabecera: CabeceraGuardada;
+  items: ItemGuardado[];
+  /** Asociados que reemplazan a los guardados; null: no se tocan (la nota ya tiene uno de la base). */
+  asociados: AsociadoGuardado[] | null;
+};
 
 // ----- Ayudas para la pantalla ----------------------------------------------
 
@@ -166,10 +183,20 @@ function esObjeto(valor: unknown): valor is Record<string, unknown> {
  * Valida lo enviado por la pantalla y arma la cabecera y los ítems para
  * guardar. Un renglón con producto toma del catálogo código, nombre, unidad
  * y alícuota; uno libre, lo cargado. Importes y totales se calculan acá.
+ *
+ * Una nota lleva la letra de su asociado (de la base, o el tipo del cargado
+ * a mano); sin asociado, la de la condición IVA del cliente.
  */
 export function armarBorrador(
   enviado: unknown,
-  contexto: { productos: ReadonlyMap<string, ProductoCatalogo>; condicionIvaCliente: CondicionIva | null },
+  contexto: {
+    productos: ReadonlyMap<string, ProductoCatalogo>;
+    condicionIvaCliente: CondicionIva | null;
+    /** Asociado de la base que ya tiene la nota (lo puso "Generar nota"). */
+    asociadoInterno?: { tipoArca: number } | null;
+    /** CUIT del emisor: va en el asociado cargado a mano. */
+    cuitEmisor?: string | null;
+  },
 ): { borrador: BorradorArmado } | { errores: string[] } {
   if (!esObjeto(enviado) || !Array.isArray(enviado.items)) {
     return { errores: ["Los datos del comprobante no son válidos."] };
@@ -267,12 +294,29 @@ export function armarBorrador(
     });
   });
 
+  // Asociados: el de la base no se toca; el cargado a mano se reemplaza.
+  let asociados: AsociadoGuardado[] | null = [];
+  let letraAsociado: LetraComprobante | null = null;
+  if (clase && contexto.asociadoInterno) {
+    const validos = validarAsociadosNota(clase, [contexto.asociadoInterno.tipoArca]);
+    if ("error" in validos) errores.push(validos.error);
+    else letraAsociado = validos.letra;
+    asociados = null;
+  } else if (clase && clase !== "factura") {
+    const manual = leerAsociadoManual(enviado.asociadoManual, clase, fecha, contexto.cuitEmisor ?? null);
+    if ("errores" in manual) errores.push(...manual.errores);
+    else if (manual.asociado) {
+      asociados = [manual.asociado];
+      letraAsociado = letraDeTipoArca((manual.asociado as { tipo_arca: number }).tipo_arca);
+    }
+  }
+
   if (errores.length > 0) return { errores };
 
   let letra: LetraComprobante | null = null;
   let tipoArca: TipoComprobanteArca | null = null;
-  if (contexto.condicionIvaCliente) {
-    ({ letra, tipoArca } = letraYTipo(contexto.condicionIvaCliente, clase!));
+  if (contexto.condicionIvaCliente || letraAsociado) {
+    ({ letra, tipoArca } = letraYTipoNota(contexto.condicionIvaCliente, clase!, letraAsociado));
   }
 
   const totales = calcularTotales(
@@ -302,6 +346,7 @@ export function armarBorrador(
         total: totales.total,
       },
       items,
+      asociados,
     },
   };
 }
@@ -320,6 +365,8 @@ const MENSAJES_GUARDADO: Record<string, string> = {
 
 /** Mensaje legible de un error de la base al guardar o borrar un borrador. */
 export function mensajeErrorGuardado(error: { code?: string; message: string }): string {
+  // CM007 (asociado inválido): el mensaje de la base ya es legible y dice qué asociado.
+  if (error.code === "CM007") return error.message;
   return (error.code && MENSAJES_GUARDADO[error.code]) || `No se pudo guardar el comprobante: ${error.message}`;
 }
 

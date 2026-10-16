@@ -40,6 +40,20 @@ async function generar(n: number, ambiente: "produccion" | "homologacion" = "pro
 }
 
 describe("generarPdfComprobante", () => {
+  it("imprime el comprobante asociado debajo del receptor en una nota de crédito", async () => {
+    const ejemplo = ejemploConItems(1);
+    const datos = armarDatosPdf({
+      ...ejemplo,
+      comprobante: { ...ejemplo.comprobante, clase: "nota_credito", tipo_arca: 3 },
+      asociados: [{ tipo_arca: 1, punto_venta: 7, numero: 361, fecha: "2026-10-10" }],
+    });
+    const doc = await PDFDocument.load(await generarPdfComprobante(datos));
+    const texto = textoDePagina(doc.getPages()[0]);
+    expect(texto).toContain("NOTA DE CRÉDITO");
+    expect(texto).toContain("Comprobante asociado:");
+    expect(texto).toContain("A-00007-00000361 del 10/10/2026");
+  });
+
   it("genera un PDF de una página con los datos del comprobante", async () => {
     const { bytes, paginas } = await generar(1);
     expect(Buffer.from(bytes.slice(0, 5)).toString("latin1")).toBe("%PDF-");

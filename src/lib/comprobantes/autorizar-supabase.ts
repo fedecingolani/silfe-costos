@@ -15,7 +15,6 @@ import {
   feCAESolicitar,
   feCompConsultar,
   feCompUltimoAutorizado,
-  type AsociadoSolicitud,
 } from "@/lib/arca/wsfe";
 import type { AmbienteArca, EstadoComprobante } from "@/lib/tipos";
 import {
@@ -24,7 +23,8 @@ import {
   type RepositorioComprobantes,
   type ServiciosArca,
 } from "./autorizar";
-import { asociadoManual } from "./asociados";
+import { asociadoInterno, asociadoManual } from "./asociados";
+import { leerAsociados, leerNotasSobre, saldoDe } from "./asociados-carga";
 
 type Supabase = Awaited<ReturnType<typeof createClient>>;
 
@@ -52,40 +52,30 @@ export function repositorioComprobantes(supabase: Supabase): RepositorioComproba
     if ((data ?? []).length !== 1) throw new ErrorBaseDatos("CM002", SIN_CAMBIOS);
   }
 
-  async function asociados(id: string, cuitEmisor: string | null): Promise<AsociadoSolicitud[]> {
-    const { data, error } = await supabase
-      .from("comprobante_asociado")
-      .select("asociado_id, tipo_arca, punto_venta, numero, fecha, cuit")
-      .eq("comprobante_id", id);
-    if (error) fallar("No se pudieron leer los comprobantes asociados", error);
-    const filas = data ?? [];
+  /** CbtesAsoc (validados antes de tocar ARCA) y, en una nota de crédito, el saldo de sus asociados. */
+  async function asociados(
+    id: string,
+    clase: DatosAutorizacion["comprobante"]["clase"],
+    cuitEmisor: string | null,
+  ): Promise<Pick<DatosAutorizacion, "asociados" | "saldoNotaCredito">> {
+    const leidos = await leerAsociados(supabase, id);
+    if (typeof leidos === "string") throw new ErrorBaseDatos(undefined, leidos);
 
-    const ids = filas.map((f) => f.asociado_id).filter((v): v is string => Boolean(v));
-    const enBase = new Map<string, { tipo_arca: number | null; punto_venta: number; numero: number | null; fecha: string; estado: string }>();
-    if (ids.length > 0) {
-      const { data: comprobantes, error: errorBase } = await supabase
-        .from("comprobante")
-        .select("id, tipo_arca, punto_venta, numero, fecha, estado")
-        .in("id", ids);
-      if (errorBase) fallar("No se pudieron leer los comprobantes asociados", errorBase);
-      for (const f of comprobantes ?? []) enBase.set(f.id, f);
-    }
-
-    return filas.map((f) => {
-      // Se valida antes de tocar ARCA: el error llega tal cual a la pantalla.
-      if (!f.asociado_id) return asociadoManual(f);
-      const asociado = enBase.get(f.asociado_id);
-      if (!asociado || asociado.estado !== "autorizado" || asociado.numero === null || asociado.tipo_arca === null) {
-        throw new Error("El comprobante asociado no está autorizado: sólo se asocian comprobantes con número.");
-      }
-      return {
-        tipo: Number(asociado.tipo_arca),
-        puntoVenta: Number(asociado.punto_venta),
-        numero: Number(asociado.numero),
-        fecha: asociado.fecha,
-        cuit: cuitEmisor ?? undefined,
-      };
+    // Un error de un asociado llega tal cual a la pantalla.
+    const solicitud = leidos.map((a) => {
+      if (!a.asociado_id) return asociadoManual(a);
+      if (!a.interno) throw new Error("El comprobante asociado ya no existe.");
+      return asociadoInterno(a.interno, cuitEmisor);
     });
+
+    let saldoNotaCredito: DatosAutorizacion["saldoNotaCredito"] = null;
+    const internos = leidos.map((a) => a.asociado_id).filter((v): v is string => Boolean(v));
+    if (clase === "nota_credito" && internos.length > 0) {
+      const notas = await leerNotasSobre(supabase, internos, id);
+      if (typeof notas === "string") throw new ErrorBaseDatos(undefined, notas);
+      saldoNotaCredito = saldoDe(leidos, notas);
+    }
+    return { asociados: solicitud, saldoNotaCredito };
   }
 
   return {
@@ -155,7 +145,7 @@ export function repositorioComprobantes(supabase: Supabase): RepositorioComproba
           importe: Number(i.importe),
           iva: Number(i.iva),
         })),
-        asociados: await asociados(id, cuitEmisor),
+        ...(await asociados(id, c.clase, cuitEmisor)),
         cliente: {
           razonSocial: cliente.data.razon_social,
           cuit: cliente.data.cuit,

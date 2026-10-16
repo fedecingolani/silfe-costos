@@ -7,6 +7,7 @@ import { MENSAJE_SIN_SECRETO, leerClaveCifrado } from "@/lib/arca/secreto";
 import type { FetchArca } from "@/lib/arca/wsaa";
 import { hoyArgentina } from "@/lib/clientes/seguimiento";
 import { filtroBusquedaClientes } from "@/lib/clientes/busqueda";
+import { asociadosParaGuardar, leerAsociados } from "@/lib/comprobantes/asociados-carga";
 import { autorizar } from "@/lib/comprobantes/autorizar";
 import { repositorioComprobantes, serviciosArca } from "@/lib/comprobantes/autorizar-supabase";
 import {
@@ -16,8 +17,16 @@ import {
   type ProductoCatalogo,
 } from "@/lib/comprobantes/borrador";
 import { nombreComprobante } from "@/lib/comprobantes/listado";
+import { armarNota } from "@/lib/comprobantes/notas";
 import { pesos } from "@/lib/formato";
-import { NOMBRES_AMBIENTE_ARCA, type AmbienteArca, type CondicionIva, type EstadoComprobante } from "@/lib/tipos";
+import {
+  CLASES_COMPROBANTE,
+  NOMBRES_AMBIENTE_ARCA,
+  type AmbienteArca,
+  type ClaseComprobante,
+  type CondicionIva,
+  type EstadoComprobante,
+} from "@/lib/tipos";
 
 // Next enmascara en producción los errores lanzados desde una acción: las
 // acciones devuelven el mensaje en lugar de lanzarlo. Ninguna devuelve la
@@ -77,6 +86,8 @@ async function productosPorId(supabase: Supabase, ids: string[]): Promise<Map<st
  * Crea (id null) o actualiza un borrador con su cabecera e ítems en una sola
  * transacción (guardar_borrador_comprobante). Un rechazado vuelve a borrador.
  * `datos` es el JSON de BorradorEnviado: importes y totales se recalculan acá.
+ * Una nota generada desde otro comprobante conserva ese asociado y su letra;
+ * una cargada a mano guarda el asociado de la pantalla con la CUIT del emisor.
  */
 export async function guardarBorrador(id: string | null, datos: string): Promise<ResultadoGuardado> {
   if (id !== null && !UUID.test(id)) return { error: "Comprobante inválido." };
@@ -108,7 +119,22 @@ export async function guardarBorrador(id: string | null, datos: string): Promise
   const productos = await productosPorId(supabase, ids);
   if (typeof productos === "string") return { error: productos };
 
-  const armado = armarBorrador(enviado, { productos, condicionIvaCliente: cliente?.condicion_iva ?? null });
+  let asociadoInterno: { tipoArca: number } | null = null;
+  if (id !== null) {
+    const asociados = await leerAsociados(supabase, id);
+    if (typeof asociados === "string") return { error: asociados };
+    const interno = asociados.find((a) => a.interno?.tipo_arca)?.interno;
+    if (interno?.tipo_arca) asociadoInterno = { tipoArca: interno.tipo_arca };
+  }
+  const { data: emisor, error: errorEmisor } = await supabase.from("arca_emisor").select("cuit").eq("id", true).maybeSingle();
+  if (errorEmisor) return { error: `No se pudieron leer los datos del emisor: ${errorEmisor.message}` };
+
+  const armado = armarBorrador(enviado, {
+    productos,
+    condicionIvaCliente: cliente?.condicion_iva ?? null,
+    asociadoInterno,
+    cuitEmisor: (emisor?.cuit as string | null | undefined) ?? null,
+  });
   if ("errores" in armado) return { error: armado.errores.join(" ") };
   if (!cliente) return { error: "El cliente ya no existe." };
 
@@ -116,6 +142,8 @@ export async function guardarBorrador(id: string | null, datos: string): Promise
     p_id: id,
     p_comprobante: armado.borrador.cabecera,
     p_items: armado.borrador.items,
+    // null: la nota conserva el asociado de la base que ya tiene.
+    p_asociados: armado.borrador.asociados,
   });
   if (error) return { error: mensajeErrorGuardado(error) };
   const nuevoId = String(guardadoId);
@@ -151,9 +179,10 @@ export async function borrarBorrador(id: string): Promise<EstadoAccionComprobant
 }
 
 /**
- * Crea un borrador nuevo con el mismo cliente, la misma cabecera y los mismos
- * ítems, con fecha de hoy. Sirve para cualquier estado. Si el punto de venta
- * se desactivó, usa el electrónico activo de número más bajo.
+ * Crea un borrador nuevo con el mismo cliente, la misma cabecera, los mismos
+ * ítems y los mismos comprobantes asociados, con fecha de hoy. Sirve para
+ * cualquier estado. Si el punto de venta se desactivó, usa el electrónico
+ * activo de número más bajo.
  */
 export async function duplicarComprobante(id: string): Promise<EstadoAccionComprobante> {
   if (!UUID.test(id)) return { error: "Comprobante inválido." };
@@ -181,6 +210,8 @@ export async function duplicarComprobante(id: string): Promise<EstadoAccionCompr
   const activos = (puntos ?? []).map((p) => Number(p.numero));
   const puntoVenta = activos.includes(Number(c.punto_venta)) ? Number(c.punto_venta) : activos[0];
   if (puntoVenta === undefined) return { error: "No hay ningún punto de venta electrónico activo." };
+  const asociados = await leerAsociados(supabase, id);
+  if (typeof asociados === "string") return { error: asociados };
 
   const hoy = hoyArgentina();
   const { data: nuevoId, error: errorGuardar } = await supabase.rpc("guardar_borrador_comprobante", {
@@ -201,10 +232,71 @@ export async function duplicarComprobante(id: string): Promise<EstadoAccionCompr
       total: c.total,
     },
     p_items: (items ?? []) as ItemGuardado[],
+    p_asociados: asociadosParaGuardar(asociados),
   });
   if (errorGuardar) return { error: mensajeErrorGuardado(errorGuardar) };
 
   revalidatePath(RUTA);
+  redirect(`${RUTA}/${String(nuevoId)}`);
+}
+
+/**
+ * Genera una nota de crédito o débito desde un comprobante autorizado: un
+ * borrador con el mismo cliente, punto de venta, lista y condición de pago,
+ * fecha de hoy, los ítems copiados y el comprobante como asociado. Abre el
+ * editor para ajustar cantidades o precios.
+ */
+export async function generarNota(id: string, clase: ClaseComprobante): Promise<EstadoAccionComprobante> {
+  if (!UUID.test(id) || !(CLASES_COMPROBANTE as readonly string[]).includes(clase)) {
+    return { error: "Comprobante inválido." };
+  }
+  const supabase = await createClient();
+  const [{ data: c, error }, { data: items, error: errorItems }, { data: puntos, error: errorPuntos }] =
+    await Promise.all([
+      supabase
+        .from("comprobante")
+        .select("id, estado, clase, letra, punto_venta, cliente_id, lista_precio_id, condicion_pago")
+        .eq("id", id)
+        .maybeSingle(),
+      supabase
+        .from("comprobante_item")
+        .select(
+          "producto_id, codigo, descripcion, observaciones, unidad, cantidad, precio_unitario, descuento_pct, alicuota_iva, importe, iva",
+        )
+        .eq("comprobante_id", id)
+        .order("orden"),
+      supabase.from("punto_venta").select("numero").eq("activo", true).eq("electronico", true).order("numero"),
+    ]);
+  const errorCarga = error ?? errorItems ?? errorPuntos;
+  if (errorCarga) return { error: `No se pudo leer el comprobante: ${errorCarga.message}` };
+  if (!c) return { error: "No se encontró el comprobante." };
+
+  const nota = armarNota(
+    { ...c, punto_venta: Number(c.punto_venta) },
+    ((items ?? []) as ItemGuardado[]).map((i) => ({
+      ...i,
+      cantidad: Number(i.cantidad),
+      precio_unitario: Number(i.precio_unitario),
+      descuento_pct: Number(i.descuento_pct),
+      importe: Number(i.importe),
+      iva: Number(i.iva),
+    })),
+    clase,
+    hoyArgentina(),
+    (puntos ?? []).map((p) => Number(p.numero)),
+  );
+  if ("error" in nota) return { error: nota.error };
+
+  const { data: nuevoId, error: errorGuardar } = await supabase.rpc("guardar_borrador_comprobante", {
+    p_id: null,
+    p_comprobante: nota.cabecera,
+    p_items: nota.items,
+    p_asociados: nota.asociados,
+  });
+  if (errorGuardar) return { error: mensajeErrorGuardado(errorGuardar) };
+
+  revalidatePath(RUTA);
+  revalidatePath(`${RUTA}/${id}`);
   redirect(`${RUTA}/${String(nuevoId)}`);
 }
 

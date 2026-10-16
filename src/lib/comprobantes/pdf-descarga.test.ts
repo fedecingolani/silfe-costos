@@ -20,6 +20,9 @@ function clienteStub(respuestas: Record<string, Respuesta>) {
           return constructor;
         },
         eq: () => constructor,
+        in: () => constructor,
+        then: (resolver: (r: Respuesta) => unknown, rechazar?: (e: unknown) => unknown) =>
+          Promise.resolve(respuesta).then(resolver, rechazar),
         order: () => Promise.resolve(respuesta),
         maybeSingle: () => Promise.resolve(respuesta),
       };
@@ -85,6 +88,22 @@ describe("cargarPdfComprobante", () => {
     expect(r.ok).toBe(true);
     expect(aviso.mock.calls.some((c) => String(c[0]).includes("IVA"))).toBe(true);
     aviso.mockRestore();
+  });
+
+  it("imprime el comprobante asociado de una nota de crédito, de la base o cargado a mano", async () => {
+    const nota = { ...COMPROBANTE_EJEMPLO, clase: "nota_credito", tipo_arca: 3 };
+    const { cliente, consultas } = clienteStub({
+      ...BASE,
+      comprobante: { data: nota, error: null },
+      comprobante_asociado: {
+        data: [{ asociado_id: null, tipo_arca: 1, punto_venta: 7, numero: 150, fecha: "2026-01-09" }],
+        error: null,
+      },
+    });
+    const r = await cargarPdfComprobante({ id: ID, url: URL_PEDIDO, cliente, fetch: sinLogo });
+    if (!r.ok) throw new Error(await r.respuesta.text());
+    expect(r.datos.asociados).toEqual(["A-00007-00000150 del 09/01/2026"]);
+    expect(consultas.find((c) => c.tabla === "comprobante_asociado")?.columnas).not.toContain("*");
   });
 
   it("pide el logo al mismo origen", async () => {

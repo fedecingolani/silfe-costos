@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { condicionIvaReceptorId, documentoReceptor, letraYTipo } from "./letra";
+import { condicionIvaReceptorId, documentoReceptor, letraYTipo, letraYTipoNota } from "./letra";
 
 describe("letraYTipo", () => {
   it("da letra A a Responsable Inscripto y Monotributista", () => {
@@ -49,5 +49,28 @@ describe("documentoReceptor", () => {
   it("en letra B sin CUIT válida usa 99 con número 0", () => {
     expect(documentoReceptor(null, "Consumidor Final", "B")).toEqual({ docTipo: 99, docNro: "0" });
     expect(documentoReceptor("123", "Consumidor Final", "B")).toEqual({ docTipo: 99, docNro: "0" });
+  });
+});
+
+describe("letraYTipoNota", () => {
+  it("una nota hereda la letra del comprobante asociado, no la de la condición IVA actual del cliente", () => {
+    expect(letraYTipoNota("Consumidor Final", "nota_credito", "A")).toEqual({
+      letra: "A",
+      tipoArca: 3,
+      aviso:
+        "El cliente hoy es Consumidor Final (letra B), pero la nota lleva la letra A del comprobante asociado, como exige ARCA.",
+    });
+    expect(letraYTipoNota("Responsable Inscripto", "nota_debito", "B").tipoArca).toBe(7);
+  });
+
+  it("sin aviso si la letra coincide o si el cliente no tiene condición IVA", () => {
+    expect(letraYTipoNota("Monotributista", "nota_credito", "A")).toEqual({ letra: "A", tipoArca: 3, aviso: null });
+    expect(letraYTipoNota(null, "nota_credito", "B")).toEqual({ letra: "B", tipoArca: 8, aviso: null });
+  });
+
+  it("sin asociado (o en una factura) la letra sale de la condición IVA del cliente", () => {
+    expect(letraYTipoNota("Consumidor Final", "nota_credito", null)).toEqual({ letra: "B", tipoArca: 8, aviso: null });
+    expect(letraYTipoNota("Consumidor Final", "factura", "A")).toEqual({ letra: "B", tipoArca: 6, aviso: null });
+    expect(() => letraYTipoNota(null, "nota_credito", null)).toThrow(/condición frente al IVA/);
   });
 });
