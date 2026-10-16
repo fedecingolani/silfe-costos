@@ -259,7 +259,7 @@ Menú **Ventas → Comprobantes**.
 | ID | Tarea | Ruta | Estado |
 | --- | --- | --- | --- |
 | T1 | Migraciones `comprobante`, `comprobante_item`, `comprobante_asociado`, campos nuevos del emisor, triggers de inmutabilidad y RLS (pgTAP en rojo primero) | delegada (writer) | [x] |
-| T2 | `src/lib/comprobantes/`: letra/tipo, cálculo de totales e IVA por alícuota, armado y parseo de `FECAESolicitar`, `FECompConsultar`, QR. Extraer el `AlmacenTicket` de Supabase a un módulo compartido (Vitest) | delegada (writer) | [ ] |
+| T2 | `src/lib/comprobantes/`: letra/tipo, cálculo de totales e IVA por alícuota, armado y parseo de `FECAESolicitar`, `FECompConsultar`, QR. Extraer el `AlmacenTicket` de Supabase a un módulo compartido (Vitest) | delegada (writer) | [x] |
 | T3 | Autorización: bloqueo por punto de venta y tipo, último + 1, reintento correlativo, estado `verificando` y reconciliación | delegada (writer) | [ ] |
 | T4 | Pantallas: listado, alta/edición de borrador y detalle | delegada (writer) | [ ] |
 | T5 | Impresión: PDF completo con QR para comprobantes electrónicos | delegada (writer) | [ ] |
@@ -296,7 +296,7 @@ Menú **Ventas → Comprobantes**.
 
 - Rama `feat/comprobantes-venta` creada desde `main` (6dc480f).
 - T1 (delegada, writer: 3 archivos SQL no triviales): migraciones `20261024000001_comprobantes.sql` y
-  `20261024000002_rls_comprobantes.sql`, test `supabase/tests/comprobantes_test.sql` (86 pruebas).
+  `20261024000002_rls_comprobantes.sql`, test `supabase/tests/comprobantes_test.sql` (86 pruebas). Commit `b347aa7`.
   - RED observado (tablas inexistentes) y luego GREEN con `supabase test db supabase/tests/comprobantes_test.sql`.
   - Bloqueo de numeración: tabla `comprobante_numeracion_bloqueo` + funciones `tomar_bloqueo_numeracion`
     (devuelve el vencimiento como llave, o null si está tomado) y `liberar_bloqueo_numeracion` (security invoker).
@@ -304,7 +304,16 @@ Menú **Ventas → Comprobantes**.
     CM003 borrado no permitido, CM004 ítems/asociados bloqueados, CM005 punto de venta inconsistente.
   - Pendiente: `supabase/tests/arca_configuracion_test.sql` (fuera de la superficie de T1) espera las columnas
     viejas de `arca_emisor` y falla con las tres nuevas; hay que sumarlas a su `columns_are`.
+- T2 (delegada, writer: 6 módulos con tests): `src/lib/comprobantes/` (`letra`, `calculo`, `validacion`, `numero`,
+  `qr`), `feCAESolicitar` y `feCompConsultar` en `src/lib/arca/wsfe.ts`, `src/lib/arca/almacen-ticket.ts`
+  (extraído de las acciones de `/configuracion/arca`, mismo comportamiento) y tipos en `src/lib/tipos.ts`.
+  - RED observado (módulos y funciones inexistentes) y luego GREEN con Vitest. Los tests de `almacen-ticket` son de
+    caracterización del código movido (no hubo RED: el comportamiento no cambia).
+  - Cálculo con enteros (BigInt) y redondeo mitad hacia arriba; IVA por alícuota sobre la base sumada.
+  - QR con `https://www.arca.gob.ar/fe/qr/?p=<base64>`.
+  - Checks: `npm test`, `npm run typecheck`, `npm run lint`, `npm run build` en verde; `supabase test db` con la
+    falla pendiente de `arca_configuracion_test.sql` (ver T1).
 
 ## Próximo paso
 
-T1 + T2.
+Sumar las columnas nuevas de `arca_emisor` a `arca_configuracion_test.sql` y seguir con T3.

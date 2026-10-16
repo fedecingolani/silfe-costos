@@ -1,12 +1,14 @@
 /**
- * WSFEv1: factura electrónica de ARCA (SOAP 1.1). Por ahora sólo las
- * operaciones para probar la conexión: FEDummy (estado de los servidores,
- * sin autenticación) y FECompUltimoAutorizado (último número autorizado de
- * un punto de venta y tipo de comprobante).
+ * WSFEv1: factura electrónica de ARCA (SOAP 1.1).
+ * - FEDummy: estado de los servidores, sin autenticación.
+ * - FECompUltimoAutorizado: último número autorizado de un punto de venta y tipo.
+ * - FECAESolicitar: pide el CAE de un comprobante (concepto Productos, pesos).
+ * - FECompConsultar: datos de un comprobante ya autorizado, para reconciliar
+ *   una respuesta perdida.
  */
 import type { AmbienteArca, CondicionIvaEmisor } from "@/lib/tipos";
 import type { FetchArca } from "./wsaa";
-import { escaparXml, etiqueta } from "./xml";
+import { desescaparXml, escaparXml, etiqueta } from "./xml";
 
 export const URL_WSFE: Record<AmbienteArca, string> = {
   homologacion: "https://wswhomo.afip.gov.ar/wsfev1/service.asmx",
@@ -96,4 +98,191 @@ export async function feCompUltimoAutorizado(
     throw new Error("WSFE no informó el número del último comprobante.");
   }
   return Number(numero);
+}
+
+// ----- FECAESolicitar ------------------------------------------------------
+
+export type AlicuotaSolicitud = { id: number; base: number; importe: number };
+
+export type AsociadoSolicitud = {
+  tipo: number;
+  puntoVenta: number;
+  numero: number;
+  /** CUIT del emisor del comprobante asociado. */
+  cuit?: string;
+  /** yyyy-mm-dd */
+  fecha?: string;
+};
+
+export type SolicitudCae = {
+  puntoVenta: number;
+  tipoComprobante: number;
+  numero: number;
+  /** yyyy-mm-dd */
+  fecha: string;
+  docTipo: number;
+  docNro: string;
+  condicionIvaReceptorId: number;
+  neto: number;
+  iva: number;
+  total: number;
+  alicuotas: readonly AlicuotaSolicitud[];
+  asociados?: readonly AsociadoSolicitud[];
+};
+
+export type MensajeWsfe = { code: number; msg: string };
+
+export type RespuestaCae = {
+  resultado: "A" | "R";
+  cae: string | null;
+  caeVencimiento: Date | null;
+  observaciones: MensajeWsfe[];
+  errores: MensajeWsfe[];
+};
+
+/** Importe con 2 decimales, como lo espera WSFE. */
+function importe(valor: number): string {
+  if (!Number.isFinite(valor)) throw new Error(`Importe inválido para ARCA: ${valor}`);
+  return valor.toFixed(2);
+}
+
+/** yyyy-mm-dd → yyyymmdd */
+function fechaWsfe(fecha: string): string {
+  return fecha.replace(/-/g, "");
+}
+
+/** yyyymmdd → fecha a las 00:00 UTC, o null si viene vacía o mal formada. */
+function leerFecha(valor: string | null): Date | null {
+  const partes = valor?.match(/^(\d{4})(\d{2})(\d{2})$/);
+  if (!partes) return null;
+  return new Date(Date.UTC(Number(partes[1]), Number(partes[2]) - 1, Number(partes[3])));
+}
+
+/** Todas las apariciones de una etiqueta (con o sin prefijo de namespace). */
+function todas(xml: string, nombre: string): string[] {
+  const re = new RegExp(`<(?:[\\w-]+:)?${nombre}(?:\\s[^>]*)?>([\\s\\S]*?)</(?:[\\w-]+:)?${nombre}>`, "g");
+  return [...xml.matchAll(re)].map((m) => m[1].trim());
+}
+
+/** Mensajes de <Obs> o <Err>: [{code, msg}]. */
+function mensajes(xml: string | null, nombre: "Obs" | "Err"): MensajeWsfe[] {
+  if (!xml) return [];
+  return todas(xml, nombre).map((bloque) => ({
+    code: Number(etiqueta(bloque, "Code")),
+    msg: desescaparXml(etiqueta(bloque, "Msg") ?? ""),
+  }));
+}
+
+function armarAsociados(asociados: readonly AsociadoSolicitud[] | undefined): string {
+  if (!asociados || asociados.length === 0) return "";
+  const filas = asociados.map(
+    (a) =>
+      `<CbteAsoc><Tipo>${a.tipo}</Tipo><PtoVta>${a.puntoVenta}</PtoVta><Nro>${a.numero}</Nro>` +
+      (a.cuit ? `<Cuit>${escaparXml(a.cuit)}</Cuit>` : "") +
+      (a.fecha ? `<CbteFch>${fechaWsfe(a.fecha)}</CbteFch>` : "") +
+      "</CbteAsoc>",
+  );
+  return `<CbtesAsoc>${filas.join("")}</CbtesAsoc>`;
+}
+
+/**
+ * Pide el CAE de un comprobante. El orden de los elementos sigue el WSDL de
+ * FECAEDetRequest. Un rechazo de ARCA (Resultado R, Observaciones o Errors)
+ * no se lanza: se devuelve para guardarlo tal cual en el comprobante.
+ */
+export async function feCAESolicitar(
+  fetchArca: FetchArca,
+  ambiente: AmbienteArca,
+  auth: AuthWsfe,
+  solicitud: SolicitudCae,
+): Promise<RespuestaCae> {
+  const s = solicitud;
+  const iva = s.alicuotas
+    .map((a) => `<AlicIva><Id>${a.id}</Id><BaseImp>${importe(a.base)}</BaseImp><Importe>${importe(a.importe)}</Importe></AlicIva>`)
+    .join("");
+  const detalle =
+    `<Concepto>1</Concepto><DocTipo>${s.docTipo}</DocTipo><DocNro>${escaparXml(s.docNro)}</DocNro>` +
+    `<CbteDesde>${s.numero}</CbteDesde><CbteHasta>${s.numero}</CbteHasta><CbteFch>${fechaWsfe(s.fecha)}</CbteFch>` +
+    `<ImpTotal>${importe(s.total)}</ImpTotal><ImpTotConc>0.00</ImpTotConc><ImpNeto>${importe(s.neto)}</ImpNeto>` +
+    `<ImpOpEx>0.00</ImpOpEx><ImpTrib>0.00</ImpTrib><ImpIVA>${importe(s.iva)}</ImpIVA>` +
+    `<MonId>PES</MonId><MonCotiz>1</MonCotiz><CondicionIVAReceptorId>${s.condicionIvaReceptorId}</CondicionIVAReceptorId>` +
+    armarAsociados(s.asociados) +
+    (iva ? `<Iva>${iva}</Iva>` : "");
+
+  const resultado = await llamar(
+    fetchArca,
+    ambiente,
+    "FECAESolicitar",
+    `${armarAuth(auth)}<FeCAEReq><FeCabReq><CantReg>1</CantReg><PtoVta>${s.puntoVenta}</PtoVta>` +
+      `<CbteTipo>${s.tipoComprobante}</CbteTipo></FeCabReq><FeDetReq><FECAEDetRequest>${detalle}` +
+      "</FECAEDetRequest></FeDetReq></FeCAEReq>",
+  );
+
+  const errores = mensajes(etiqueta(resultado, "Errors"), "Err");
+  const det = etiqueta(resultado, "FECAEDetResponse");
+  const cab = etiqueta(resultado, "FeCabResp");
+  const codigo = (det && etiqueta(det, "Resultado")) ?? (cab && etiqueta(cab, "Resultado"));
+
+  if (codigo !== "A" && codigo !== "R" && errores.length === 0) {
+    throw new Error("WSFE no informó el resultado de FECAESolicitar.");
+  }
+  const aprobado = codigo === "A" && errores.length === 0;
+  return {
+    resultado: aprobado ? "A" : "R",
+    cae: aprobado ? (det && etiqueta(det, "CAE")) || null : null,
+    caeVencimiento: aprobado ? leerFecha(det && etiqueta(det, "CAEFchVto")) : null,
+    observaciones: mensajes(det && etiqueta(det, "Observaciones"), "Obs"),
+    errores,
+  };
+}
+
+// ----- FECompConsultar -----------------------------------------------------
+
+export type ComprobanteConsultado = {
+  cae: string;
+  caeVencimiento: Date | null;
+  importeTotal: number;
+  /** yyyy-mm-dd */
+  fecha: string | null;
+  docNro: string | null;
+};
+
+/** Código de WSFE para "no existen datos" en una consulta. */
+const SIN_DATOS = "602";
+
+/**
+ * Datos de un comprobante en ARCA, o null si ARCA no lo tiene (602). Sirve
+ * para saber si un pedido de CAE cuya respuesta se perdió llegó a autorizarse.
+ */
+export async function feCompConsultar(
+  fetchArca: FetchArca,
+  ambiente: AmbienteArca,
+  auth: AuthWsfe,
+  puntoVenta: number,
+  tipoComprobante: number,
+  numero: number,
+): Promise<ComprobanteConsultado | null> {
+  const resultado = await llamar(
+    fetchArca,
+    ambiente,
+    "FECompConsultar",
+    `${armarAuth(auth)}<FeCompConsReq><CbteTipo>${tipoComprobante}</CbteTipo><CbteNro>${numero}</CbteNro>` +
+      `<PtoVta>${puntoVenta}</PtoVta></FeCompConsReq>`,
+  );
+  const errores = etiqueta(resultado, "Errors");
+  if (errores && etiqueta(errores, "Code") === SIN_DATOS) return null;
+  const error = errorArca(resultado);
+  if (error) throw new Error(error);
+
+  const datos = etiqueta(resultado, "ResultGet");
+  const cae = datos && etiqueta(datos, "CodAutorizacion");
+  if (!datos || !cae) throw new Error("WSFE no informó el CAE del comprobante consultado.");
+  const fecha = leerFecha(etiqueta(datos, "CbteFch"));
+  return {
+    cae,
+    caeVencimiento: leerFecha(etiqueta(datos, "FchVto")),
+    importeTotal: Number(etiqueta(datos, "ImpTotal")),
+    fecha: fecha ? fecha.toISOString().slice(0, 10) : null,
+    docNro: etiqueta(datos, "DocNro"),
+  };
 }
