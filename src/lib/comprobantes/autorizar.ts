@@ -11,7 +11,8 @@
  *     la letra del asociado (no la de la condición IVA actual del cliente) y
  *     una nota de crédito no supera el saldo de los asociados de la base.
  *  2. Toma el bloqueo de numeración (ambiente, punto de venta, tipo); si
- *     otro pedido lo tiene, espera un poco y se rinde.
+ *     otro pedido lo tiene, espera un poco y se rinde. Una nota de crédito
+ *     vuelve a controlar el saldo con el bloqueo tomado.
  *  3. Pide el ticket, consulta el último autorizado y numera último + 1.
  *  4. Pasa a "verificando" con ese número y pide el CAE:
  *     - aprobado: autorizado con número y CAE;
@@ -152,6 +153,11 @@ export type RepositorioComprobantes = {
   ): Promise<void>;
   /** verificando → borrador, sin número. */
   volverABorrador(id: string): Promise<void>;
+  /**
+   * El saldo de DatosAutorizacion.saldoNotaCredito leído otra vez, con el
+   * bloqueo de numeración tomado (ver emitir).
+   */
+  saldoNotaCredito(id: string): Promise<DatosAutorizacion["saldoNotaCredito"]>;
   /** Llave del bloqueo tomado, o null si otro pedido lo tiene. */
   tomarBloqueo(clave: ClaveNumeracion): Promise<string | null>;
   liberarBloqueo(clave: ClaveNumeracion, llave: string): Promise<void>;
@@ -425,6 +431,25 @@ async function emitir(
   const { letra, tipoArca } = borrador;
   const clave: ClaveNumeracion = { ambiente, puntoVenta: c.puntoVenta, tipoArca };
   return conBloqueo(ctx, clave, async () => {
+    if (c.clase === "nota_credito") {
+      // El saldo de arriba se leyó sin bloqueo: dos notas de crédito sobre la
+      // misma factura autorizadas a la vez podían pasar las dos. Se vuelve a
+      // leer acá, antes de pasar a verificando. Las notas que lo consumen
+      // cuentan desde que están en verificación, así que la que ganó el
+      // bloqueo antes ya se descuenta. Alcanza porque el bloqueo es por
+      // (ambiente, punto de venta, tipo): el ambiente y el tipo salen del
+      // asociado (misma letra, misma clase), así que dos notas de crédito
+      // sobre la misma factura en el mismo punto de venta se serializan.
+      // Lo que NO cubre: el punto de venta de la nota lo elige el usuario
+      // (armarNota usa el de la factura sólo si sigue activo, y el editor lo
+      // deja cambiar). Dos notas de crédito sobre la misma factura en puntos
+      // de venta distintos toman bloqueos distintos y pueden pasar las dos.
+      const saldo = await ctx.repositorio.saldoNotaCredito(c.id);
+      if (saldo) {
+        const excede = mensajeExcedeSaldo(borrador.total, saldo.saldo, saldo.asociado);
+        if (excede) return { error: excede };
+      }
+    }
     const auth = await ctx.arca.autenticar(ambiente, credencial, cuitEmisor);
     const ultimo = () => ctx.arca.ultimoAutorizado(ambiente, auth, c.puntoVenta, tipoArca);
     let numero = (await ultimo()) + 1;

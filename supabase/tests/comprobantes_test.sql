@@ -9,7 +9,7 @@
 begin;
 create extension if not exists pgtap with schema extensions;
 
-select plan(140);
+select plan(146);
 
 -- ---------------------------------------------------------------------
 -- Estructura
@@ -773,6 +773,84 @@ select throws_ok(
     )$$,
   'CM007', null, 'Los asociados de la base son todos del mismo ambiente'
 );
+-- Con p_asociados null, las reglas corren sobre los asociados guardados.
+-- Una nota de débito A y una factura B autorizadas (punto de venta no
+-- electrónico, sin ambiente).
+insert into comprobante (id, punto_venta, clase, letra, tipo_arca, cliente_id)
+values ('a0000000-0000-0000-0000-000000000010', 9099, 'nota_debito', 'A', 2,
+        'c0000000-0000-0000-0000-000000000001'),
+       ('a0000000-0000-0000-0000-000000000011', 9099, 'factura', 'B', 6,
+        'c0000000-0000-0000-0000-000000000002');
+update comprobante set estado = 'autorizado', numero = 2
+where id in ('a0000000-0000-0000-0000-000000000010', 'a0000000-0000-0000-0000-000000000011');
+
+select lives_ok(
+  $$select guardar_borrador_comprobante(
+      (select id from nota_rpc),
+      '{"punto_venta": 9007, "clase": "nota_credito", "letra": "A", "tipo_arca": 3, "fecha": "2026-10-18",
+        "fecha_vencimiento_pago": "2026-10-18", "cliente_id": "c0000000-0000-0000-0000-000000000001",
+        "condicion_pago": "contado", "neto": 100, "iva": 21, "total": 121}'::jsonb,
+      '[{"descripcion": "Devolución", "cantidad": 1, "precio_unitario": 100, "descuento_pct": 0,
+         "alicuota_iva": 21, "importe": 100, "iva": 21}]'::jsonb,
+      '[{"asociado_id": "a0000000-0000-0000-0000-000000000010"}]'::jsonb
+    )$$,
+  'Una nota de crédito se asocia a una nota de débito'
+);
+select throws_ok(
+  $$select guardar_borrador_comprobante(
+      (select id from nota_rpc),
+      '{"punto_venta": 9007, "clase": "nota_debito", "letra": "A", "tipo_arca": 2, "fecha": "2026-10-18",
+        "fecha_vencimiento_pago": "2026-10-18", "cliente_id": "c0000000-0000-0000-0000-000000000001",
+        "condicion_pago": "contado", "neto": 100, "iva": 21, "total": 121}'::jsonb,
+      '[{"descripcion": "Devolución", "cantidad": 1, "precio_unitario": 100, "descuento_pct": 0,
+         "alicuota_iva": 21, "importe": 100, "iva": 21}]'::jsonb,
+      null
+    )$$,
+  'CM007', null, 'Sin asociados en el pedido, la clase nueva se valida contra los guardados'
+);
+select results_eq(
+  $$select c.clase, a.asociado_id from comprobante c join comprobante_asociado a on a.comprobante_id = c.id
+    where c.id = (select id from nota_rpc)$$,
+  $$values ('nota_credito'::text, 'a0000000-0000-0000-0000-000000000010'::uuid)$$,
+  'Si la clase nueva no admite los asociados guardados, la nota queda como estaba'
+);
+select throws_ok(
+  $$select guardar_borrador_comprobante(
+      (select id from nota_rpc),
+      '{"punto_venta": 9007, "clase": "nota_credito", "letra": "B", "tipo_arca": 8, "fecha": "2026-10-18",
+        "fecha_vencimiento_pago": "2026-10-18", "cliente_id": "c0000000-0000-0000-0000-000000000001",
+        "condicion_pago": "contado", "neto": 100, "iva": 21, "total": 121}'::jsonb,
+      '[{"descripcion": "Devolución", "cantidad": 1, "precio_unitario": 100, "descuento_pct": 0,
+         "alicuota_iva": 21, "importe": 100, "iva": 21}]'::jsonb,
+      null
+    )$$,
+  'CM007', null, 'Sin asociados en el pedido, la letra nueva se valida contra los guardados'
+);
+select throws_ok(
+  $$select guardar_borrador_comprobante(
+      (select id from nota_rpc),
+      '{"punto_venta": 9007, "clase": "nota_credito", "letra": "A", "tipo_arca": 3, "fecha": "2026-10-18",
+        "fecha_vencimiento_pago": "2026-10-18", "cliente_id": "c0000000-0000-0000-0000-000000000001",
+        "condicion_pago": "contado", "neto": 100, "iva": 21, "total": 121}'::jsonb,
+      '[{"descripcion": "Devolución", "cantidad": 1, "precio_unitario": 100, "descuento_pct": 0,
+         "alicuota_iva": 21, "importe": 100, "iva": 21}]'::jsonb,
+      '[{"asociado_id": "a0000000-0000-0000-0000-000000000011"}]'::jsonb
+    )$$,
+  'CM007', null, 'Una nota lleva la letra de su asociado de la base'
+);
+select lives_ok(
+  $$select guardar_borrador_comprobante(
+      (select id from nota_rpc),
+      '{"punto_venta": 9007, "clase": "nota_credito", "letra": "B", "tipo_arca": 8, "fecha": "2026-10-18",
+        "fecha_vencimiento_pago": "2026-10-18", "cliente_id": "c0000000-0000-0000-0000-000000000001",
+        "condicion_pago": "contado", "neto": 100, "iva": 21, "total": 121}'::jsonb,
+      '[{"descripcion": "Devolución", "cantidad": 1, "precio_unitario": 100, "descuento_pct": 0,
+         "alicuota_iva": 21, "importe": 100, "iva": 21}]'::jsonb,
+      '[{"asociado_id": "a0000000-0000-0000-0000-000000000011"}]'::jsonb
+    )$$,
+  'Una nota B se asocia a una factura B'
+);
+
 select has_function('public', 'guardar_borrador_comprobante', array['uuid', 'jsonb', 'jsonb', 'jsonb'],
   'guardar_borrador_comprobante recibe los asociados');
 

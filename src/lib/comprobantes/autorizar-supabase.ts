@@ -24,7 +24,7 @@ import {
   type ServiciosArca,
 } from "./autorizar";
 import { asociadoInterno, asociadoManual } from "./asociados";
-import { leerAsociados, leerNotasSobre, saldoDe } from "./asociados-carga";
+import { leerAsociados, leerNotasSobre, saldoDe, type AsociadoLeido } from "./asociados-carga";
 
 type Supabase = Awaited<ReturnType<typeof createClient>>;
 
@@ -52,14 +52,28 @@ export function repositorioComprobantes(supabase: Supabase): RepositorioComproba
     if ((data ?? []).length !== 1) throw new ErrorBaseDatos("CM002", SIN_CAMBIOS);
   }
 
+  async function leerAsociadosDe(id: string): Promise<AsociadoLeido[]> {
+    const leidos = await leerAsociados(supabase, id);
+    if (typeof leidos === "string") throw new ErrorBaseDatos(undefined, leidos);
+    return leidos;
+  }
+
+  /** Saldo de los asociados de la base para la nota de crédito `id` (sin contarla a ella). */
+  async function saldoSobre(id: string, leidos: readonly AsociadoLeido[]): Promise<DatosAutorizacion["saldoNotaCredito"]> {
+    const internos = leidos.map((a) => a.asociado_id).filter((v): v is string => Boolean(v));
+    if (internos.length === 0) return null;
+    const notas = await leerNotasSobre(supabase, internos, id);
+    if (typeof notas === "string") throw new ErrorBaseDatos(undefined, notas);
+    return saldoDe(leidos, notas);
+  }
+
   /** CbtesAsoc (validados antes de tocar ARCA) y, en una nota de crédito, el saldo de sus asociados. */
   async function asociados(
     id: string,
     clase: DatosAutorizacion["comprobante"]["clase"],
     cuitEmisor: string | null,
   ): Promise<Pick<DatosAutorizacion, "asociados" | "saldoNotaCredito">> {
-    const leidos = await leerAsociados(supabase, id);
-    if (typeof leidos === "string") throw new ErrorBaseDatos(undefined, leidos);
+    const leidos = await leerAsociadosDe(id);
 
     // Un error de un asociado llega tal cual a la pantalla.
     const solicitud = leidos.map((a) => {
@@ -68,13 +82,7 @@ export function repositorioComprobantes(supabase: Supabase): RepositorioComproba
       return asociadoInterno(a.interno, cuitEmisor);
     });
 
-    let saldoNotaCredito: DatosAutorizacion["saldoNotaCredito"] = null;
-    const internos = leidos.map((a) => a.asociado_id).filter((v): v is string => Boolean(v));
-    if (clase === "nota_credito" && internos.length > 0) {
-      const notas = await leerNotasSobre(supabase, internos, id);
-      if (typeof notas === "string") throw new ErrorBaseDatos(undefined, notas);
-      saldoNotaCredito = saldoDe(leidos, notas);
-    }
+    const saldoNotaCredito = clase === "nota_credito" ? await saldoSobre(id, leidos) : null;
     return { asociados: solicitud, saldoNotaCredito };
   }
 
@@ -226,6 +234,10 @@ export function repositorioComprobantes(supabase: Supabase): RepositorioComproba
 
     async volverABorrador(id) {
       await actualizar(id, ["verificando"], { estado: "borrador", intento_numero: null });
+    },
+
+    async saldoNotaCredito(id) {
+      return saldoSobre(id, await leerAsociadosDe(id));
     },
 
     async tomarBloqueo(clave) {

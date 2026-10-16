@@ -86,6 +86,8 @@ function escenario(opciones: {
   consulta?: Awaited<ReturnType<ServiciosArca["consultar"]>> | Error;
   autenticar?: Error;
   guardarFalla?: Error;
+  /** Saldo que lee el repositorio con el bloqueo tomado (por defecto, el de la carga). */
+  saldoBajoBloqueo?: DatosAutorizacion["saldoNotaCredito"];
 }) {
   const datos = opciones.datos ?? datosBase();
   const fila = datos.comprobante;
@@ -138,6 +140,11 @@ function escenario(opciones: {
       eventos.push("rechazado");
       estado.rechazado = d;
       Object.assign(fila, { estado: "rechazado", intentoNumero: null });
+    },
+    async saldoNotaCredito() {
+      eventos.push("saldo");
+      expect(estado.bloqueoTomado).toBe(true);
+      return opciones.saldoBajoBloqueo !== undefined ? opciones.saldoBajoBloqueo : datos.saldoNotaCredito;
     },
     async volverABorrador() {
       eventos.push("borrador");
@@ -617,7 +624,34 @@ describe("autorizar: notas de crédito y débito", () => {
   });
 
   it("autoriza una nota de crédito por el saldo justo", async () => {
-    const { deps } = escenario({ datos: nota({ saldoNotaCredito: { saldo: 1320.5, asociado: "A-00007-00000361" } }) });
+    const { deps, eventos } = escenario({
+      datos: nota({ saldoNotaCredito: { saldo: 1320.5, asociado: "A-00007-00000361" } }),
+    });
     expect((await autorizar(ID, deps)).estado).toBe("autorizado");
+    expect(eventos.slice(0, 5)).toEqual(["cargar", "guardar", "bloqueo", "saldo", "auth"]);
+  });
+
+  it("vuelve a leer el saldo con el bloqueo tomado: otra nota de crédito autorizada en el medio la frena", async () => {
+    // Al cargar entraba justo; antes de numerar, otra nota de crédito sobre
+    // la misma factura ya se autorizó y dejó un saldo menor.
+    const { deps, eventos, estado } = escenario({
+      datos: nota({ saldoNotaCredito: { saldo: 1320.5, asociado: "A-00007-00000361" } }),
+      saldoBajoBloqueo: { saldo: 320.5, asociado: "A-00007-00000361" },
+    });
+    expect(await autorizar(ID, deps)).toEqual({
+      error: "La nota de crédito ($ 1.320,50) supera el saldo disponible de A-00007-00000361: $ 320,50.",
+    });
+    expect(eventos).toEqual(["cargar", "guardar", "bloqueo", "saldo", "liberar"]);
+    expect(estado.bloqueoTomado).toBe(false);
+    expect(estado.verificando).toBeUndefined();
+  });
+
+  it("la nota de débito y la factura no releen el saldo", async () => {
+    const { deps, eventos } = escenario({ datos: nota({}, "nota_debito") });
+    expect((await autorizar(ID, deps)).estado).toBe("autorizado");
+    expect(eventos).not.toContain("saldo");
+    const factura = escenario({});
+    await autorizar(ID, factura.deps);
+    expect(factura.eventos).not.toContain("saldo");
   });
 });
