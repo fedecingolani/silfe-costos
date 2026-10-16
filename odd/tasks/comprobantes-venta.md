@@ -413,6 +413,7 @@ Menú **Ventas → Comprobantes**.
   - Checks: `npm test` (382), `npm run typecheck`, `npm run lint`, `npm run build` y `npx opennextjs-cloudflare
     build` en verde; `qrcode-generator` queda dentro de `.open-next/server-functions/default/handler.mjs`.
   - Sin prueba automática de la ruta contra la base: el recorrido real queda para T7.
+  - Commit `3b708a5`.
 
 ## Próximo paso
 
