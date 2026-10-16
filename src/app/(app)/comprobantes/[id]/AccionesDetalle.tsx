@@ -6,10 +6,11 @@ import { autorizarComprobante, duplicarComprobante, type EstadoAccionComprobante
 
 /**
  * Botones del detalle: "Verificar con ARCA" (sólo en verificación, corre la
- * reconciliación de autorizarComprobante), "Duplicar" y los lugares de PDF
- * (T5) y nota de crédito (T6), todavía sin funcionar.
+ * reconciliación de autorizarComprobante), "Duplicar", "PDF" (sólo con
+ * `pdf`: autorizado en un punto de venta electrónico) y el lugar de la nota
+ * de crédito (T6), todavía sin funcionar.
  */
-export function AccionesDetalle({ id, verificando }: { id: string; verificando: boolean }) {
+export function AccionesDetalle({ id, verificando, pdf }: { id: string; verificando: boolean; pdf: boolean }) {
   const router = useRouter();
   const [pendiente, iniciar] = useTransition();
   const [resultado, setResultado] = useState<EstadoAccionComprobante | null>(null);
@@ -37,10 +38,21 @@ export function AccionesDetalle({ id, verificando }: { id: string; verificando: 
         <button type="button" disabled={pendiente} onClick={duplicar} className="boton-secundario">
           Duplicar
         </button>
-        {/* Lugares reservados: el PDF llega en T5 y la nota de crédito en T6. */}
-        <button type="button" disabled title="Próximamente (T5)" className="boton-secundario opacity-50">
-          PDF (próximamente)
-        </button>
+        {pdf ? (
+          <a href={`/comprobantes/${id}/pdf`} target="_blank" rel="noopener noreferrer" className="boton-secundario">
+            PDF
+          </a>
+        ) : (
+          <button
+            type="button"
+            disabled
+            title="El PDF está disponible cuando el comprobante está autorizado en un punto de venta electrónico."
+            className="boton-secundario opacity-50"
+          >
+            PDF
+          </button>
+        )}
+        {/* Lugar reservado: la nota de crédito llega en T6. */}
         <button type="button" disabled title="Próximamente (T6)" className="boton-secundario opacity-50">
           Generar nota de crédito (próximamente)
         </button>

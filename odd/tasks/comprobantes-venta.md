@@ -262,7 +262,7 @@ Menú **Ventas → Comprobantes**.
 | T2 | `src/lib/comprobantes/`: letra/tipo, cálculo de totales e IVA por alícuota, armado y parseo de `FECAESolicitar`, `FECompConsultar`, QR. Extraer el `AlmacenTicket` de Supabase a un módulo compartido (Vitest) | delegada (writer) | [x] |
 | T3 | Autorización: bloqueo por punto de venta y tipo, último + 1, reintento correlativo, estado `verificando` y reconciliación | delegada (writer) | [x] |
 | T4 | Pantallas: listado, alta/edición de borrador y detalle | delegada (writer) | [x] |
-| T5 | Impresión: PDF completo con QR para comprobantes electrónicos | delegada (writer) | [ ] |
+| T5 | Impresión: PDF completo con QR para comprobantes electrónicos | delegada (writer) | [x] |
 | T6 | Notas de crédito/débito con comprobante asociado | delegada (writer) | [ ] |
 | T7 | Recorrido en homologación: Factura A, Factura B, NC parcial, rechazo de ARCA y respuesta perdida simulada | orquestador | [ ] |
 | T8 | **Segunda etapa:** punto de venta no electrónico (numeración propia, sin ARCA) e impresión en formulario preimpreso | delegada (writer) | [ ] |
@@ -386,6 +386,34 @@ Menú **Ventas → Comprobantes**.
   - Commit `fe94524`. Checks: `npm test` (347), `npm run typecheck`, `npm run lint`, `npm run build` y
     `supabase test db` (356) en verde.
 
+- Revisión nativa de T4: **la declinó el usuario**. T4 quedó verificada por los checks del writer (ver arriba).
+
+- T5 (delegada, writer: generador, mapeo, carga y ruta, varios archivos no triviales con tests): PDF del comprobante.
+  - QR: `qrcode-generator@1.4.4` (JS puro, sin canvas ni dependencias nativas), corrección M, versión automática y
+    zona de silencio de 4 módulos. `qr-matriz.ts` devuelve la matriz y el PDF dibuja los módulos oscuros como
+    rectángulos vectoriales (un rectángulo por tramo horizontal), sin PNG. El QR mide 85 pt (≈ 30 mm).
+  - `pdf-datos.ts` (puro): `armarDatosPdf` (título, letra, código de ARCA con 3 dígitos, CUIT con guiones, fechas
+    dd/mm/aaaa, documento del receptor, IVA de las alícuotas 2,5 / 5 / 10,5 / 21 / 27 con cero las que no tiene,
+    totales de la fila, URL del QR, nombre del archivo), `validarImprimible`, `paginar` y `dispositionEnLinea`.
+  - Números con formato argentino (1.400.000,00), como el resto de la app; el sistema anterior usa 1,400,000.00.
+  - `pdf.ts` (puro, pdf-lib, texto saneado a WinAnsi): encabezado con logo, letra, código y datos del emisor;
+    receptor; moneda, provincia, vencimiento y forma de pago; tabla con banda gris; pie con IVA por alícuota, banda
+    de totales, QR, "Comprobante Autorizado", CAE y su vencimiento. Encabezado y receptor en todas las páginas; pie
+    sólo en la última; "Página N de M" en todas; marca diagonal "HOMOLOGACIÓN – SIN VALIDEZ FISCAL" en homologación.
+  - Paginación: las páginas se llenan en orden; si la última no deja lugar para el pie, su último renglón pasa a
+    una página nueva (o la nueva lleva sólo el pie si ni ese renglón entra).
+  - `pdf-descarga.ts` y la ruta `/comprobantes/[id]/pdf` (`force-dynamic`): columnas explícitas (nada de
+    `arca_credencial`); 404 si no existe, 409 con texto legible si no está autorizado, si el punto de venta no es
+    electrónico o si faltan CAE o CUIT del emisor; logo de `public/` con el mismo tiempo máximo (`MS_LOGO`) que las
+    listas. El cargador del logo de las listas es privado y quedaba fuera de la superficie: se copió (10 líneas).
+  - `Content-Disposition: inline` con `Factura A-00007-00000361.pdf` (y nombre UTF-8 para las notas de crédito/débito).
+  - Detalle: el botón "PDF" abre el PDF en otra pestaña si está autorizado en un punto de venta electrónico.
+  - RED observado (módulos inexistentes) y luego GREEN: 35 tests nuevos (mapeo, formatos, paginación, QR, generador
+    con 1 y 40 ítems y homologación, carga con cliente simulado).
+  - Checks: `npm test` (382), `npm run typecheck`, `npm run lint`, `npm run build` y `npx opennextjs-cloudflare
+    build` en verde; `qrcode-generator` queda dentro de `.open-next/server-functions/default/handler.mjs`.
+  - Sin prueba automática de la ruta contra la base: el recorrido real queda para T7.
+
 ## Próximo paso
 
-T5: PDF del comprobante autorizado con QR, CAE y los datos del emisor (domicilio, IIBB, inicio de actividades).
+T6: notas de crédito/débito con comprobante asociado.

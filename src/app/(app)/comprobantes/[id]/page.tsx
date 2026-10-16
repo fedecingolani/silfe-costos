@@ -188,7 +188,8 @@ export default async function ComprobantePage({ params }: { params: Promise<{ id
       )}
 
       <div className="mb-4">
-        <AccionesDetalle id={c.id} verificando={verificando} />
+        {/* Sólo los puntos de venta electrónicos tienen ambiente: el PDF completo es para ellos. */}
+        <AccionesDetalle id={c.id} verificando={verificando} pdf={c.estado === "autorizado" && c.ambiente !== null} />
       </div>
 
       {observaciones.length > 0 && (
