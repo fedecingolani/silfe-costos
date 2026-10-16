@@ -260,7 +260,7 @@ Menú **Ventas → Comprobantes**.
 | --- | --- | --- | --- |
 | T1 | Migraciones `comprobante`, `comprobante_item`, `comprobante_asociado`, campos nuevos del emisor, triggers de inmutabilidad y RLS (pgTAP en rojo primero) | delegada (writer) | [x] |
 | T2 | `src/lib/comprobantes/`: letra/tipo, cálculo de totales e IVA por alícuota, armado y parseo de `FECAESolicitar`, `FECompConsultar`, QR. Extraer el `AlmacenTicket` de Supabase a un módulo compartido (Vitest) | delegada (writer) | [x] |
-| T3 | Autorización: bloqueo por punto de venta y tipo, último + 1, reintento correlativo, estado `verificando` y reconciliación | delegada (writer) | [ ] |
+| T3 | Autorización: bloqueo por punto de venta y tipo, último + 1, reintento correlativo, estado `verificando` y reconciliación | delegada (writer) | [x] |
 | T4 | Pantallas: listado, alta/edición de borrador y detalle | delegada (writer) | [ ] |
 | T5 | Impresión: PDF completo con QR para comprobantes electrónicos | delegada (writer) | [ ] |
 | T6 | Notas de crédito/débito con comprobante asociado | delegada (writer) | [ ] |
@@ -313,7 +313,35 @@ Menú **Ventas → Comprobantes**.
   - QR con `https://www.arca.gob.ar/fe/qr/?p=<base64>`.
   - Checks: `npm test`, `npm run typecheck`, `npm run lint`, `npm run build` en verde; `supabase test db` con la
     falla pendiente de `arca_configuracion_test.sql` (ver T1).
+  - Commit `9f8d687`. Luego `6be8f3d`: `arca_configuracion_test.sql` con las columnas nuevas del emisor
+    (`supabase test db` en verde).
+- Revisión nativa de T1 + T2: **aprobada**, con tres advertencias no bloqueantes, corregidas en el commit `e2a7d85`
+  (delegada, writer):
+  - `validarParaAutorizar` informaba como válida una fecha vacía o mal formada (el `NaN` pasaba el control de ±5 días).
+  - `feCAESolicitar` devolvía `A` sin CAE cuando ARCA no lo informaba. Ahora lanza `RespuestaArcaIncierta`.
+  - Migración `20261024000003_comprobantes_verificando.sql`:
+    - `verificando → autorizado` exige `numero = intento_numero`;
+    - en verificación no cambian el punto de venta, el ambiente, la clase, la letra, el tipo, el cliente, la fecha,
+      los totales ni la copia del receptor (CM004);
+    - `intento_numero` sólo cambia en verificación (CM002).
+  - RED observado (3 Vitest, 20 pgTAP) y luego GREEN.
+- T3 (delegada, writer: orquestación + cableado + acción, 3 archivos no triviales con tests):
+  - `src/lib/comprobantes/autorizar.ts`: lógica pura con dependencias inyectadas (repositorio, ARCA, reloj y espera).
+  - `autorizar-supabase.ts`: cableado real (updates condicionales al estado esperado, RPC del bloqueo,
+    `obtenerTicket` con `almacenTicket`).
+  - Acción `autorizarComprobante(id)` en `src/app/(app)/comprobantes/acciones.ts`.
+  - Bloqueo: hasta 7 intentos de `tomar_bloqueo_numeracion` con 6 esperas de 500 ms; se libera en `finally` sólo si
+    se tomó.
+  - Reintento por 10016 una sola vez. Si no se puede consultar el último para reintentar, se guarda el rechazo
+    (ARCA ya respondió R).
+  - Reconciliación bajo el mismo bloqueo, comparando total (±0,005) y documento (sólo dígitos):
+    - si coincide, se autoriza con el CAE de ARCA;
+    - si ARCA tiene otros datos, queda `rechazado` con `arca_errores` `[{code: 0, msg}]` y `arca_resultado` nulo;
+    - si ARCA no lo tiene, vuelve a borrador y sigue el flujo normal una vez.
+  - RED observado (módulo inexistente) y luego GREEN: 27 tests de `autorizar` con dobles en memoria.
+  - El cableado contra Supabase no tiene prueba automática: la `service_role` local no tiene permisos sobre
+    `comprobante`. Se verificó con `typecheck` y contra el esquema; el recorrido real queda para T7.
 
 ## Próximo paso
 
-Sumar las columnas nuevas de `arca_emisor` a `arca_configuracion_test.sql` y seguir con T3.
+T4: pantallas (listado, alta/edición de borrador y detalle) usando `autorizarComprobante`.
