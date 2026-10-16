@@ -15,7 +15,8 @@ select has_table('public', 'arca_emisor', 'Existe arca_emisor');
 select has_table('public', 'arca_credencial', 'Existe arca_credencial');
 
 select columns_are('public', 'arca_emisor', array[
-  'id', 'cuit', 'razon_social', 'condicion_iva', 'punto_venta', 'ambiente', 'actualizado_en'
+  'id', 'cuit', 'razon_social', 'condicion_iva', 'punto_venta', 'ambiente', 'actualizado_en',
+  'domicilio_comercial', 'ingresos_brutos', 'inicio_actividades'
 ], 'arca_emisor tiene las columnas esperadas');
 
 select columns_are('public', 'arca_credencial', array[
