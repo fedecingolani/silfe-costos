@@ -341,6 +341,8 @@ Menú **Ventas → Comprobantes**.
   - RED observado (módulo inexistente) y luego GREEN: 27 tests de `autorizar` con dobles en memoria.
   - El cableado contra Supabase no tiene prueba automática: la `service_role` local no tiene permisos sobre
     `comprobante`. Se verificó con `typecheck` y contra el esquema; el recorrido real queda para T7.
+  - Commit `21c5ac7`. Checks: `npm test` (295), `npm run typecheck`, `npm run lint`, `npm run build` y
+    `supabase test db` (341) en verde.
 
 ## Próximo paso
 
