@@ -258,7 +258,7 @@ Menú **Ventas → Comprobantes**.
 
 | ID | Tarea | Ruta | Estado |
 | --- | --- | --- | --- |
-| T1 | Migraciones `comprobante`, `comprobante_item`, `comprobante_asociado`, campos nuevos del emisor, triggers de inmutabilidad y RLS (pgTAP en rojo primero) | delegada (writer) | [ ] |
+| T1 | Migraciones `comprobante`, `comprobante_item`, `comprobante_asociado`, campos nuevos del emisor, triggers de inmutabilidad y RLS (pgTAP en rojo primero) | delegada (writer) | [x] |
 | T2 | `src/lib/comprobantes/`: letra/tipo, cálculo de totales e IVA por alícuota, armado y parseo de `FECAESolicitar`, `FECompConsultar`, QR. Extraer el `AlmacenTicket` de Supabase a un módulo compartido (Vitest) | delegada (writer) | [ ] |
 | T3 | Autorización: bloqueo por punto de venta y tipo, último + 1, reintento correlativo, estado `verificando` y reconciliación | delegada (writer) | [ ] |
 | T4 | Pantallas: listado, alta/edición de borrador y detalle | delegada (writer) | [ ] |
@@ -295,6 +295,15 @@ Menú **Ventas → Comprobantes**.
 ## Progreso
 
 - Rama `feat/comprobantes-venta` creada desde `main` (6dc480f).
+- T1 (delegada, writer: 3 archivos SQL no triviales): migraciones `20261024000001_comprobantes.sql` y
+  `20261024000002_rls_comprobantes.sql`, test `supabase/tests/comprobantes_test.sql` (86 pruebas).
+  - RED observado (tablas inexistentes) y luego GREEN con `supabase test db supabase/tests/comprobantes_test.sql`.
+  - Bloqueo de numeración: tabla `comprobante_numeracion_bloqueo` + funciones `tomar_bloqueo_numeracion`
+    (devuelve el vencimiento como llave, o null si está tomado) y `liberar_bloqueo_numeracion` (security invoker).
+  - Errores de los triggers con SQLSTATE propio: CM001 autorizado inmutable, CM002 transición inválida,
+    CM003 borrado no permitido, CM004 ítems/asociados bloqueados, CM005 punto de venta inconsistente.
+  - Pendiente: `supabase/tests/arca_configuracion_test.sql` (fuera de la superficie de T1) espera las columnas
+    viejas de `arca_emisor` y falla con las tres nuevas; hay que sumarlas a su `columns_are`.
 
 ## Próximo paso
 
