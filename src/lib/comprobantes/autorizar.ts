@@ -496,9 +496,14 @@ async function reconciliar(
     }
 
     if (!encontrado.caeVencimiento) {
-      throw new RespuestaArcaIncierta(
-        `ARCA tiene el comprobante ${nombre} pero no informó el vencimiento del CAE. Volvé a intentar en un rato.`,
-      );
+      // Sin vencimiento no se puede guardar como autorizado: sigue en
+      // verificación, igual que una respuesta incierta al emitir.
+      return {
+        error: mensajeIncierto(
+          new RespuestaArcaIncierta(`ARCA tiene el comprobante ${nombre} pero no informó el vencimiento del CAE`),
+        ),
+        estado: "verificando",
+      };
     }
     const caeVencimiento = fechaIso(encontrado.caeVencimiento);
     await ctx.repositorio.marcarAutorizado(c.id, {

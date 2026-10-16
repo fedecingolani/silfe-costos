@@ -459,6 +459,20 @@ describe("autorizar: reconciliación de un comprobante en verificación", () => 
     ]);
   });
 
+  it("si ARCA lo tiene pero no informa el vencimiento del CAE, sigue en verificación", async () => {
+    const { deps, eventos, fila } = escenario({
+      datos: verificando(),
+      consulta: { ...encontrado, caeVencimiento: null },
+    });
+    const resultado = await autorizar(ID, deps);
+    expect(resultado.estado).toBe("verificando");
+    expect(resultado.error).toContain("no informó el vencimiento del CAE");
+    expect(resultado.error).toContain("apretá «Autorizar» de nuevo");
+    expect(fila.estado).toBe("verificando");
+    expect(eventos.some((e) => e.startsWith("autorizado") || e.startsWith("cae"))).toBe(false);
+    expect(eventos.at(-1)).toBe("liberar");
+  });
+
   it("si no puede consultar, sigue en verificación y no pide CAE", async () => {
     const { deps, eventos, fila } = escenario({ datos: verificando(), consulta: new TypeError("fetch failed") });
     const resultado = await autorizar(ID, deps);

@@ -24,6 +24,7 @@ import {
   type RepositorioComprobantes,
   type ServiciosArca,
 } from "./autorizar";
+import { asociadoManual } from "./asociados";
 
 type Supabase = Awaited<ReturnType<typeof createClient>>;
 
@@ -71,15 +72,8 @@ export function repositorioComprobantes(supabase: Supabase): RepositorioComproba
     }
 
     return filas.map((f) => {
-      if (!f.asociado_id) {
-        return {
-          tipo: Number(f.tipo_arca),
-          puntoVenta: Number(f.punto_venta),
-          numero: Number(f.numero),
-          fecha: f.fecha,
-          cuit: f.cuit,
-        };
-      }
+      // Se valida antes de tocar ARCA: el error llega tal cual a la pantalla.
+      if (!f.asociado_id) return asociadoManual(f);
       const asociado = enBase.get(f.asociado_id);
       if (!asociado || asociado.estado !== "autorizado" || asociado.numero === null || asociado.tipo_arca === null) {
         throw new Error("El comprobante asociado no está autorizado: sólo se asocian comprobantes con número.");

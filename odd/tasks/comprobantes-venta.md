@@ -344,6 +344,15 @@ Menú **Ventas → Comprobantes**.
   - Commit `21c5ac7`. Checks: `npm test` (295), `npm run typecheck`, `npm run lint`, `npm run build` y
     `supabase test db` (341) en verde.
 
+- Revisión nativa de T3: **aprobada**, con dos advertencias no bloqueantes, corregidas en T4 (unidad A, delegada,
+  writer):
+  - la reconciliación que encuentra el comprobante en ARCA sin vencimiento del CAE devolvía el error sin
+    `estado: 'verificando'` (la fila seguía en verificación). Ahora devuelve `verificando` con el mismo mensaje de
+    "respuesta incierta, apretá «Autorizar» de nuevo" que la emisión;
+  - un asociado cargado a mano con datos nulos se convertía en `NaN`. `asociadoManual` (`src/lib/comprobantes/asociados.ts`)
+    valida tipo, punto de venta, número, fecha y CUIT y devuelve un error legible antes de tocar ARCA.
+  - RED observado (1 test de `autorizar`, módulo `asociados` inexistente) y luego GREEN.
+
 ## Próximo paso
 
 T4: pantallas (listado, alta/edición de borrador y detalle) usando `autorizarComprobante`.

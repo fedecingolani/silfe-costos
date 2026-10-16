@@ -35,6 +35,11 @@ function dias(fecha: string): number | null {
   return ms / MS_POR_DIA;
 }
 
+/** true si `fecha` es una fecha yyyy-mm-dd que existe. */
+export function esFechaValida(fecha: string | null | undefined): fecha is string {
+  return typeof fecha === "string" && dias(fecha) !== null;
+}
+
 function sumarDias(diasFecha: number, cantidad: number): string {
   return new Date((diasFecha + cantidad) * MS_POR_DIA).toISOString().slice(0, 10);
 }
