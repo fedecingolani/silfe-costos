@@ -21,14 +21,22 @@ export type BorradorAValidar = {
 
 const MS_POR_DIA = 24 * 60 * 60 * 1000;
 
-/** Fecha yyyy-mm-dd como días desde la época (sin zona horaria). */
-function dias(fecha: string): number {
-  const [anio, mes, dia] = fecha.split("-").map(Number);
-  return Date.UTC(anio, mes - 1, dia) / MS_POR_DIA;
+/**
+ * Fecha yyyy-mm-dd como días desde la época (sin zona horaria), o null si
+ * está vacía, mal formada o no existe (por ejemplo, 30 de febrero).
+ */
+function dias(fecha: string): number | null {
+  const partes = /^(\d{4})-(\d{2})-(\d{2})$/.exec(fecha);
+  if (!partes) return null;
+  const [anio, mes, dia] = [Number(partes[1]), Number(partes[2]), Number(partes[3])];
+  const ms = Date.UTC(anio, mes - 1, dia);
+  const d = new Date(ms);
+  if (d.getUTCFullYear() !== anio || d.getUTCMonth() !== mes - 1 || d.getUTCDate() !== dia) return null;
+  return ms / MS_POR_DIA;
 }
 
-function sumarDias(fecha: string, cantidad: number): string {
-  return new Date((dias(fecha) + cantidad) * MS_POR_DIA).toISOString().slice(0, 10);
+function sumarDias(diasFecha: number, cantidad: number): string {
+  return new Date((diasFecha + cantidad) * MS_POR_DIA).toISOString().slice(0, 10);
 }
 
 function formatoArgentino(fecha: string): string {
@@ -61,10 +69,17 @@ export function validarParaAutorizar(borrador: BorradorAValidar, hoy: string): s
     errores.push(e instanceof Error ? e.message : String(e));
   }
 
-  if (Math.abs(dias(borrador.fecha) - dias(hoy)) > DIAS_TOLERANCIA_FECHA) {
+  // Una fecha inválida daría NaN y la comparación pasaría sin avisar.
+  const diasFecha = dias(borrador.fecha);
+  const diasHoy = dias(hoy);
+  if (diasFecha === null) {
+    errores.push("La fecha del comprobante no es válida.");
+  } else if (diasHoy === null) {
+    errores.push("No se pudo determinar la fecha de hoy para validar la fecha.");
+  } else if (Math.abs(diasFecha - diasHoy) > DIAS_TOLERANCIA_FECHA) {
     errores.push(
-      `La fecha del comprobante tiene que estar entre el ${formatoArgentino(sumarDias(hoy, -DIAS_TOLERANCIA_FECHA))} ` +
-        `y el ${formatoArgentino(sumarDias(hoy, DIAS_TOLERANCIA_FECHA))}.`,
+      `La fecha del comprobante tiene que estar entre el ${formatoArgentino(sumarDias(diasHoy, -DIAS_TOLERANCIA_FECHA))} ` +
+        `y el ${formatoArgentino(sumarDias(diasHoy, DIAS_TOLERANCIA_FECHA))}.`,
     );
   }
 

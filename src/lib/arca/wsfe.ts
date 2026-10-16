@@ -132,13 +132,23 @@ export type SolicitudCae = {
 
 export type MensajeWsfe = { code: number; msg: string };
 
-export type RespuestaCae = {
-  resultado: "A" | "R";
-  cae: string | null;
-  caeVencimiento: Date | null;
-  observaciones: MensajeWsfe[];
-  errores: MensajeWsfe[];
-};
+export type RespuestaCae = { observaciones: MensajeWsfe[]; errores: MensajeWsfe[] } & (
+  | { resultado: "A"; cae: string; caeVencimiento: Date }
+  | { resultado: "R"; cae: null; caeVencimiento: null }
+);
+
+/**
+ * La respuesta de ARCA no permite saber si el comprobante quedó autorizado
+ * (por ejemplo, un aprobado sin CAE o con un vencimiento ilegible). Quien
+ * llama lo trata como una respuesta perdida: deja el comprobante en
+ * verificación y lo reconcilia con FECompConsultar antes de reintentar.
+ */
+export class RespuestaArcaIncierta extends Error {
+  constructor(mensaje: string) {
+    super(mensaje);
+    this.name = "RespuestaArcaIncierta";
+  }
+}
 
 /** Importe con 2 decimales, como lo espera WSFE. */
 function importe(valor: number): string {
@@ -227,13 +237,15 @@ export async function feCAESolicitar(
     throw new Error("WSFE no informó el resultado de FECAESolicitar.");
   }
   const aprobado = codigo === "A" && errores.length === 0;
-  return {
-    resultado: aprobado ? "A" : "R",
-    cae: aprobado ? (det && etiqueta(det, "CAE")) || null : null,
-    caeVencimiento: aprobado ? leerFecha(det && etiqueta(det, "CAEFchVto")) : null,
-    observaciones: mensajes(det && etiqueta(det, "Observaciones"), "Obs"),
-    errores,
-  };
+  const observaciones = mensajes(det && etiqueta(det, "Observaciones"), "Obs");
+  if (!aprobado) return { resultado: "R", cae: null, caeVencimiento: null, observaciones, errores };
+
+  const cae = (det && etiqueta(det, "CAE")) || null;
+  const caeVencimiento = leerFecha(det && etiqueta(det, "CAEFchVto"));
+  if (!cae || !caeVencimiento) {
+    throw new RespuestaArcaIncierta("ARCA aprobó el comprobante pero no informó el CAE o su vencimiento.");
+  }
+  return { resultado: "A", cae, caeVencimiento, observaciones, errores };
 }
 
 // ----- FECompConsultar -----------------------------------------------------

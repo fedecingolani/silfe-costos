@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  RespuestaArcaIncierta,
   URL_WSFE,
   feCAESolicitar,
   feCompConsultar,
@@ -266,6 +267,25 @@ describe("feCAESolicitar", () => {
     expect(respuesta.errores).toEqual([
       { code: 600, msg: "ValidacionDeToken: No apareció CUIT en lista de relaciones: 23334771229" },
     ]);
+  });
+
+  it("lanza RespuestaArcaIncierta si un aprobado no trae el CAE o su vencimiento", async () => {
+    const sinCae = caeRespuesta(
+      cabResp("A") +
+        "<FeDetResp><FECAEDetResponse><CbteDesde>361</CbteDesde><Resultado>A</Resultado>" +
+        "<CAE></CAE><CAEFchVto>20261026</CAEFchVto></FECAEDetResponse></FeDetResp>",
+    );
+    const vencimientoMalo = caeRespuesta(
+      cabResp("A") +
+        "<FeDetResp><FECAEDetResponse><CbteDesde>361</CbteDesde><Resultado>A</Resultado>" +
+        "<CAE>76123456789012</CAE><CAEFchVto>2026-10-26</CAEFchVto></FECAEDetResponse></FeDetResp>",
+    );
+    for (const xml of [sinCae, vencimientoMalo]) {
+      const { fetchFalso } = fetchQueResponde(xml);
+      const promesa = feCAESolicitar(fetchFalso, "homologacion", AUTH, SOLICITUD);
+      await expect(promesa).rejects.toBeInstanceOf(RespuestaArcaIncierta);
+      await expect(promesa).rejects.toThrow("ARCA aprobó el comprobante pero no informó el CAE o su vencimiento.");
+    }
   });
 
   it("falla si la respuesta no trae resultado ni errores", async () => {

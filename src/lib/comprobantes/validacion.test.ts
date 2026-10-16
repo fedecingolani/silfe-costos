@@ -69,4 +69,15 @@ describe("validarParaAutorizar", () => {
   it("cruza bien los cambios de mes y año", () => {
     expect(validarParaAutorizar({ ...valido, fecha: "2026-12-29" }, "2027-01-02")).toEqual([]);
   });
+
+  it("informa una fecha vacía o mal formada en lugar de aceptarla", () => {
+    const mensaje = "La fecha del comprobante no es válida.";
+    for (const fecha of ["", "16/10/2026", "2026-10", "2026-02-30", "2026-13-01", "abc"]) {
+      expect(validarParaAutorizar({ ...valido, fecha }, HOY)).toEqual([mensaje]);
+    }
+  });
+
+  it("informa si no se pudo determinar la fecha de hoy", () => {
+    expect(validarParaAutorizar(valido, "")).toEqual(["No se pudo determinar la fecha de hoy para validar la fecha."]);
+  });
 });

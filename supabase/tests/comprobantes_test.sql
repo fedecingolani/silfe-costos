@@ -9,7 +9,7 @@
 begin;
 create extension if not exists pgtap with schema extensions;
 
-select plan(86);
+select plan(107);
 
 -- ---------------------------------------------------------------------
 -- Estructura
@@ -64,7 +64,8 @@ from unnest(array[
 -- ---------------------------------------------------------------------
 
 insert into cliente (id, razon_social, cuit, condicion_iva)
-values ('c0000000-0000-0000-0000-000000000001', 'Cliente de prueba', '30712345671', 'Responsable Inscripto');
+values ('c0000000-0000-0000-0000-000000000001', 'Cliente de prueba', '30712345671', 'Responsable Inscripto'),
+       ('c0000000-0000-0000-0000-000000000002', 'Otro cliente', '20111111112', 'Monotributista');
 
 select set_config(
   'request.jwt.claims',
@@ -328,6 +329,75 @@ select is(
   (select count(*)::int from comprobante_item where comprobante_id = 'a0000000-0000-0000-0000-000000000002'),
   0,
   'Al borrar el borrador se borran sus ítems'
+);
+
+-- ---------------------------------------------------------------------
+-- Verificando: el número enviado queda anclado y los datos no cambian
+-- ---------------------------------------------------------------------
+
+insert into punto_venta (numero, nombre, electronico) values (9008, 'Otro electrónico', true);
+insert into comprobante (
+  id, punto_venta, ambiente, clase, letra, tipo_arca, cliente_id,
+  receptor_razon_social, receptor_doc_tipo, receptor_doc_nro, receptor_condicion_iva,
+  receptor_domicilio, receptor_provincia, neto, iva, total
+)
+values ('a0000000-0000-0000-0000-000000000007', 9007, 'homologacion', 'factura', 'A', 1,
+        'c0000000-0000-0000-0000-000000000001', 'Cliente de prueba', 80, '30712345671',
+        'Responsable Inscripto', 'Calle 1', 'Río Negro', 100, 21, 121);
+update comprobante set estado = 'verificando', intento_numero = 500
+where id = 'a0000000-0000-0000-0000-000000000007';
+
+select throws_ok(
+  format('update comprobante set %I = %s where id = %L', c, v, 'a0000000-0000-0000-0000-000000000007'),
+  'CM004', null, format('En verificación no cambia %s', c)
+)
+from (values
+  ('punto_venta', '9008'),
+  ('ambiente', $$'produccion'$$),
+  ('clase', $$'nota_debito'$$),
+  ('letra', $$'B'$$),
+  ('tipo_arca', '6'),
+  ('cliente_id', $$'c0000000-0000-0000-0000-000000000002'$$),
+  ('fecha', 'fecha + 1'),
+  ('neto', '101'),
+  ('iva', '22'),
+  ('total', '123'),
+  ('receptor_razon_social', $$'Otra razón social'$$),
+  ('receptor_doc_tipo', '96'),
+  ('receptor_doc_nro', $$'20111111112'$$),
+  ('receptor_condicion_iva', $$'Monotributista'$$),
+  ('receptor_domicilio', $$'Calle 2'$$),
+  ('receptor_provincia', $$'Neuquén'$$)
+) as t(c, v);
+
+select lives_ok(
+  $$update comprobante set intento_numero = 501 where id = 'a0000000-0000-0000-0000-000000000007'$$,
+  'En verificación cambia el número a intentar (reintento por número no correlativo)'
+);
+select throws_ok(
+  $$update comprobante set estado = 'autorizado', numero = 500, cae = '9', cae_vencimiento = current_date
+    where id = 'a0000000-0000-0000-0000-000000000007'$$,
+  'CM002', null, 'Se autoriza sólo con el número enviado a ARCA'
+);
+select lives_ok(
+  $$update comprobante set estado = 'autorizado', numero = 501, cae = '9', cae_vencimiento = current_date
+    where id = 'a0000000-0000-0000-0000-000000000007'$$,
+  'Se autoriza con el número enviado a ARCA'
+);
+
+insert into comprobante (id, punto_venta, ambiente, clase, letra, tipo_arca, cliente_id)
+values ('a0000000-0000-0000-0000-000000000008', 9007, 'homologacion', 'factura', 'A', 1,
+        'c0000000-0000-0000-0000-000000000001');
+
+select throws_ok(
+  $$update comprobante set intento_numero = 7 where id = 'a0000000-0000-0000-0000-000000000008'$$,
+  'CM002', null, 'Un borrador no cambia el número a intentar sin pasar a verificación'
+);
+update comprobante set estado = 'verificando', intento_numero = 7 where id = 'a0000000-0000-0000-0000-000000000008';
+update comprobante set estado = 'rechazado', arca_resultado = 'R' where id = 'a0000000-0000-0000-0000-000000000008';
+select throws_ok(
+  $$update comprobante set intento_numero = 8 where id = 'a0000000-0000-0000-0000-000000000008'$$,
+  'CM002', null, 'Un rechazado no cambia el número a intentar'
 );
 
 -- ---------------------------------------------------------------------
