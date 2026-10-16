@@ -437,8 +437,6 @@ export type ArcaEmisor = {
   cuit: string | null;
   razon_social: string | null;
   condicion_iva: CondicionIvaEmisor | null;
-  /** Obsoleta: los puntos de venta están en la tabla punto_venta. */
-  punto_venta: number | null;
   ambiente: AmbienteArca;
   /** Datos que se imprimen en los comprobantes. */
   domicilio_comercial: string | null;

@@ -21,8 +21,10 @@ export function FormularioEmisor({
     cuit: emisor?.cuit ?? "",
     razon_social: emisor?.razon_social ?? "",
     condicion_iva: emisor?.condicion_iva ?? "",
-    punto_venta: emisor?.punto_venta != null ? String(emisor.punto_venta) : "",
     ambiente: emisor?.ambiente ?? "homologacion",
+    domicilio_comercial: emisor?.domicilio_comercial ?? "",
+    ingresos_brutos: emisor?.ingresos_brutos ?? "",
+    inicio_actividades: emisor?.inicio_actividades ?? "",
   });
   const cambiar = (e: ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
     setValores((v) => ({ ...v, [e.target.name]: e.target.value }));
@@ -62,19 +64,31 @@ export function FormularioEmisor({
           </p>
         </div>
         <div>
-          <label className="etiqueta">Punto de venta *</label>
+          <label className="etiqueta">Domicilio comercial</label>
           <input
-            name="punto_venta"
-            required
-            inputMode="numeric"
-            value={valores.punto_venta}
+            name="domicilio_comercial"
+            value={valores.domicilio_comercial}
             onChange={cambiar}
             className="campo"
           />
-          <p className="mt-1 text-xs text-stone-500">
-            El que diste de alta en ARCA para &quot;Web Services&quot; (no el de facturación en línea).
-          </p>
         </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="etiqueta">Ingresos brutos</label>
+            <input name="ingresos_brutos" value={valores.ingresos_brutos} onChange={cambiar} className="campo" />
+          </div>
+          <div>
+            <label className="etiqueta">Inicio de actividades</label>
+            <input
+              name="inicio_actividades"
+              type="date"
+              value={valores.inicio_actividades}
+              onChange={cambiar}
+              className="campo"
+            />
+          </div>
+        </div>
+        <p className="-mt-1 text-xs text-stone-500">Se imprimen en el encabezado de los comprobantes.</p>
         <div>
           <label className="etiqueta">Ambiente activo</label>
           <select name="ambiente" value={valores.ambiente} onChange={cambiar} className="campo">

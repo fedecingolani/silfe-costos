@@ -353,6 +353,15 @@ Menú **Ventas → Comprobantes**.
     valida tipo, punto de venta, número, fecha y CUIT y devuelve un error legible antes de tocar ARCA.
   - RED observado (1 test de `autorizar`, módulo `asociados` inexistente) y luego GREEN.
 
+- T4, unidad B (delegada, writer): puntos de venta y datos del emisor en `/configuracion/arca`.
+  - Migración `20261024000004_puntos_venta_emisor.sql`: vuelve a copiar `arca_emisor.punto_venta` a `punto_venta`
+    (por si cambió), crea el 7 electrónico si la tabla está vacía y borra la columna.
+  - Formulario del emisor sin punto de venta y con domicilio comercial, ingresos brutos e inicio de actividades.
+  - Tarjeta "Puntos de venta": listado, alta (número, nombre, electrónico), activar/desactivar y borrar (la clave
+    foránea lo impide si tiene comprobantes; se informa que hay que desactivarlo).
+  - "Probar conexión" usa el electrónico activo de número más bajo, con un select si hay varios; sin ninguno, avisa.
+  - RED observado en `arca_configuracion_test.sql` (3 fallas: columna todavía presente) y luego GREEN.
+
 ## Próximo paso
 
 T4: pantallas (listado, alta/edición de borrador y detalle) usando `autorizarComprobante`.
