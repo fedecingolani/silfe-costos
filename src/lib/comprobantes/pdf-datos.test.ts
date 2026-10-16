@@ -7,7 +7,7 @@ import {
   formatearCuit,
   formatearImporte,
   paginar,
-  validarImprimible,
+  puedeImprimir,
 } from "./pdf-datos";
 import { COMPROBANTE_EJEMPLO, EMISOR_EJEMPLO, ITEM_EJEMPLO, ejemploConItems } from "./pdf-fixtures";
 
@@ -30,27 +30,82 @@ describe("formatos", () => {
   });
 });
 
-describe("validarImprimible", () => {
-  it("acepta un comprobante autorizado de un punto de venta electrónico", () => {
-    expect(validarImprimible(COMPROBANTE_EJEMPLO, true, EMISOR_EJEMPLO)).toBeNull();
+describe("puedeImprimir", () => {
+  const imprimible = { ...COMPROBANTE_EJEMPLO, puntoVentaElectronico: true, cuitEmisor: EMISOR_EJEMPLO.cuit };
+
+  it("acepta un comprobante autorizado de un punto de venta electrónico, con CAE y CUIT del emisor", () => {
+    expect(puedeImprimir(imprimible)).toEqual({ ok: true });
   });
 
   it("rechaza con 409 un comprobante que no está autorizado", () => {
-    const r = validarImprimible({ ...COMPROBANTE_EJEMPLO, estado: "borrador" }, true, EMISOR_EJEMPLO);
-    expect(r?.status).toBe(409);
-    expect(r?.mensaje).toMatch(/autorizado/);
+    const r = puedeImprimir({ ...imprimible, estado: "borrador" });
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.status).toBe(409);
+      expect(r.motivo).toMatch(/autorizado/);
+    }
   });
 
-  it("rechaza con 409 un punto de venta no electrónico", () => {
-    const r = validarImprimible(COMPROBANTE_EJEMPLO, false, EMISOR_EJEMPLO);
-    expect(r?.status).toBe(409);
-    expect(r?.mensaje).toMatch(/no electrónico/);
+  it("rechaza un punto de venta no electrónico", () => {
+    const r = puedeImprimir({ ...imprimible, puntoVentaElectronico: false });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.motivo).toMatch(/no electrónico/);
   });
 
-  it("rechaza con 409 si falta el CAE o el CUIT del emisor", () => {
-    expect(validarImprimible({ ...COMPROBANTE_EJEMPLO, cae: null }, true, EMISOR_EJEMPLO)?.status).toBe(409);
-    expect(validarImprimible(COMPROBANTE_EJEMPLO, true, { ...EMISOR_EJEMPLO, cuit: null })?.mensaje).toMatch(/CUIT/);
-    expect(validarImprimible(COMPROBANTE_EJEMPLO, true, null)?.status).toBe(409);
+  it("rechaza si falta el CAE o el CUIT del emisor", () => {
+    expect(puedeImprimir({ ...imprimible, cae: null }).ok).toBe(false);
+    const sinCuit = puedeImprimir({ ...imprimible, cuitEmisor: null });
+    expect(sinCuit.ok).toBe(false);
+    if (!sinCuit.ok) expect(sinCuit.motivo).toMatch(/CUIT/);
+  });
+});
+
+describe("IVA por alícuota del PDF", () => {
+  it("usa el IVA por alícuota autorizado en lugar de recalcularlo de los ítems", () => {
+    // Guardado distinto de lo que da recalcular los ítems (1.400.000 al 21%): manda lo autorizado.
+    const datos = armarDatosPdf({
+      comprobante: {
+        ...COMPROBANTE_EJEMPLO,
+        neto: 1400000,
+        iva: 147000,
+        total: 1547000,
+        iva_detalle: [{ id: 4, alicuota: 10.5, base: 1400000, importe: 147000 }],
+      },
+      items: [ITEM_EJEMPLO],
+      emisor: EMISOR_EJEMPLO,
+    });
+    expect(datos.ivaPorAlicuota.find((a) => a.etiqueta === "IVA 10,5")?.importe).toBe("147.000,00");
+    expect(datos.ivaPorAlicuota.find((a) => a.etiqueta === "IVA 21")?.importe).toBe("0,00");
+    expect(datos.inconsistencias).toEqual([]);
+  });
+
+  it("recalcula de los ítems si el comprobante no tiene el IVA guardado (anteriores a guardarlo)", () => {
+    const datos = armarDatosPdf({
+      comprobante: { ...COMPROBANTE_EJEMPLO, iva_detalle: null },
+      items: [ITEM_EJEMPLO],
+      emisor: EMISOR_EJEMPLO,
+    });
+    expect(datos.ivaPorAlicuota.find((a) => a.etiqueta === "IVA 21")?.importe).toBe("294.000,00");
+    expect(datos.inconsistencias).toEqual([]);
+  });
+
+  it("informa si el IVA por alícuota no suma el IVA guardado", () => {
+    const datos = armarDatosPdf({
+      comprobante: { ...COMPROBANTE_EJEMPLO, iva_detalle: [{ id: 5, alicuota: 21, base: 1400000, importe: 293999.99 }] },
+      items: [ITEM_EJEMPLO],
+      emisor: EMISOR_EJEMPLO,
+    });
+    expect(datos.inconsistencias).toHaveLength(1);
+    expect(datos.inconsistencias[0]).toMatch(/293\.999,99.*294\.000,00/);
+  });
+
+  it("informa si el recalculado de un comprobante viejo no coincide con el IVA guardado", () => {
+    const datos = armarDatosPdf({
+      comprobante: { ...COMPROBANTE_EJEMPLO, iva: 293000, iva_detalle: null },
+      items: [ITEM_EJEMPLO],
+      emisor: EMISOR_EJEMPLO,
+    });
+    expect(datos.inconsistencias).toHaveLength(1);
   });
 });
 
@@ -141,7 +196,16 @@ describe("armarDatosPdf", () => {
 
   it("muestra el IVA de todas las alícuotas gravadas, con cero las que no tiene", () => {
     const mixto = armarDatosPdf({
-      comprobante: { ...COMPROBANTE_EJEMPLO, neto: 1100, iva: 220.5, total: 1320.5 },
+      comprobante: {
+        ...COMPROBANTE_EJEMPLO,
+        neto: 1100,
+        iva: 220.5,
+        total: 1320.5,
+        iva_detalle: [
+          { id: 4, alicuota: 10.5, base: 100, importe: 10.5 },
+          { id: 5, alicuota: 21, base: 1000, importe: 210 },
+        ],
+      },
       items: [
         { ...ITEM_EJEMPLO, cantidad: 1, precio_unitario: 1000, importe: 1000, iva: 210, alicuota_iva: 21 },
         { ...ITEM_EJEMPLO, cantidad: 1, precio_unitario: 100, importe: 100, iva: 10.5, alicuota_iva: 10.5 },

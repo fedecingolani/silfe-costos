@@ -12,6 +12,7 @@ import {
   type ClaseComprobante,
   type Comprobante,
   type ComprobanteItem,
+  type IvaAutorizado,
 } from "@/lib/tipos";
 import { calcularTotales } from "./calculo";
 import { formatearNumero } from "./numero";
@@ -39,6 +40,7 @@ export type FilaComprobantePdf = Pick<
   | "neto"
   | "iva"
   | "total"
+  | "iva_detalle"
   | "cae"
   | "cae_vencimiento"
 >;
@@ -66,7 +68,7 @@ export type FilaEmisorPdf = Pick<
 export const COLUMNAS_COMPROBANTE_PDF =
   "id, punto_venta, ambiente, estado, clase, letra, tipo_arca, numero, fecha, fecha_vencimiento_pago, " +
   "condicion_pago, receptor_razon_social, receptor_doc_tipo, receptor_doc_nro, receptor_condicion_iva, " +
-  "receptor_domicilio, receptor_provincia, neto, iva, total, cae, cae_vencimiento";
+  "receptor_domicilio, receptor_provincia, neto, iva, total, iva_detalle, cae, cae_vencimiento";
 export const COLUMNAS_ITEM_PDF =
   "codigo, descripcion, observaciones, unidad, cantidad, precio_unitario, descuento_pct, alicuota_iva, importe, iva";
 export const COLUMNAS_EMISOR_PDF =
@@ -122,6 +124,8 @@ export type DatosPdfComprobante = {
   homologacion: boolean;
   /** Sin extensión: "Factura A-00007-00000361". */
   nombreArchivo: string;
+  /** Diferencias entre el IVA por alícuota impreso y el IVA guardado (para el log; vacío si coinciden). */
+  inconsistencias: string[];
 };
 
 const TITULOS: Record<ClaseComprobante, string> = {
@@ -164,37 +168,75 @@ export function fechaCorta(valor: string | null | undefined): string {
   return m ? `${m[3]}/${m[2]}/${m[1]}` : "";
 }
 
-export type ErrorImpresion = { status: 404 | 409; mensaje: string };
+/** Lo que decide si un comprobante se puede imprimir (la ruta del PDF y el botón del detalle). */
+export type ImprimibleSegun = Pick<
+  FilaComprobantePdf,
+  "estado" | "cae" | "cae_vencimiento" | "letra" | "tipo_arca" | "numero"
+> & {
+  puntoVentaElectronico: boolean;
+  cuitEmisor: string | null | undefined;
+};
+
+export type PuedeImprimir = { ok: true } | { ok: false; status: 409; motivo: string };
 
 /**
  * El PDF completo es sólo para comprobantes autorizados de un punto de
- * venta electrónico (con CAE). Devuelve el error para mostrar, o null.
+ * venta electrónico, con CAE, y con la CUIT del emisor cargada (va en el QR).
+ * Única regla: la usan la ruta del PDF y el botón del detalle.
  */
-export function validarImprimible(
-  c: FilaComprobantePdf,
-  puntoVentaElectronico: boolean,
-  emisor: FilaEmisorPdf | null,
-): ErrorImpresion | null {
-  if (c.estado !== "autorizado") {
-    return { status: 409, mensaje: "Sólo se imprime un comprobante autorizado." };
-  }
-  if (!puntoVentaElectronico) {
-    return {
-      status: 409,
-      mensaje: "El comprobante es de un punto de venta no electrónico: se imprime en el formulario preimpreso.",
-    };
+export function puedeImprimir(c: ImprimibleSegun): PuedeImprimir {
+  const no = (motivo: string): PuedeImprimir => ({ ok: false, status: 409, motivo });
+  if (c.estado !== "autorizado") return no("Sólo se imprime un comprobante autorizado.");
+  if (!c.puntoVentaElectronico) {
+    return no("El comprobante es de un punto de venta no electrónico: se imprime en el formulario preimpreso.");
   }
   if (!c.cae || !c.cae_vencimiento || !c.letra || !c.tipo_arca || c.numero === null) {
-    return { status: 409, mensaje: "Al comprobante le faltan datos de la autorización (CAE, número o tipo)." };
+    return no("Al comprobante le faltan datos de la autorización (CAE, número o tipo).");
   }
-  if (!emisor?.cuit) {
-    return { status: 409, mensaje: "Falta el CUIT del emisor: cargalo en Configuración → ARCA." };
-  }
-  return null;
+  if (!c.cuitEmisor) return no("Falta el CUIT del emisor: cargalo en Configuración → ARCA.");
+  return { ok: true };
+}
+
+/** Diferencia tolerada entre importes, por redondeo de punto flotante. */
+const TOLERANCIA = 0.005;
+
+/**
+ * IVA por alícuota de un comprobante: el autorizado (iva_detalle, lo que
+ * se envió a ARCA) o, en los anteriores a guardarlo, el recalculado de los
+ * ítems. Avisa si la suma no da el IVA guardado del comprobante.
+ */
+export function ivaDelComprobante(
+  c: Pick<FilaComprobantePdf, "iva" | "iva_detalle">,
+  items: readonly Pick<FilaItemPdf, "cantidad" | "precio_unitario" | "descuento_pct" | "alicuota_iva">[],
+): { alicuotas: IvaAutorizado[]; origen: "autorizado" | "recalculado"; inconsistencia: string | null } {
+  const guardado = Array.isArray(c.iva_detalle) ? c.iva_detalle : null;
+  const alicuotas: IvaAutorizado[] =
+    guardado?.map((a) => ({
+      id: Number(a.id),
+      alicuota: Number(a.alicuota),
+      base: Number(a.base),
+      importe: Number(a.importe),
+    })) ??
+    calcularTotales(
+      items.map((i) => ({
+        cantidad: Number(i.cantidad),
+        precioUnitario: Number(i.precio_unitario),
+        descuentoPct: Number(i.descuento_pct),
+        alicuotaIva: Number(i.alicuota_iva),
+      })),
+    ).ivaPorAlicuota;
+  const origen = guardado ? "autorizado" : "recalculado";
+
+  const suma = Math.round(alicuotas.reduce((total, a) => total + a.importe, 0) * 100) / 100;
+  const inconsistencia =
+    Math.abs(suma - Number(c.iva)) > TOLERANCIA
+      ? `El IVA por alícuota (${origen}) suma ${formatearImporte(suma)} y el IVA del comprobante es ${formatearImporte(Number(c.iva))}.`
+      : null;
+  return { alicuotas, origen, inconsistencia };
 }
 
 /**
- * Arma los datos del PDF. Supone un comprobante que pasó validarImprimible
+ * Arma los datos del PDF. Supone un comprobante que pasó puedeImprimir
  * (si falta algo, queda vacío en lugar de fallar).
  */
 export function armarDatosPdf({
@@ -211,15 +253,8 @@ export function armarDatosPdf({
   const docTipo = c.receptor_doc_tipo ?? 99;
   const docNro = c.receptor_doc_nro ?? "0";
 
-  const totales = calcularTotales(
-    items.map((i) => ({
-      cantidad: Number(i.cantidad),
-      precioUnitario: Number(i.precio_unitario),
-      descuentoPct: Number(i.descuento_pct),
-      alicuotaIva: Number(i.alicuota_iva),
-    })),
-  );
-  const ivaDe = new Map(totales.ivaPorAlicuota.map((a) => [Number(a.alicuota), a.importe]));
+  const iva = ivaDelComprobante(c, items);
+  const ivaDe = new Map(iva.alicuotas.map((a) => [a.alicuota, a.importe]));
 
   return {
     titulo: TITULOS[c.clase],
@@ -279,6 +314,7 @@ export function armarDatosPdf({
     }),
     homologacion: c.ambiente === "homologacion",
     nombreArchivo: `${NOMBRES_CLASE_COMPROBANTE[c.clase]} ${numero}`.trim(),
+    inconsistencias: iva.inconsistencia ? [`${numero}: ${iva.inconsistencia}`] : [],
   };
 }
 

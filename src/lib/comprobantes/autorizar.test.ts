@@ -98,6 +98,7 @@ function escenario(opciones: {
     recalculado?: BorradorRecalculado;
     autorizado?: Parameters<RepositorioComprobantes["marcarAutorizado"]>[1];
     rechazado?: Parameters<RepositorioComprobantes["marcarRechazado"]>[1];
+    verificando?: Parameters<RepositorioComprobantes["pasarAVerificando"]>[1];
     bloqueoTomado: boolean;
   } = { bloqueoTomado: false };
 
@@ -120,6 +121,7 @@ function escenario(opciones: {
     },
     async pasarAVerificando(_id, d) {
       eventos.push(`verificando ${d.intentoNumero}`);
+      estado.verificando = d;
       Object.assign(fila, { estado: "verificando", intentoNumero: d.intentoNumero, letra: d.letra, tipoArca: d.tipoArca });
     },
     async cambiarIntento(_id, numero) {
@@ -212,6 +214,19 @@ const verificando = (): DatosAutorizacion => {
 };
 
 describe("autorizar: camino feliz", () => {
+  it("guarda al pasar a verificación el IVA por alícuota que se envía a ARCA", async () => {
+    const { deps, solicitudes, estado } = escenario({});
+    await autorizar(ID, deps);
+
+    expect(estado.verificando?.ivaDetalle).toEqual([
+      { id: 4, alicuota: 10.5, base: 100, importe: 10.5 },
+      { id: 5, alicuota: 21, base: 1000, importe: 210 },
+    ]);
+    expect(estado.verificando?.ivaDetalle.map(({ id, base, importe }) => ({ id, base, importe }))).toEqual(
+      solicitudes[0].alicuotas,
+    );
+  });
+
   it("recalcula, numera último + 1 bajo bloqueo, pide el CAE y lo guarda", async () => {
     const { deps, eventos, solicitudes, estado } = escenario({});
     const resultado = await autorizar(ID, deps);

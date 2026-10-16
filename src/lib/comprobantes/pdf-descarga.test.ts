@@ -77,6 +77,16 @@ describe("cargarPdfComprobante", () => {
     expect(consultas.every((c) => !c.columnas.includes("*"))).toBe(true);
   });
 
+  it("avisa en el log si el IVA por alícuota guardado no coincide con el IVA del comprobante", async () => {
+    const aviso = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const distinto = { ...COMPROBANTE_EJEMPLO, iva_detalle: [{ id: 5, alicuota: 21, base: 1400000, importe: 1 }] };
+    const { cliente } = clienteStub({ ...BASE, comprobante: { data: distinto, error: null } });
+    const r = await cargarPdfComprobante({ id: ID, url: URL_PEDIDO, cliente, fetch: sinLogo });
+    expect(r.ok).toBe(true);
+    expect(aviso.mock.calls.some((c) => String(c[0]).includes("IVA"))).toBe(true);
+    aviso.mockRestore();
+  });
+
   it("pide el logo al mismo origen", async () => {
     const png = new Uint8Array([137, 80, 78, 71]);
     const conLogo = vi.fn(async () => new Response(png));

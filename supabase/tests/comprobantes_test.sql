@@ -9,7 +9,7 @@
 begin;
 create extension if not exists pgtap with schema extensions;
 
-select plan(122);
+select plan(126);
 
 -- ---------------------------------------------------------------------
 -- Estructura
@@ -22,6 +22,7 @@ from unnest(array[
 
 select has_column('public', 'arca_emisor', c, format('arca_emisor tiene %s', c))
 from unnest(array['domicilio_comercial', 'ingresos_brutos', 'inicio_actividades']) as c;
+select has_column('public', 'comprobante', 'iva_detalle', 'comprobante guarda el IVA por alícuota enviado a ARCA');
 
 select col_is_pk('public', 'punto_venta', 'numero', 'El punto de venta se identifica por su número');
 select col_default_is('public', 'comprobante', 'estado', 'borrador', 'Un comprobante nace en borrador');
@@ -237,6 +238,11 @@ select throws_ok(
   'CM001', null, 'Un comprobante autorizado no se modifica'
 );
 select throws_ok(
+  $$update comprobante set iva_detalle = '[{"id": 5, "alicuota": 21, "base": 1, "importe": 0.21}]'
+    where id = 'a0000000-0000-0000-0000-000000000001'$$,
+  'CM001', null, 'El IVA por alícuota de un autorizado no se modifica'
+);
+select throws_ok(
   $$delete from comprobante where id = 'a0000000-0000-0000-0000-000000000001'$$,
   'CM001', null, 'Un comprobante autorizado no se borra'
 );
@@ -367,7 +373,8 @@ from (values
   ('receptor_doc_nro', $$'20111111112'$$),
   ('receptor_condicion_iva', $$'Monotributista'$$),
   ('receptor_domicilio', $$'Calle 2'$$),
-  ('receptor_provincia', $$'Neuquén'$$)
+  ('receptor_provincia', $$'Neuquén'$$),
+  ('iva_detalle', $$'[{"id": 5, "alicuota": 21, "base": 100, "importe": 21}]'$$)
 ) as t(c, v);
 
 select lives_ok(
@@ -389,6 +396,10 @@ insert into comprobante (id, punto_venta, ambiente, clase, letra, tipo_arca, cli
 values ('a0000000-0000-0000-0000-000000000008', 9007, 'homologacion', 'factura', 'A', 1,
         'c0000000-0000-0000-0000-000000000001');
 
+select throws_ok(
+  $$update comprobante set iva_detalle = '{"id": 5}' where id = 'a0000000-0000-0000-0000-000000000008'$$,
+  '23514', null, 'El IVA por alícuota es una lista'
+);
 select throws_ok(
   $$update comprobante set intento_numero = 7 where id = 'a0000000-0000-0000-0000-000000000008'$$,
   'CM002', null, 'Un borrador no cambia el número a intentar sin pasar a verificación'

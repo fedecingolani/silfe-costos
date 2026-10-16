@@ -36,6 +36,7 @@ export const COMPROBANTE_EJEMPLO: FilaComprobantePdf = {
   total: 1694000,
   cae: "76123456789012",
   cae_vencimiento: "2026-10-26",
+  iva_detalle: [{ id: 5, alicuota: 21, base: 1400000, importe: 294000 }],
 };
 
 export const ITEM_EJEMPLO: FilaItemPdf = {
@@ -69,6 +70,7 @@ export function ejemploConItems(n: number, ambiente: FilaComprobantePdf["ambient
     neto: 1000 * n,
     iva: 210 * n,
     total: 1210 * n,
+    iva_detalle: [{ id: 5, alicuota: 21, base: 1000 * n, importe: 210 * n }],
   };
   return { comprobante, items, emisor: EMISOR_EJEMPLO };
 }

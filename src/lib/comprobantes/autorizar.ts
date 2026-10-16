@@ -43,6 +43,7 @@ import {
   type ClaseComprobante,
   type CondicionIva,
   type EstadoComprobante,
+  type IvaAutorizado,
   type LetraComprobante,
   type TipoComprobanteArca,
 } from "@/lib/tipos";
@@ -117,10 +118,15 @@ export type RepositorioComprobantes = {
   cargar(id: string): Promise<DatosAutorizacion | null>;
   /** Guarda lo recalculado y deja el comprobante en borrador (sólo desde borrador o rechazado). */
   guardarRecalculado(id: string, datos: BorradorRecalculado): Promise<void>;
-  /** borrador → verificando con el número que se envía a ARCA. */
+  /** borrador → verificando con el número y el IVA por alícuota que se envían a ARCA. */
   pasarAVerificando(
     id: string,
-    datos: { intentoNumero: number; letra: LetraComprobante; tipoArca: TipoComprobanteArca },
+    datos: {
+      intentoNumero: number;
+      letra: LetraComprobante;
+      tipoArca: TipoComprobanteArca;
+      ivaDetalle: IvaAutorizado[];
+    },
   ): Promise<void>;
   /** Cambia el número enviado (reintento por número no correlativo). */
   cambiarIntento(id: string, intentoNumero: number): Promise<void>;
@@ -312,7 +318,15 @@ function recalcular(datos: DatosAutorizacion) {
     asociados: datos.asociados.length > 0 ? datos.asociados : undefined,
   });
 
-  return { borrador, solicitud };
+  // Lo mismo que va en el array Iva: se guarda para imprimirlo tal cual.
+  const ivaDetalle: IvaAutorizado[] = totales.ivaPorAlicuota.map(({ id, alicuota, base, importe }) => ({
+    id,
+    alicuota,
+    base,
+    importe,
+  }));
+
+  return { borrador, solicitud, ivaDetalle };
 }
 
 // ----- Flujo ---------------------------------------------------------------
@@ -384,7 +398,7 @@ async function emitir(
   );
   if (errores.length > 0) return { error: errores.join(" ") };
 
-  const { borrador, solicitud } = recalcular(datos);
+  const { borrador, solicitud, ivaDetalle } = recalcular(datos);
   await ctx.repositorio.guardarRecalculado(c.id, borrador);
 
   const { letra, tipoArca } = borrador;
@@ -393,7 +407,7 @@ async function emitir(
     const auth = await ctx.arca.autenticar(ambiente, credencial, cuitEmisor);
     const ultimo = () => ctx.arca.ultimoAutorizado(ambiente, auth, c.puntoVenta, tipoArca);
     let numero = (await ultimo()) + 1;
-    await ctx.repositorio.pasarAVerificando(c.id, { intentoNumero: numero, letra, tipoArca });
+    await ctx.repositorio.pasarAVerificando(c.id, { intentoNumero: numero, letra, tipoArca, ivaDetalle });
 
     // Desde acá ARCA pudo haber recibido el pedido: ante cualquier error el
     // comprobante queda en verificación y se reconcilia la próxima vez.

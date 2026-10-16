@@ -202,6 +202,8 @@ export function repositorioComprobantes(supabase: Supabase): RepositorioComproba
         intento_numero: d.intentoNumero,
         letra: d.letra,
         tipo_arca: d.tipoArca,
+        // Lo enviado a ARCA: queda fijo desde acá (ver 20261024000005).
+        iva_detalle: d.ivaDetalle,
       });
     },
 

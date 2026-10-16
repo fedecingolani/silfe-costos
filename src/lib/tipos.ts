@@ -530,6 +530,9 @@ export type AlicuotaIva = (typeof ALICUOTAS_IVA)[number];
 /** Código y mensaje tal como los devuelve ARCA (Obs o Err). */
 export type MensajeArca = { code: number; msg: string };
 
+/** IVA de una alícuota tal como se envió a ARCA (array Iva de FECAESolicitar). */
+export type IvaAutorizado = { id: number; alicuota: number; base: number; importe: number };
+
 /** Fila de comprobante. Los importes llegan de Postgres como números. */
 export type Comprobante = {
   id: string;
@@ -559,6 +562,8 @@ export type Comprobante = {
   neto: number;
   iva: number;
   total: number;
+  /** IVA por alícuota enviado a ARCA. Vacío en los anteriores a guardarlo. */
+  iva_detalle: IvaAutorizado[] | null;
   cae: string | null;
   cae_vencimiento: string | null;
   arca_resultado: "A" | "R" | "P" | null;

@@ -4,7 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { Encabezado, Migas, Pastilla, Tarjeta } from "@/components/ui";
 import { fecha, fechaHora, numero, pesos } from "@/lib/formato";
 import { hoyArgentina } from "@/lib/clientes/seguimiento";
-import { calcularTotales } from "@/lib/comprobantes/calculo";
+import { ivaDelComprobante, puedeImprimir } from "@/lib/comprobantes/pdf-datos";
 import { NOMBRES_ESTADO, TONO_ESTADO, nombreComprobante, numeroVisible } from "@/lib/comprobantes/listado";
 import {
   NOMBRES_AMBIENTE_ARCA,
@@ -26,7 +26,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const COLUMNAS_COMPROBANTE =
   "id, punto_venta, ambiente, estado, clase, letra, tipo_arca, numero, fecha, fecha_vencimiento_pago, cliente_id, " +
   "lista_precio_id, condicion_pago, observaciones, receptor_razon_social, receptor_doc_tipo, receptor_doc_nro, " +
-  "receptor_condicion_iva, receptor_domicilio, receptor_provincia, neto, iva, total, cae, cae_vencimiento, " +
+  "receptor_condicion_iva, receptor_domicilio, receptor_provincia, neto, iva, total, iva_detalle, cae, cae_vencimiento, " +
   "arca_resultado, arca_observaciones, arca_errores, intento_numero, autorizado_en";
 const COLUMNAS_ITEM =
   "id, orden, producto_id, codigo, descripcion, observaciones, unidad, cantidad, precio_unitario, descuento_pct, " +
@@ -154,14 +154,17 @@ export default async function ComprobantePage({ params }: { params: Promise<{ id
 
   // ----- Autorizado o en verificación: sólo lectura ---------------------------
 
-  const totales = calcularTotales(
-    items.map((i) => ({
-      cantidad: Number(i.cantidad),
-      precioUnitario: Number(i.precio_unitario),
-      descuentoPct: Number(i.descuento_pct),
-      alicuotaIva: Number(i.alicuota_iva),
-    })),
-  );
+  // El IVA por alícuota autorizado (lo enviado a ARCA); recalculado sólo en los anteriores a guardarlo.
+  const ivaPorAlicuota = ivaDelComprobante(c, items).alicuotas;
+  const [{ data: puntoVenta }, { data: emisor }] = await Promise.all([
+    supabase.from("punto_venta").select("electronico").eq("numero", c.punto_venta).maybeSingle(),
+    supabase.from("arca_emisor").select("cuit").eq("id", true).maybeSingle(),
+  ]);
+  const imprimible = puedeImprimir({
+    ...c,
+    puntoVentaElectronico: puntoVenta?.electronico === true,
+    cuitEmisor: emisor?.cuit as string | null | undefined,
+  });
   const observaciones = c.arca_observaciones ?? [];
   const verificando = c.estado === "verificando";
 
@@ -188,8 +191,11 @@ export default async function ComprobantePage({ params }: { params: Promise<{ id
       )}
 
       <div className="mb-4">
-        {/* Sólo los puntos de venta electrónicos tienen ambiente: el PDF completo es para ellos. */}
-        <AccionesDetalle id={c.id} verificando={verificando} pdf={c.estado === "autorizado" && c.ambiente !== null} />
+        <AccionesDetalle
+          id={c.id}
+          verificando={verificando}
+          pdf={imprimible.ok ? { ok: true } : { ok: false, motivo: imprimible.motivo }}
+        />
       </div>
 
       {observaciones.length > 0 && (
@@ -272,7 +278,7 @@ export default async function ComprobantePage({ params }: { params: Promise<{ id
             <dt className="text-stone-500">Neto gravado</dt>
             <dd className="tabular-nums">{pesos(Number(c.neto))}</dd>
           </div>
-          {totales.ivaPorAlicuota.map((a) => (
+          {ivaPorAlicuota.map((a) => (
             <div key={a.id} className="flex justify-between">
               <dt className="text-stone-500">IVA {numero(a.alicuota, 1)}%</dt>
               <dd className="tabular-nums">{pesos(a.importe)}</dd>

@@ -12,7 +12,7 @@ import {
   COLUMNAS_ITEM_PDF,
   armarDatosPdf,
   dispositionEnLinea,
-  validarImprimible,
+  puedeImprimir,
   type DatosPdfComprobante,
   type FilaComprobantePdf,
   type FilaEmisorPdf,
@@ -91,19 +91,22 @@ export async function cargarPdfComprobante({
   if (puntoVenta.error) return respuestaError(`Error al cargar el punto de venta: ${puntoVenta.error.message}`, 500);
 
   const datosEmisor = emisor.data as FilaEmisorPdf | null;
-  const error = validarImprimible(c, puntoVenta.data?.electronico === true, datosEmisor);
-  if (error) return respuestaError(error.mensaje, error.status);
+  const imprimible = puedeImprimir({
+    ...c,
+    puntoVentaElectronico: puntoVenta.data?.electronico === true,
+    cuitEmisor: datosEmisor?.cuit,
+  });
+  if (!imprimible.ok) return respuestaError(imprimible.motivo, imprimible.status);
 
   const logo = await cargarLogo(url, fetchLogo, msLogo);
-  return {
-    ok: true,
-    datos: armarDatosPdf({
-      comprobante: c,
-      items: (items.data ?? []) as unknown as FilaItemPdf[],
-      emisor: datosEmisor!,
-    }),
-    logo,
-  };
+  const datos = armarDatosPdf({
+    comprobante: c,
+    items: (items.data ?? []) as unknown as FilaItemPdf[],
+    emisor: datosEmisor!,
+  });
+  // No se corta la impresión: se deja rastro para revisar el comprobante.
+  for (const aviso of datos.inconsistencias) console.warn(`PDF del comprobante ${c.id}: ${aviso}`);
+  return { ok: true, datos, logo };
 }
 
 /** Respuesta con el PDF para abrir en el navegador. */
