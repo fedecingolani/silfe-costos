@@ -468,6 +468,25 @@ Menú **Ventas → Comprobantes**.
     `authenticated` firmado localmente (filas temporales borradas). `next dev` con Supabase local: 307 a /login en las
     rutas de comprobantes, sin 500.
 
+- Revisión nativa de T6: **aprobada**, con una advertencia y dos sugerencias no bloqueantes, corregidas (delegada,
+  writer). Commit `a1c32f5`:
+  - advertencia (carrera del saldo): `autorizar` leía el saldo de la nota de crédito antes del bloqueo de numeración.
+    Ahora lo vuelve a leer con el bloqueo tomado (`RepositorioComprobantes.saldoNotaCredito`) y, si se pasa, devuelve
+    el error legible sin llamar a ARCA y libera el bloqueo. Serializa dos notas de crédito sobre la misma factura en
+    el **mismo** punto de venta (ambiente y tipo salen del asociado). **Riesgo residual:** el punto de venta de la
+    nota lo elige el usuario (`armarNota` usa el de la factura sólo si sigue activo y el editor lo deja cambiar), así
+    que dos notas sobre la misma factura en puntos de venta distintos toman bloqueos distintos y pueden pasar las dos.
+    Cerrarlo del todo pide un control en la base o un bloqueo por factura (pendiente de decidir);
+  - sugerencia: `guardar_borrador_comprobante` (migración `20261024000006_comprobantes_notas_asociados.sql`) valida
+    siempre los asociados que quedan (los del pedido o, con `p_asociados` null, los guardados) contra la clase y letra
+    nuevas: factura sin asociados, asociado autorizado, clase admitida, **misma letra que el asociado de la base**
+    (regla nueva en la base; la app ya la cumplía) y un mismo ambiente. Mismo CM007;
+  - sugerencia: `autorizar-supabase.test.ts` cubre con un cliente de Supabase falso los CbtesAsoc (base y a mano),
+    "ya no existe", el saldo, la exclusión de la nota que se autoriza y las notas repetidas.
+  - RED observado (4 pgTAP, 2 Vitest) y luego GREEN; los tests del repositorio cubren código existente (sin RED).
+  - Checks: `npm test` (449), `npm run typecheck`, `npm run lint`, `npm run build`, `supabase migration up --local` y
+    `supabase test db` (380) en verde.
+
 ## Próximo paso
 
 T7: recorrido en homologación (Factura A, Factura B, NC parcial, rechazo de ARCA y respuesta perdida simulada).
