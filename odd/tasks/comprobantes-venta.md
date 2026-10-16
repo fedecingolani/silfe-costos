@@ -383,6 +383,8 @@ Menú **Ventas → Comprobantes**.
   - RED observado (pgTAP de la función: 12 fallas; módulos `borrador` y `listado` inexistentes) y luego GREEN.
   - Sin prueba automática de las pantallas: se verificaron las consultas contra la base local con un JWT de
     `authenticated` firmado localmente y el arranque con `next dev` (307 a /login, sin 500).
+  - Commit `fe94524`. Checks: `npm test` (347), `npm run typecheck`, `npm run lint`, `npm run build` y
+    `supabase test db` (356) en verde.
 
 ## Próximo paso
 
