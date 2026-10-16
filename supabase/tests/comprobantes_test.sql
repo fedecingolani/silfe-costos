@@ -9,7 +9,7 @@
 begin;
 create extension if not exists pgtap with schema extensions;
 
-select plan(107);
+select plan(122);
 
 -- ---------------------------------------------------------------------
 -- Estructura
@@ -496,7 +496,149 @@ select isnt(
   'Un bloqueo vencido se vuelve a tomar'
 );
 
+-- ---------------------------------------------------------------------
+-- guardar_borrador_comprobante: cabecera e ítems en una sola transacción
+-- ---------------------------------------------------------------------
+
+update arca_emisor set ambiente = 'produccion' where id;
+
+create temp table borrador_rpc (id uuid);
+select lives_ok(
+  $$insert into borrador_rpc
+    select guardar_borrador_comprobante(
+      null,
+      '{"punto_venta": 9007, "clase": "factura", "letra": "A", "tipo_arca": 1, "fecha": "2026-10-16",
+        "fecha_vencimiento_pago": "2026-10-30", "cliente_id": "c0000000-0000-0000-0000-000000000001",
+        "lista_precio_id": null, "condicion_pago": "cuenta_corriente", "observaciones": "Entrega en planta",
+        "neto": 1100, "iva": 220.5, "total": 1320.5}'::jsonb,
+      '[{"producto_id": null, "codigo": null, "descripcion": "Desarrollo de producto", "observaciones": null,
+         "unidad": null, "cantidad": 1, "precio_unitario": 1000, "descuento_pct": 0, "alicuota_iva": 21,
+         "importe": 1000, "iva": 210},
+        {"producto_id": null, "codigo": "X", "descripcion": "Otro", "observaciones": "nota",
+         "unidad": "u", "cantidad": 2, "precio_unitario": 50, "descuento_pct": 0, "alicuota_iva": 10.5,
+         "importe": 100, "iva": 10.5}]'::jsonb
+    )$$,
+  'guardar_borrador_comprobante crea un borrador con sus ítems'
+);
+select results_eq(
+  $$select estado, ambiente, total, observaciones from comprobante where id = (select id from borrador_rpc)$$,
+  $$values ('borrador'::text, 'produccion'::text, 1320.50::numeric(14,2), 'Entrega en planta'::text)$$,
+  'El borrador nuevo de un punto de venta electrónico toma el ambiente activo del emisor'
+);
+select results_eq(
+  $$select orden, descripcion from comprobante_item where comprobante_id = (select id from borrador_rpc) order by orden$$,
+  $$values (0, 'Desarrollo de producto'::text), (1, 'Otro'::text)$$,
+  'Los ítems se guardan en el orden recibido'
+);
+
+update arca_emisor set ambiente = 'homologacion' where id;
+
+select lives_ok(
+  $$select guardar_borrador_comprobante(
+      (select id from borrador_rpc),
+      '{"punto_venta": 9007, "clase": "nota_debito", "letra": "A", "tipo_arca": 2, "fecha": "2026-10-17",
+        "fecha_vencimiento_pago": "2026-10-17", "cliente_id": "c0000000-0000-0000-0000-000000000001",
+        "lista_precio_id": null, "condicion_pago": "contado", "observaciones": null,
+        "neto": 50, "iva": 10.5, "total": 60.5}'::jsonb,
+      '[{"producto_id": null, "descripcion": "Ajuste", "cantidad": 1, "precio_unitario": 50,
+         "descuento_pct": 0, "alicuota_iva": 21, "importe": 50, "iva": 10.5}]'::jsonb
+    )$$,
+  'guardar_borrador_comprobante actualiza un borrador existente'
+);
+select results_eq(
+  $$select clase, condicion_pago, ambiente, total from comprobante where id = (select id from borrador_rpc)$$,
+  $$values ('nota_debito'::text, 'contado'::text, 'produccion'::text, 60.50::numeric(14,2))$$,
+  'Al actualizar se conserva el ambiente con que se creó el borrador'
+);
+select is(
+  (select count(*)::int from comprobante_item where comprobante_id = (select id from borrador_rpc)),
+  1,
+  'Al actualizar se reemplazan los ítems'
+);
+
+select throws_ok(
+  $$select guardar_borrador_comprobante(
+      (select id from borrador_rpc),
+      '{"punto_venta": 9007, "clase": "factura", "fecha": "2026-10-17", "fecha_vencimiento_pago": "2026-10-17",
+        "cliente_id": "c0000000-0000-0000-0000-000000000001", "condicion_pago": "contado",
+        "neto": 0, "iva": 0, "total": 0}'::jsonb,
+      '[{"descripcion": "Sin cantidad", "cantidad": 0, "precio_unitario": 1, "descuento_pct": 0,
+         "alicuota_iva": 21, "importe": 0, "iva": 0}]'::jsonb
+    )$$,
+  '23514', null, 'Un ítem inválido hace fallar todo el guardado'
+);
+select results_eq(
+  $$select c.clase, (select count(*)::int from comprobante_item i where i.comprobante_id = c.id)
+    from comprobante c where c.id = (select id from borrador_rpc)$$,
+  $$values ('nota_debito'::text, 1)$$,
+  'Si el guardado falla, el borrador queda como estaba (cabecera e ítems)'
+);
+
+-- Un rechazado vuelve a borrador al guardarlo y se limpian los mensajes de ARCA.
+update comprobante set estado = 'verificando', intento_numero = 77, letra = 'A', tipo_arca = 2
+where id = (select id from borrador_rpc);
+update comprobante set estado = 'rechazado', intento_numero = null, arca_resultado = 'R',
+  arca_errores = '[{"code": 10242, "msg": "Falta la condición IVA"}]'
+where id = (select id from borrador_rpc);
+select lives_ok(
+  $$select guardar_borrador_comprobante(
+      (select id from borrador_rpc),
+      '{"punto_venta": 9007, "clase": "nota_debito", "fecha": "2026-10-17", "fecha_vencimiento_pago": "2026-10-17",
+        "cliente_id": "c0000000-0000-0000-0000-000000000001", "condicion_pago": "contado",
+        "neto": 50, "iva": 10.5, "total": 60.5}'::jsonb,
+      '[{"descripcion": "Ajuste corregido", "cantidad": 1, "precio_unitario": 50, "descuento_pct": 0,
+         "alicuota_iva": 21, "importe": 50, "iva": 10.5}]'::jsonb
+    )$$,
+  'Un rechazado se puede corregir'
+);
+select results_eq(
+  $$select estado, arca_resultado, arca_errores from comprobante where id = (select id from borrador_rpc)$$,
+  $$values ('borrador'::text, null::text, null::jsonb)$$,
+  'Al corregir un rechazado vuelve a borrador sin los mensajes de ARCA'
+);
+
+select throws_ok(
+  $$select guardar_borrador_comprobante(
+      'a0000000-0000-0000-0000-000000000007',
+      '{"punto_venta": 9007, "clase": "factura", "fecha": "2026-10-16", "fecha_vencimiento_pago": "2026-10-16",
+        "cliente_id": "c0000000-0000-0000-0000-000000000001", "condicion_pago": "contado",
+        "neto": 0, "iva": 0, "total": 0}'::jsonb,
+      '[]'::jsonb
+    )$$,
+  'CM004', null, 'No se guarda como borrador un comprobante en verificación'
+);
+select throws_ok(
+  $$select guardar_borrador_comprobante(
+      'a0000000-0000-0000-0000-0000000000ff',
+      '{"punto_venta": 9007, "clase": "factura", "fecha": "2026-10-16", "fecha_vencimiento_pago": "2026-10-16",
+        "cliente_id": "c0000000-0000-0000-0000-000000000001", "condicion_pago": "contado",
+        "neto": 0, "iva": 0, "total": 0}'::jsonb,
+      '[]'::jsonb
+    )$$,
+  'CM006', null, 'Informa si el comprobante no existe'
+);
+select is(
+  (select ambiente from comprobante where id = guardar_borrador_comprobante(
+    null,
+    '{"punto_venta": 9099, "clase": "factura", "fecha": "2026-10-16", "fecha_vencimiento_pago": "2026-10-16",
+      "cliente_id": "c0000000-0000-0000-0000-000000000002", "condicion_pago": "cuenta_corriente",
+      "neto": 0, "iva": 0, "total": 0}'::jsonb,
+    '[]'::jsonb
+  )),
+  null,
+  'Un borrador de un punto de venta no electrónico no lleva ambiente'
+);
+
 reset role;
+
+select ok(
+  not has_function_privilege('anon', 'public.guardar_borrador_comprobante(uuid, jsonb, jsonb)', 'execute'),
+  'anon no ejecuta guardar_borrador_comprobante'
+);
+select ok(
+  has_function_privilege('authenticated', 'public.guardar_borrador_comprobante(uuid, jsonb, jsonb)', 'execute'),
+  'authenticated ejecuta guardar_borrador_comprobante'
+);
 
 select * from finish();
 rollback;

@@ -129,6 +129,18 @@ comprobante autorizado en un punto de venta electrónico activo.
 - El ticket de WSAA dura 12 horas y se reutiliza. Si ARCA responde que ya entregó uno que la
   app no guardó, hay que esperar a que venza.
 
+## Comprobantes de venta
+
+En **Ventas → Comprobantes** (`/comprobantes`) se cargan facturas y notas de débito como
+borradores y se autorizan en ARCA (CAE). El listado filtra por fechas, cliente, tipo, estado y
+ambiente (por defecto, el activo); los borradores van arriba.
+
+- Un borrador se guarda entero o no se guarda: la cabecera y los ítems van juntos en la función
+  `guardar_borrador_comprobante`. Los importes y totales se recalculan en el servidor.
+- "Autorizar en ARCA" guarda, muestra un resumen para confirmar y pide el CAE. Un comprobante
+  que quedó "verificando" (respuesta perdida) se verifica con ARCA antes de volver a pedirlo.
+- Un autorizado no se modifica ni se borra; se puede duplicar como borrador nuevo.
+
 ## Seguridad
 
 Todas las tablas tienen RLS activo. El rol `anon` no tiene acceso a nada; el rol `authenticated`

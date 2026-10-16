@@ -1,0 +1,265 @@
+import { describe, expect, it } from "vitest";
+import {
+  aDecimal,
+  alicuotaArca,
+  armarBorrador,
+  buscarProductos,
+  itemParaCalcular,
+  mapaPrecios,
+  mensajeErrorGuardado,
+  precioPropuesto,
+  vencimientoPara,
+  type BorradorEnviado,
+  type ProductoCatalogo,
+} from "./borrador";
+
+const CLIENTE = "c0000000-0000-0000-0000-000000000001";
+const PRODUCTO = "p0000000-0000-0000-0000-000000000001";
+const LISTA = "a0000000-0000-0000-0000-000000000001";
+
+const productos = new Map<string, ProductoCatalogo>([
+  [PRODUCTO, { id: PRODUCTO, codigo: "LON-01", nombre: "Lona cosechera", alicuota_iva: 21, unidad: "Docena" }],
+]);
+
+const enviado = (cambios: Partial<BorradorEnviado> = {}): BorradorEnviado => ({
+  clienteId: CLIENTE,
+  clase: "factura",
+  fecha: "2026-10-16",
+  fechaVencimientoPago: "2026-10-30",
+  condicionPago: "cuenta_corriente",
+  listaPrecioId: LISTA,
+  puntoVenta: 7,
+  observaciones: "  Entrega en planta ",
+  items: [
+    {
+      productoId: PRODUCTO,
+      descripcion: "lo que mande el navegador",
+      observaciones: "Color verde",
+      cantidad: "2",
+      precioUnitario: "1000,5",
+      descuentoPct: "10",
+      alicuotaIva: "10.5",
+    },
+    {
+      productoId: null,
+      descripcion: " Desarrollo de producto ",
+      observaciones: "",
+      cantidad: "1",
+      precioUnitario: "500",
+      descuentoPct: "",
+      alicuotaIva: "10.5",
+    },
+  ],
+  ...cambios,
+});
+
+const contexto = { productos, condicionIvaCliente: "Responsable Inscripto" as const };
+
+describe("aDecimal", () => {
+  it.each([
+    ["1,5", 1.5],
+    [" 2.25 ", 2.25],
+    ["0", 0],
+    [3, 3],
+    ["", null],
+    ["abc", null],
+    [null, null],
+  ])("%j → %j", (entrada, salida) => {
+    expect(aDecimal(entrada)).toBe(salida);
+  });
+});
+
+describe("vencimientoPara", () => {
+  it("con contado, el vencimiento es la fecha", () => {
+    expect(vencimientoPara("contado", "2026-10-16", "2026-11-30")).toBe("2026-10-16");
+  });
+  it("con cuenta corriente respeta el vencimiento elegido", () => {
+    expect(vencimientoPara("cuenta_corriente", "2026-10-16", "2026-11-30")).toBe("2026-11-30");
+  });
+  it("nunca queda antes de la fecha ni vacío", () => {
+    expect(vencimientoPara("cuenta_corriente", "2026-10-16", "2026-10-01")).toBe("2026-10-16");
+    expect(vencimientoPara("cuenta_corriente", "2026-10-16", "")).toBe("2026-10-16");
+  });
+});
+
+describe("precios de la lista", () => {
+  const mapa = mapaPrecios([
+    { producto_id: PRODUCTO, precio_final: "1234.5678" },
+    { producto_id: PRODUCTO, precio_final: 1 },
+    { producto_id: null, precio_final: 99 },
+  ]);
+
+  it("propone el precio final de la lista (el primero si el producto aparece dos veces)", () => {
+    expect(precioPropuesto(mapa, PRODUCTO)).toEqual({ precio: 1234.5678, enLista: true });
+  });
+
+  it("propone 0 si el producto no está en la lista", () => {
+    expect(precioPropuesto(mapa, "otro")).toEqual({ precio: 0, enLista: false });
+  });
+});
+
+describe("alicuotaArca", () => {
+  it("acepta sólo las alícuotas de ARCA", () => {
+    expect(alicuotaArca(10.5)).toBe(10.5);
+    expect(alicuotaArca("21")).toBe(21);
+    expect(alicuotaArca(19)).toBeNull();
+  });
+});
+
+describe("itemParaCalcular", () => {
+  it("convierte una fila de la pantalla para el cálculo en vivo", () => {
+    expect(itemParaCalcular(enviado().items[0])).toEqual({
+      cantidad: 2,
+      precioUnitario: 1000.5,
+      descuentoPct: 10,
+      alicuotaIva: 10.5,
+    });
+  });
+  it("devuelve null mientras la fila está incompleta", () => {
+    expect(itemParaCalcular({ ...enviado().items[0], cantidad: "" })).toBeNull();
+    expect(itemParaCalcular({ ...enviado().items[0], alicuotaIva: "19" })).toBeNull();
+  });
+});
+
+describe("armarBorrador", () => {
+  it("arma la cabecera y los ítems para guardar, con totales calculados en el servidor", () => {
+    const resultado = armarBorrador(enviado(), contexto);
+    expect(resultado).toEqual({
+      borrador: {
+        cabecera: {
+          punto_venta: 7,
+          clase: "factura",
+          letra: "A",
+          tipo_arca: 1,
+          fecha: "2026-10-16",
+          fecha_vencimiento_pago: "2026-10-30",
+          cliente_id: CLIENTE,
+          lista_precio_id: LISTA,
+          condicion_pago: "cuenta_corriente",
+          observaciones: "Entrega en planta",
+          neto: 2300.9,
+          iva: 430.69,
+          total: 2731.59,
+        },
+        items: [
+          {
+            producto_id: PRODUCTO,
+            codigo: "LON-01",
+            descripcion: "Lona cosechera",
+            observaciones: "Color verde",
+            unidad: "Docena",
+            cantidad: 2,
+            precio_unitario: 1000.5,
+            descuento_pct: 10,
+            alicuota_iva: 21,
+            importe: 1800.9,
+            iva: 378.19,
+          },
+          {
+            producto_id: null,
+            codigo: null,
+            descripcion: "Desarrollo de producto",
+            observaciones: null,
+            unidad: null,
+            cantidad: 1,
+            precio_unitario: 500,
+            descuento_pct: 0,
+            alicuota_iva: 10.5,
+            importe: 500,
+            iva: 52.5,
+          },
+        ],
+      },
+    });
+  });
+
+  it("con contado guarda el vencimiento igual a la fecha", () => {
+    const resultado = armarBorrador(enviado({ condicionPago: "contado" }), contexto);
+    expect("borrador" in resultado && resultado.borrador.cabecera.fecha_vencimiento_pago).toBe("2026-10-16");
+  });
+
+  it("sin condición IVA del cliente guarda el borrador sin letra", () => {
+    const resultado = armarBorrador(enviado(), { ...contexto, condicionIvaCliente: null });
+    expect("borrador" in resultado && resultado.borrador.cabecera).toMatchObject({ letra: null, tipo_arca: null });
+  });
+
+  it("un borrador puede no tener ítems todavía", () => {
+    const resultado = armarBorrador(enviado({ items: [] }), contexto);
+    expect("borrador" in resultado && resultado.borrador.cabecera.total).toBe(0);
+  });
+
+  it("junta todos los errores", () => {
+    const resultado = armarBorrador(
+      enviado({
+        clienteId: "",
+        fecha: "2026-02-30",
+        items: [
+          { ...enviado().items[1], descripcion: " ", cantidad: "0", precioUnitario: "-1", descuentoPct: "120" },
+          { ...enviado().items[0], productoId: "inexistente" },
+        ],
+      }),
+      contexto,
+    );
+    expect(resultado).toEqual({
+      errores: [
+        "Elegí el cliente.",
+        "La fecha del comprobante no es válida.",
+        "Ítem 1: completá la descripción.",
+        "Ítem 1: la cantidad tiene que ser mayor a cero.",
+        "Ítem 1: el precio no puede ser negativo.",
+        "Ítem 1: el descuento tiene que estar entre 0 y 100.",
+        "Ítem 2: el producto ya no existe.",
+      ],
+    });
+  });
+
+  it("rechaza un producto con una alícuota que ARCA no acepta", () => {
+    const raros = new Map(productos);
+    raros.set(PRODUCTO, { ...productos.get(PRODUCTO)!, alicuota_iva: 19 });
+    expect(armarBorrador(enviado({ items: [enviado().items[0]] }), { ...contexto, productos: raros })).toEqual({
+      errores: ["Ítem 1: el producto LON-01 tiene una alícuota de IVA (19%) que ARCA no acepta. Corregila en el producto."],
+    });
+  });
+
+  it("rechaza datos que no son un borrador", () => {
+    expect(armarBorrador(null, contexto)).toEqual({ errores: ["Los datos del comprobante no son válidos."] });
+  });
+});
+
+describe("mensajeErrorGuardado", () => {
+  it.each([
+    ["CM004", "El comprobante ya no es un borrador: no se puede modificar. Recargá la página."],
+    ["CM001", "El comprobante está autorizado: no se puede modificar. Para corregirlo, emití una nota de crédito."],
+    ["CM006", "No se encontró el comprobante. Puede que lo hayan borrado."],
+    ["23503", "El cliente, la lista de precios o el punto de venta ya no existen. Recargá la página."],
+  ])("traduce %s", (code, mensaje) => {
+    expect(mensajeErrorGuardado({ code, message: "x" })).toBe(mensaje);
+  });
+
+  it("deja el resto con el mensaje de la base", () => {
+    expect(mensajeErrorGuardado({ code: "XX000", message: "algo" })).toBe("No se pudo guardar el comprobante: algo");
+  });
+});
+
+describe("buscarProductos", () => {
+  const catalogo = [
+    { codigo: "COR-02", nombre: "Correa reforzada" },
+    { codigo: "LON-01", nombre: "Lona cosechera" },
+    { codigo: "MAL-01", nombre: "Malla antigranizo con lona" },
+  ];
+
+  it("busca por código o nombre, sin acentos ni mayúsculas, con todas las palabras", () => {
+    expect(buscarProductos(catalogo, "LONA").map((p) => p.codigo)).toEqual(["LON-01", "MAL-01"]);
+    expect(buscarProductos(catalogo, "malla lona").map((p) => p.codigo)).toEqual(["MAL-01"]);
+    expect(buscarProductos(catalogo, "cosechéra").map((p) => p.codigo)).toEqual(["LON-01"]);
+  });
+
+  it("pone primero los que empiezan con el texto en el código", () => {
+    expect(buscarProductos(catalogo, "l").map((p) => p.codigo)[0]).toBe("LON-01");
+  });
+
+  it("sin texto no devuelve nada y respeta el límite", () => {
+    expect(buscarProductos(catalogo, "  ")).toEqual([]);
+    expect(buscarProductos(catalogo, "o", 2)).toHaveLength(2);
+  });
+});

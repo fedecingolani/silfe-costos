@@ -261,7 +261,7 @@ Menú **Ventas → Comprobantes**.
 | T1 | Migraciones `comprobante`, `comprobante_item`, `comprobante_asociado`, campos nuevos del emisor, triggers de inmutabilidad y RLS (pgTAP en rojo primero) | delegada (writer) | [x] |
 | T2 | `src/lib/comprobantes/`: letra/tipo, cálculo de totales e IVA por alícuota, armado y parseo de `FECAESolicitar`, `FECompConsultar`, QR. Extraer el `AlmacenTicket` de Supabase a un módulo compartido (Vitest) | delegada (writer) | [x] |
 | T3 | Autorización: bloqueo por punto de venta y tipo, último + 1, reintento correlativo, estado `verificando` y reconciliación | delegada (writer) | [x] |
-| T4 | Pantallas: listado, alta/edición de borrador y detalle | delegada (writer) | [ ] |
+| T4 | Pantallas: listado, alta/edición de borrador y detalle | delegada (writer) | [x] |
 | T5 | Impresión: PDF completo con QR para comprobantes electrónicos | delegada (writer) | [ ] |
 | T6 | Notas de crédito/débito con comprobante asociado | delegada (writer) | [ ] |
 | T7 | Recorrido en homologación: Factura A, Factura B, NC parcial, rechazo de ARCA y respuesta perdida simulada | orquestador | [ ] |
@@ -351,7 +351,7 @@ Menú **Ventas → Comprobantes**.
     "respuesta incierta, apretá «Autorizar» de nuevo" que la emisión;
   - un asociado cargado a mano con datos nulos se convertía en `NaN`. `asociadoManual` (`src/lib/comprobantes/asociados.ts`)
     valida tipo, punto de venta, número, fecha y CUIT y devuelve un error legible antes de tocar ARCA.
-  - RED observado (1 test de `autorizar`, módulo `asociados` inexistente) y luego GREEN.
+  - RED observado (1 test de `autorizar`, módulo `asociados` inexistente) y luego GREEN. Commit `c19e0aa`.
 
 - T4, unidad B (delegada, writer): puntos de venta y datos del emisor en `/configuracion/arca`.
   - Migración `20261024000004_puntos_venta_emisor.sql`: vuelve a copiar `arca_emisor.punto_venta` a `punto_venta`
@@ -360,8 +360,30 @@ Menú **Ventas → Comprobantes**.
   - Tarjeta "Puntos de venta": listado, alta (número, nombre, electrónico), activar/desactivar y borrar (la clave
     foránea lo impide si tiene comprobantes; se informa que hay que desactivarlo).
   - "Probar conexión" usa el electrónico activo de número más bajo, con un select si hay varios; sin ninguno, avisa.
-  - RED observado en `arca_configuracion_test.sql` (3 fallas: columna todavía presente) y luego GREEN.
+  - RED observado en `arca_configuracion_test.sql` (3 fallas: columna todavía presente) y luego GREEN. Commit `7929b5d`.
+
+- T4, unidad C (delegada, writer): pantallas de `/comprobantes`.
+  - Guardado atómico con la función `guardar_borrador_comprobante(p_id, p_comprobante, p_items)` (security invoker,
+    sólo `authenticated`), agregada a `20261024000004_puntos_venta_emisor.sql` porque era la única migración dentro de
+    la superficie autorizada. Crea o actualiza, reemplaza los ítems, toma el ambiente activo del emisor al crear en un
+    punto de venta electrónico (y lo conserva al actualizar), pasa un rechazado a borrador limpiando los mensajes de
+    ARCA. Errores: CM004 (ya no es borrador), CM005 (punto de venta inexistente), CM006 (comprobante inexistente; P0002
+    llega de PostgREST como un 500 sin cuerpo).
+  - Lógica pura con Vitest: `borrador.ts` (lectura y validación de lo enviado, importes y totales en el servidor,
+    vencimiento según condición de pago, precio de la lista, buscador de productos, mensajes de error) y `listado.ts`
+    (filtros de la URL, orden con borradores arriba, nombres y número visible).
+  - Acciones: `guardarBorrador`, `borrarBorrador`, `duplicarComprobante` (fecha de hoy, mismo cliente, cabecera e
+    ítems), `buscarClientes` (reusa `filtroBusquedaClientes`), `preciosDeLista`; `autorizarComprobante` ahora
+    devuelve también el estado.
+  - Pantallas: listado con filtros y aviso de homologación; editor de borrador/rechazado (cliente, clase, fecha,
+    vencimiento, condición, lista, punto de venta, observaciones, ítems de producto o libres con cálculo en vivo,
+    totales por alícuota, guardar, autorizar con confirmación, borrar y duplicar); detalle de autorizado/verificando
+    con "Verificar con ARCA", "Duplicar" y lugares reservados (deshabilitados) para PDF (T5) y nota de crédito (T6).
+    Menú Ventas → Comprobantes.
+  - RED observado (pgTAP de la función: 12 fallas; módulos `borrador` y `listado` inexistentes) y luego GREEN.
+  - Sin prueba automática de las pantallas: se verificaron las consultas contra la base local con un JWT de
+    `authenticated` firmado localmente y el arranque con `next dev` (307 a /login, sin 500).
 
 ## Próximo paso
 
-T4: pantallas (listado, alta/edición de borrador y detalle) usando `autorizarComprobante`.
+T5: PDF del comprobante autorizado con QR, CAE y los datos del emisor (domicilio, IIBB, inicio de actividades).
