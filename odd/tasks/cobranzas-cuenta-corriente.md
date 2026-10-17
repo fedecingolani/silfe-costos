@@ -184,7 +184,7 @@ corriente** de cada cliente y administrar la **cartera de cheques** recibidos.
 | ID | Tarea | Ruta | Estado |
 | --- | --- | --- | --- |
 | T1 | Comprobantes: ítem no gravado (`ImpTotConc`), `PeriodoAsoc`, PDF y tests | delegada (writer) | [x] |
-| T2 | Esquema: recibo, medios, cheque, historial, imputación, vistas de saldo y cuenta corriente, inmutabilidad y RLS (pgTAP en rojo primero) | delegada (writer) | [ ] |
+| T2 | Esquema: recibo, medios, cheque, historial, imputación, vistas de saldo y cuenta corriente, inmutabilidad y RLS (pgTAP en rojo primero) | delegada (writer) | [x] |
 | T3 | Lógica pura: validación de recibo, imputación, saldo a favor y transiciones de cheques (Vitest) | delegada (writer) | [ ] |
 | T4 | Cobranza de cuenta corriente y pago de contado: pantallas y acciones, emisión con número | delegada (writer) | [ ] |
 | T5 | Saldo a favor automático al autorizar, imputación de NC y estado de pago en comprobantes | delegada (writer) | [ ] |
@@ -217,9 +217,50 @@ corriente** de cada cliente y administrar la **cartera de cheques** recibidos.
   `supabase migration up --local` + `supabase test db` 399 ok; `supabase db reset --local` +
   `supabase test db` 399 ok. Datos locales de prueba restaurados después del reset.
 
+### T2 — Esquema de cobranzas (17/10/2026)
+
+- Commit: feat(cobranzas): recibos, cheques, imputaciones y vistas de cuenta corriente. Migraciones
+  `20261026000001_cobranzas.sql` y `20261026000002_rls_cobranzas.sql` (sólo local; falta `db push`).
+  Tests `supabase/tests/cobranzas_test.sql` (148, en rojo antes de la migración).
+- **Numeración:** tabla `recibo_punto_venta (numero, nombre, activo, ultimo_numero)`, con el 1 creado.
+  `emitir_recibo(id)` (security invoker) bloquea el contador con `select … for update`, lo avanza y emite
+  en la misma transacción: si la emisión falla se deshace todo, sin huecos. El trigger exige que el número
+  emitido sea el recién tomado del contador (CB014). `recibo.numero_texto` = `R-00001-00000001`.
+- **Emisión** (trigger, vale para SQL directo): al menos un medio (CB003), total = suma de medios (CB004),
+  cada cheque con su medio del mismo tipo e importe (CB012), imputaciones ≤ total (CB005) y ≤ saldo de cada
+  débito, con el débito bloqueado (CB006), mismo cliente (CB008). Pago de contado: total exacto del
+  comprobante y una única imputación a él (CB015).
+- **Débitos:** facturas y ND autorizadas de producción o no electrónicas (`fn_es_debito_cc`). Homologación
+  no recibe imputaciones (CB007) ni aparece en las vistas.
+- **Imputaciones:** origen recibo o nota de crédito (exactamente uno). Una imputación cuenta si su recibo
+  está emitido o si sale de una NC; las de un borrador sólo cuentan para el tope de ese recibo. A un recibo
+  emitido sólo se le agregan imputaciones automáticas (saldo a favor); nunca a un débito de contado (CB015).
+  Las de NC no se modifican ni se borran.
+- **Notas de crédito en las vistas:** una NC autorizada (producción o no electrónica) va siempre por su total
+  al haber de la cuenta corriente; lo que imputa baja el saldo de ese débito y el resto queda a favor
+  (`v_cliente_saldo_a_favor`). Así `saldo = pendientes − a favor` se cumple siempre (test).
+- **Cheques:** en_cartera → depositado | entregado | rechazado; depositado/entregado → rechazado (CB009).
+  Entregado exige `entregado_a`; rechazado exige `nd_comprobante_id` (una ND del mismo cliente, CB018). Con
+  el recibo emitido sólo cambia el estado (CB017). Cada alta y cambio de estado escribe `cheque_estado`
+  (trigger) con `estado_fecha` y `estado_observacion` del cheque; el historial no se modifica ni se borra
+  (CB011).
+- **Anulación** `anular_recibo(id, motivo)`: sólo emitido (CB002), con motivo (CB019) y todos sus cheques en
+  cartera (CB010). Un trigger posterior borra **todas** sus imputaciones (también las automáticas: los
+  débitos vuelven a pendientes, como dice la spec) y pasa sus cheques al estado **anulado** (sale de la
+  cartera, queda en el historial). El número no se reutiliza; los medios se conservan. Un recibo anulado no
+  aparece en la cuenta corriente.
+- **Vistas** (security invoker): `v_comprobante_saldo`, `v_cliente_saldo_a_favor`, `v_cuenta_corriente`
+  (orden fecha, creado_en, id; saldo acumulado por cliente) y `v_cliente_saldo` (todos los clientes; debe,
+  haber, saldo, deuda pendiente, a favor y fecha del pendiente más viejo).
+- Tamaño: ~1100 líneas de SQL más 830 de tests, por encima de las 400 orientativas: las reglas de la spec son
+  muchas y cada una lleva su trigger y su test; partirlo dejaría un esquema a medias.
+- Checks: `supabase migration up --local` ok; `supabase test db` 547, falla sólo `arca_configuracion_test` 26
+  (conocida: hay una credencial de homologación local); `supabase db reset --local` + `supabase test db`
+  547 ok. Datos locales restaurados (el volcado ahora resuelve `producto_id` por código).
+
 ## Próximo paso
 
-- T2: esquema de recibo, medios, cheque, historial, imputación y vistas de saldo (pgTAP en rojo primero).
+- T3: lógica pura de recibo, imputación, saldo a favor y cheques (Vitest en rojo primero).
 
 ## Criterios de aceptación
 
