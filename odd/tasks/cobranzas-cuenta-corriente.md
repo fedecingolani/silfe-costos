@@ -261,7 +261,7 @@ corriente** de cada cliente y administrar la **cartera de cheques** recibidos.
 ### T3 — Lógica pura de cobranzas (17/10/2026)
 
 - Commit: feat(cobranzas): validación de recibos, imputación, saldo a favor y transiciones de cheques
-  (hash en el próximo commit de documentación). Vitest en rojo primero (4 archivos sin implementación).
+  `ae49bc4`. Vitest en rojo primero (4 archivos sin implementación).
 - `src/lib/cobranzas/dinero.ts`: centavos enteros (`aCentavos`, `aPesos`, `sumarPesos`, `textoPesos`). Los
   helpers de `comprobantes/calculo.ts` son privados y trabajan con 4 decimales y BigInt; para sumar importes
   de 2 decimales alcanza con centavos enteros (mismo criterio que `saldoNotaCredito`).
