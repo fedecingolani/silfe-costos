@@ -487,6 +487,7 @@ Menú **Ventas → Comprobantes**.
   - Checks: `npm test` (449), `npm run typecheck`, `npm run lint`, `npm run build`, `supabase migration up --local` y
     `supabase test db` (380) en verde.
 - Revisión nativa de las correcciones de T6 (a1c32f5): aprobada con 2 sugerencias. Corregida: si el asociado de la base desaparece entre la carga y el bloqueo, la nota de crédito se frena (antes seguía a ARCA sin control de saldo); test en rojo primero. Pendiente (sugerencia): pgTAP de pasar a `factura` una nota con asociados guardados y de la derivación del ambiente con `p_asociados` null.
+- T7 parcial (16/10), sin ARCA: `wswhomo.afip.gov.ar` (WSFE homologación) corta las conexiones desde la Mac y desde Cloudflare (520); WSAA homologación y WSFE producción responden. Recorrido de pantallas en local OK: buscador de clientes, letra A/B, precio desde la lista, cálculo por ítem y por alícuota, guardar borrador, validación de fecha, falla de ARCA antes del CAE (queda borrador, bloqueo liberado, ticket guardado), Contado fija el vencimiento, borrar borrador, detalle de autorizado (simulado por SQL con CAE de prueba), PDF 200, nota de crédito con letra heredada y tope de saldo, duplicar. Corregido en de07b13: el modal de confirmación ya no aparece si la pantalla sabe que la autorización va a fallar, y el buscador muestra "Buscando…" en vez de "ningún cliente" mientras espera. Pendiente: CAE real, rechazo de ARCA y respuesta perdida, cuando vuelva WSFE homologación. Detalle visual: en anchos angostos la tabla de ítems se desborda.
 
 ## Próximo paso
 
