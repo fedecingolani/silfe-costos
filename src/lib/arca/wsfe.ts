@@ -114,6 +114,9 @@ export type AsociadoSolicitud = {
   fecha?: string;
 };
 
+/** Período asociado de una nota (PeriodoAsoc), en lugar de CbtesAsoc. Fechas yyyy-mm-dd. */
+export type PeriodoSolicitud = { desde: string; hasta: string };
+
 export type SolicitudCae = {
   puntoVenta: number;
   tipoComprobante: number;
@@ -136,6 +139,8 @@ export type SolicitudCae = {
    */
   alicuotas: readonly AlicuotaSolicitud[];
   asociados?: readonly AsociadoSolicitud[];
+  /** Período asociado de una nota. Excluyente con asociados. */
+  periodo?: PeriodoSolicitud;
 };
 
 export type MensajeWsfe = { code: number; msg: string };
@@ -203,9 +208,18 @@ function armarAsociados(asociados: readonly AsociadoSolicitud[] | undefined): st
   return `<CbtesAsoc>${filas.join("")}</CbtesAsoc>`;
 }
 
+function armarPeriodo(periodo: PeriodoSolicitud | undefined): string {
+  if (!periodo) return "";
+  return (
+    `<PeriodoAsoc><FchDesde>${fechaWsfe(periodo.desde)}</FchDesde>` +
+    `<FchHasta>${fechaWsfe(periodo.hasta)}</FchHasta></PeriodoAsoc>`
+  );
+}
+
 /**
  * Pide el CAE de un comprobante. El orden de los elementos sigue el WSDL de
- * FECAEDetRequest. Un rechazo de ARCA (Resultado R, Observaciones o Errors)
+ * FECAEDetRequest (… CbtesAsoc, Tributos, Iva, Opcionales, Compradores,
+ * PeriodoAsoc, Actividades). Un rechazo de ARCA (Resultado R, Observaciones o Errors)
  * no se lanza: se devuelve para guardarlo tal cual en el comprobante.
  */
 export async function feCAESolicitar(
@@ -215,6 +229,10 @@ export async function feCAESolicitar(
   solicitud: SolicitudCae,
 ): Promise<RespuestaCae> {
   const s = solicitud;
+  // ARCA admite los dos (10197), pero la app asocia una nota a una cosa o a la otra.
+  if (s.periodo && s.asociados && s.asociados.length > 0) {
+    throw new Error("Una nota se asocia a comprobantes o a un período, no a los dos.");
+  }
   const iva = s.alicuotas
     .map((a) => `<AlicIva><Id>${a.id}</Id><BaseImp>${importe(a.base)}</BaseImp><Importe>${importe(a.importe)}</Importe></AlicIva>`)
     .join("");
@@ -225,7 +243,8 @@ export async function feCAESolicitar(
     `<ImpOpEx>0.00</ImpOpEx><ImpTrib>0.00</ImpTrib><ImpIVA>${importe(s.iva)}</ImpIVA>` +
     `<MonId>PES</MonId><MonCotiz>1</MonCotiz><CondicionIVAReceptorId>${s.condicionIvaReceptorId}</CondicionIVAReceptorId>` +
     armarAsociados(s.asociados) +
-    (iva ? `<Iva>${iva}</Iva>` : "");
+    (iva ? `<Iva>${iva}</Iva>` : "") +
+    armarPeriodo(s.periodo);
 
   const resultado = await llamar(
     fetchArca,

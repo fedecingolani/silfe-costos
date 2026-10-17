@@ -256,11 +256,12 @@ export async function generarPdfComprobante(datos: DatosPdfComprobante, logoPng?
       Y_RECEPTOR,
     );
     etiquetaValor(pagina, "Cond. IVA:", datos.receptor.condicionIva, X_RECEPTOR_DERECHA, Y_RECEPTOR - 12);
-    if (datos.asociados.length > 0) {
-      // Notas de crédito y débito: el comprobante asociado, achicado si no entra en la columna.
-      const etiqueta = "Comprobante asociado:";
+    if (datos.asociados.length > 0 || datos.periodoAsociado) {
+      // Notas de crédito y débito: el comprobante (o el período) asociado, achicado si no entra en la columna.
+      const etiqueta = datos.periodoAsociado ? "Período asociado:" : "Comprobante asociado:";
       const valor =
-        datos.asociados.length > 1 ? `${datos.asociados[0]} y ${datos.asociados.length - 1} más` : datos.asociados[0];
+        datos.periodoAsociado ??
+        (datos.asociados.length > 1 ? `${datos.asociados[0]} y ${datos.asociados.length - 1} más` : datos.asociados[0]);
       let tamano = 8;
       const ancho = (t: number) =>
         negrita.widthOfTextAtSize(sanear(etiqueta), t) + 3 + normal.widthOfTextAtSize(sanear(valor), t);

@@ -11,6 +11,7 @@ import {
   saldoNotaCredito,
   textoAsociado,
   validarAsociadosNota,
+  validarPeriodoAsociado,
 } from "./asociados";
 
 const completo = { tipo_arca: 1, punto_venta: 7, numero: 157, fecha: "2026-09-30", cuit: "23334771229" };
@@ -83,7 +84,7 @@ describe("notasPermitidas", () => {
 describe("validarAsociadosNota", () => {
   it("exige al menos un comprobante asociado en una nota de crédito o de débito", () => {
     expect(validarAsociadosNota("nota_credito", [])).toEqual({
-      error: "Una nota de crédito necesita el comprobante asociado (la factura que corrige).",
+      error: "Una nota de crédito necesita el comprobante asociado (la factura que corrige) o el período asociado.",
     });
     expect(validarAsociadosNota("nota_debito", [])).toHaveProperty("error");
   });
@@ -239,5 +240,48 @@ describe("CbtesAsoc en el pedido a ARCA", () => {
         "<CbteAsoc><Tipo>6</Tipo><PtoVta>7</PtoVta><Nro>150</Nro><Cuit>23334771229</Cuit><CbteFch>20260109</CbteFch></CbteAsoc>" +
         "</CbtesAsoc>",
     );
+  });
+});
+
+describe("nota asociada a un período (PeriodoAsoc)", () => {
+  const periodo = { desde: "2026-10-01", hasta: "2026-10-15" };
+
+  it("una nota con período y sin comprobantes asociados es válida y toma la letra del cliente", () => {
+    expect(validarAsociadosNota("nota_debito", [], periodo)).toEqual({ letra: null });
+    expect(validarAsociadosNota("nota_credito", [], periodo)).toEqual({ letra: null });
+  });
+
+  it("una nota se asocia a comprobantes o a un período, no a los dos", () => {
+    expect(validarAsociadosNota("nota_debito", [1], periodo)).toEqual({
+      error: "Una nota se asocia a comprobantes o a un período, no a los dos.",
+    });
+  });
+
+  it("una factura no lleva período asociado", () => {
+    expect(validarAsociadosNota("factura", [], periodo)).toEqual({ error: "Una factura no lleva período asociado." });
+  });
+
+  it("sin comprobante ni período, la nota pide alguno de los dos", () => {
+    expect(validarAsociadosNota("nota_debito", [], null)).toEqual({
+      error: "Una nota de débito necesita el comprobante asociado (la factura que ajusta) o el período asociado.",
+    });
+  });
+
+  it("valida el período con las reglas de ARCA", () => {
+    expect(validarPeriodoAsociado(periodo, "2026-10-18")).toEqual([]);
+    expect(validarPeriodoAsociado({ desde: "2026-10-15", hasta: "2026-10-01" }, "2026-10-18")).toEqual([
+      "Período asociado: el desde no puede ser posterior al hasta.",
+    ]);
+    // 10209: desde y hasta del mismo mes.
+    expect(validarPeriodoAsociado({ desde: "2026-09-20", hasta: "2026-10-05" }, "2026-10-18")).toEqual([
+      "Período asociado: el desde y el hasta tienen que ser del mismo mes.",
+    ]);
+    // 10208: el hasta no es posterior a la fecha de la nota.
+    expect(validarPeriodoAsociado({ desde: "2026-10-01", hasta: "2026-10-20" }, "2026-10-18")).toEqual([
+      "Período asociado: el hasta no puede ser posterior a la fecha de la nota.",
+    ]);
+    expect(validarPeriodoAsociado({ desde: "", hasta: "2026-02-30" }, "2026-10-18")).toEqual([
+      "Período asociado: completá el desde y el hasta.",
+    ]);
   });
 });

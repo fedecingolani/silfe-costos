@@ -180,7 +180,7 @@ export async function borrarBorrador(id: string): Promise<EstadoAccionComprobant
 
 /**
  * Crea un borrador nuevo con el mismo cliente, la misma cabecera, los mismos
- * ítems y los mismos comprobantes asociados, con fecha de hoy. Sirve para
+ * ítems y los mismos comprobantes (o período) asociados, con fecha de hoy. Sirve para
  * cualquier estado. Si el punto de venta se desactivó, usa el electrónico
  * activo de número más bajo.
  */
@@ -192,7 +192,7 @@ export async function duplicarComprobante(id: string): Promise<EstadoAccionCompr
       supabase
         .from("comprobante")
         .select(
-          "punto_venta, clase, letra, tipo_arca, cliente_id, lista_precio_id, condicion_pago, observaciones, neto, no_gravado, iva, total",
+          "punto_venta, clase, letra, tipo_arca, cliente_id, lista_precio_id, condicion_pago, observaciones, periodo_asoc_desde, periodo_asoc_hasta, neto, no_gravado, iva, total",
         )
         .eq("id", id)
         .maybeSingle(),
@@ -229,6 +229,8 @@ export async function duplicarComprobante(id: string): Promise<EstadoAccionCompr
       lista_precio_id: c.lista_precio_id,
       condicion_pago: c.condicion_pago,
       observaciones: c.observaciones,
+      periodo_asoc_desde: c.periodo_asoc_desde,
+      periodo_asoc_hasta: c.periodo_asoc_hasta,
       neto: c.neto,
       no_gravado: c.no_gravado,
       iva: c.iva,

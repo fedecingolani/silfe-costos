@@ -13,7 +13,9 @@ import {
   TIPOS_ASOCIADO_MANUAL,
   letraDeTipoArca,
   nombreTipoArca,
+  validarPeriodoAsociado,
   type AsociadoManualEnviado,
+  type PeriodoAsociado,
 } from "@/lib/comprobantes/asociados";
 import {
   buscarProductos,
@@ -69,6 +71,8 @@ export type ComprobanteEditable = {
   observaciones: string | null;
   ambiente: AmbienteArca | null;
   cliente: ClienteEncontrado;
+  /** Período asociado de una nota sin asociado de la base (PeriodoAsoc). */
+  periodo?: PeriodoAsociado | null;
   /** Comprobante asociado de una nota: de la base (lo puso "Generar nota") o cargado a mano. */
   asociado?: {
     interno: {
@@ -159,6 +163,9 @@ export function EditorComprobante({
     numero: manualGuardado?.numero ? String(manualGuardado.numero) : "",
     fecha: manualGuardado?.fecha ?? "",
   });
+  // Una nota sin asociado de la base se asocia a un comprobante cargado a mano o a un período.
+  const [asociarA, setAsociarA] = useState<"comprobante" | "periodo">(comprobante?.periodo ? "periodo" : "comprobante");
+  const [periodo, setPeriodo] = useState<PeriodoAsociado>(comprobante?.periodo ?? { desde: "", hasta: "" });
   const [masOpciones, setMasOpciones] = useState(Boolean(comprobante?.observaciones));
   const [precios, setPrecios] = useState(() => mapaPrecios(preciosIniciales));
   const [filas, setFilas] = useState<Fila[]>(() =>
@@ -194,9 +201,10 @@ export function EditorComprobante({
 
   // Una nota lleva la letra de su asociado (ARCA exige la misma), no la de la condición IVA actual del cliente.
   const esNota = clase !== "factura";
-  const letraAsociado: LetraComprobante | null = esNota
-    ? (interno?.letra ?? letraDeTipoArca(manual.tipoArca || null))
-    : null;
+  const porPeriodo = esNota && !interno && asociarA === "periodo";
+  // Con un período no hay asociado del que heredar: va la letra del cliente.
+  const letraAsociado: LetraComprobante | null =
+    esNota && !porPeriodo ? (interno?.letra ?? letraDeTipoArca(manual.tipoArca || null)) : null;
   let letra: string | null = null;
   const avisos: string[] = [];
   if (cliente && !cliente.condicion_iva) {
@@ -270,7 +278,8 @@ export function EditorComprobante({
       listaPrecioId: listaId,
       puntoVenta: puntoVenta ?? "",
       observaciones,
-      asociadoManual: esNota && !interno ? manual : null,
+      asociadoManual: esNota && !interno && !porPeriodo ? manual : null,
+      periodoAsociado: porPeriodo ? periodo : null,
       items: filas.map((f) => ({
         productoId: f.productoId,
         descripcion: f.descripcion,
@@ -305,6 +314,7 @@ export function EditorComprobante({
       hoy,
     );
     if (calculables.some((c) => c === null)) problemas.push("Hay ítems incompletos: revisá cantidad, precio y alícuota.");
+    if (porPeriodo) problemas.push(...validarPeriodoAsociado(periodo, fecha));
     if (superaSaldo && interno?.saldo != null) {
       problemas.push(`La nota de crédito supera el saldo disponible (${pesos(interno.saldo)}).`);
     }
@@ -555,7 +565,7 @@ export function EditorComprobante({
           descripcion={
             interno
               ? "La nota lleva la letra de este comprobante."
-              : "Para notas sobre comprobantes del sistema anterior: se informan a ARCA con la CUIT del emisor."
+              : "Un comprobante del sistema anterior (se informa a ARCA con la CUIT del emisor) o un período."
           }
         >
           {interno ? (
@@ -573,66 +583,123 @@ export function EditorComprobante({
               )}
             </div>
           ) : (
-            <div className="grid gap-3 p-4 sm:grid-cols-4">
-              <div>
-                <label className="etiqueta" htmlFor="asociado-tipo">
-                  Tipo *
-                </label>
-                <select
-                  id="asociado-tipo"
-                  value={manual.tipoArca}
-                  onChange={(e) => setManual((m) => ({ ...m, tipoArca: e.target.value }))}
-                  className="campo"
-                >
-                  <option value="">Elegí…</option>
-                  {TIPOS_ASOCIADO_MANUAL[clase as "nota_credito" | "nota_debito"].map((t) => (
-                    <option key={t} value={String(t)}>
-                      {nombreTipoArca(t)}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="etiqueta" htmlFor="asociado-punto-venta">
-                  Punto de venta *
-                </label>
-                <input
-                  id="asociado-punto-venta"
-                  inputMode="numeric"
-                  value={manual.puntoVenta}
-                  onChange={(e) => setManual((m) => ({ ...m, puntoVenta: e.target.value }))}
-                  className="campo"
-                />
-              </div>
-              <div>
-                <label className="etiqueta" htmlFor="asociado-numero">
-                  Número *
-                </label>
-                <input
-                  id="asociado-numero"
-                  inputMode="numeric"
-                  value={manual.numero}
-                  onChange={(e) => setManual((m) => ({ ...m, numero: e.target.value }))}
-                  className="campo"
-                />
-              </div>
-              <div>
-                <label className="etiqueta" htmlFor="asociado-fecha">
-                  Fecha *
-                </label>
-                <input
-                  id="asociado-fecha"
-                  type="date"
-                  value={manual.fecha}
-                  max={fecha}
-                  onChange={(e) => setManual((m) => ({ ...m, fecha: e.target.value }))}
-                  className="campo"
-                />
-              </div>
-              <p className="text-xs text-stone-500 sm:col-span-4">
-                Sin control de importe: el comprobante no está en la base, así que no se sabe cuánto queda por
-                acreditar. Revisá que la nota no supere el comprobante original.
-              </p>
+            <div className="space-y-3 p-4">
+              <fieldset className="flex flex-wrap gap-4 text-sm">
+                <legend className="sr-only">Asociar la nota a</legend>
+                {(
+                  [
+                    ["comprobante", "Comprobante"],
+                    ["periodo", "Período"],
+                  ] as const
+                ).map(([valor, texto]) => (
+                  <label key={valor} className="flex items-center gap-1.5">
+                    <input
+                      type="radio"
+                      name="asociar-a"
+                      value={valor}
+                      checked={asociarA === valor}
+                      onChange={() => setAsociarA(valor)}
+                    />
+                    {texto}
+                  </label>
+                ))}
+              </fieldset>
+              {asociarA === "periodo" ? (
+                <div className="grid gap-3 sm:grid-cols-4">
+                  <div>
+                    <label className="etiqueta" htmlFor="periodo-desde">
+                      Desde *
+                    </label>
+                    <input
+                      id="periodo-desde"
+                      type="date"
+                      value={periodo.desde}
+                      max={fecha}
+                      onChange={(e) => setPeriodo((p) => ({ ...p, desde: e.target.value }))}
+                      className="campo"
+                    />
+                  </div>
+                  <div>
+                    <label className="etiqueta" htmlFor="periodo-hasta">
+                      Hasta *
+                    </label>
+                    <input
+                      id="periodo-hasta"
+                      type="date"
+                      value={periodo.hasta}
+                      max={fecha}
+                      onChange={(e) => setPeriodo((p) => ({ ...p, hasta: e.target.value }))}
+                      className="campo"
+                    />
+                  </div>
+                  <p className="text-xs text-stone-500 sm:col-span-4">
+                    ARCA pide que el desde y el hasta sean del mismo mes y que el hasta no sea posterior a la fecha de
+                    la nota. La letra sale de la condición IVA del cliente.
+                  </p>
+                </div>
+              ) : (
+                <div className="grid gap-3 sm:grid-cols-4">
+                  <div>
+                    <label className="etiqueta" htmlFor="asociado-tipo">
+                      Tipo *
+                    </label>
+                    <select
+                      id="asociado-tipo"
+                      value={manual.tipoArca}
+                      onChange={(e) => setManual((m) => ({ ...m, tipoArca: e.target.value }))}
+                      className="campo"
+                    >
+                      <option value="">Elegí…</option>
+                      {TIPOS_ASOCIADO_MANUAL[clase as "nota_credito" | "nota_debito"].map((t) => (
+                        <option key={t} value={String(t)}>
+                          {nombreTipoArca(t)}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="etiqueta" htmlFor="asociado-punto-venta">
+                      Punto de venta *
+                    </label>
+                    <input
+                      id="asociado-punto-venta"
+                      inputMode="numeric"
+                      value={manual.puntoVenta}
+                      onChange={(e) => setManual((m) => ({ ...m, puntoVenta: e.target.value }))}
+                      className="campo"
+                    />
+                  </div>
+                  <div>
+                    <label className="etiqueta" htmlFor="asociado-numero">
+                      Número *
+                    </label>
+                    <input
+                      id="asociado-numero"
+                      inputMode="numeric"
+                      value={manual.numero}
+                      onChange={(e) => setManual((m) => ({ ...m, numero: e.target.value }))}
+                      className="campo"
+                    />
+                  </div>
+                  <div>
+                    <label className="etiqueta" htmlFor="asociado-fecha">
+                      Fecha *
+                    </label>
+                    <input
+                      id="asociado-fecha"
+                      type="date"
+                      value={manual.fecha}
+                      max={fecha}
+                      onChange={(e) => setManual((m) => ({ ...m, fecha: e.target.value }))}
+                      className="campo"
+                    />
+                  </div>
+                  <p className="text-xs text-stone-500 sm:col-span-4">
+                    Sin control de importe: el comprobante no está en la base, así que no se sabe cuánto queda por
+                    acreditar. Revisá que la nota no supere el comprobante original.
+                  </p>
+                </div>
+              )}
             </div>
           )}
         </Tarjeta>

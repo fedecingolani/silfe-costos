@@ -7,9 +7,11 @@
  * Flujo (borrador o rechazado):
  *  1. Recalcula en el servidor letra, tipo, receptor y totales, valida y lo
  *     guarda en el borrador. Con errores de validación no se toca ARCA.
- *     Una nota de crédito o débito necesita su comprobante asociado, lleva
- *     la letra del asociado (no la de la condición IVA actual del cliente) y
- *     una nota de crédito no supera el saldo de los asociados de la base.
+ *     Una nota de crédito o débito necesita su comprobante asociado o un
+ *     período asociado (no los dos), lleva la letra del asociado (no la de
+ *     la condición IVA actual del cliente; con período, la del cliente) y
+ *     una nota de crédito no supera el saldo de los asociados de la base
+ *     (con un período o un asociado cargado a mano no se controla).
  *  2. Toma el bloqueo de numeración (ambiente, punto de venta, tipo); si
  *     otro pedido lo tiene, espera un poco y se rinde. Una nota de crédito
  *     vuelve a controlar el saldo con el bloqueo tomado.
@@ -51,7 +53,12 @@ import {
   type LetraComprobante,
   type TipoComprobanteArca,
 } from "@/lib/tipos";
-import { mensajeExcedeSaldo, validarAsociadosNota } from "./asociados";
+import {
+  mensajeExcedeSaldo,
+  validarAsociadosNota,
+  validarPeriodoAsociado,
+  type PeriodoAsociado,
+} from "./asociados";
 import { calcularItem, calcularTotales, type ItemACalcular } from "./calculo";
 import { condicionIvaReceptorId, documentoReceptor, letraYTipoNota } from "./letra";
 import { formatearNumero } from "./numero";
@@ -93,6 +100,8 @@ export type DatosAutorizacion = {
   items: ItemAAutorizar[];
   /** CbtesAsoc ya resueltos (de la base o cargados a mano). */
   asociados: AsociadoSolicitud[];
+  /** Período asociado de una nota (PeriodoAsoc), en lugar de asociados. */
+  periodo: PeriodoAsociado | null;
   cliente: ClienteAAutorizar;
   cuitEmisor: string | null;
   puntoVentaElectronico: boolean;
@@ -336,6 +345,7 @@ function recalcular(datos: DatosAutorizacion, letraAsociado: LetraComprobante | 
     total: totales.total,
     alicuotas: totales.ivaPorAlicuota.map(({ id, base, importe }) => ({ id, base, importe })),
     asociados: datos.asociados.length > 0 ? datos.asociados : undefined,
+    ...(datos.periodo ? { periodo: datos.periodo } : {}),
   });
 
   // Lo mismo que va en el array Iva: se guarda para imprimirlo tal cual.
@@ -410,8 +420,11 @@ async function emitir(
   const asociados = validarAsociadosNota(
     c.clase,
     datos.asociados.map((a) => a.tipo),
+    datos.periodo,
   );
   if ("error" in asociados) return { error: asociados.error };
+  const erroresPeriodo = datos.periodo ? validarPeriodoAsociado(datos.periodo, c.fecha) : [];
+  if (erroresPeriodo.length > 0) return { error: erroresPeriodo.join(" ") };
   const errores = validarParaAutorizar(
     {
       clase: c.clase,

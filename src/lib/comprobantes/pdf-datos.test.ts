@@ -359,6 +359,23 @@ describe("notas de crédito y débito en el PDF", () => {
     expect(datos.asociados).toEqual(["A-00007-00000361 del 10/10/2026", "A-00007-00000150 del 09/01/2026"]);
   });
 
+  it("muestra el período asociado de una nota", () => {
+    const datos = armarDatosPdf({
+      comprobante: {
+        ...COMPROBANTE_EJEMPLO,
+        clase: "nota_debito",
+        tipo_arca: 2,
+        periodo_asoc_desde: "2026-10-01",
+        periodo_asoc_hasta: "2026-10-15",
+      },
+      items: [ITEM_EJEMPLO],
+      emisor: EMISOR_EJEMPLO,
+    });
+    expect(datos.periodoAsociado).toBe("01/10/2026 – 15/10/2026");
+    expect(datos.asociados).toEqual([]);
+    expect(armarDatosPdf({ comprobante: COMPROBANTE_EJEMPLO, items: [ITEM_EJEMPLO], emisor: EMISOR_EJEMPLO }).periodoAsociado).toBeNull();
+  });
+
   it("una factura no lleva asociados", () => {
     expect(armarDatosPdf({ comprobante: COMPROBANTE_EJEMPLO, items: [ITEM_EJEMPLO], emisor: EMISOR_EJEMPLO }).asociados).toEqual(
       [],

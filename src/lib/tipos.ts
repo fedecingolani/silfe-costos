@@ -573,6 +573,9 @@ export type Comprobante = {
   total: number;
   /** IVA por alícuota enviado a ARCA. Vacío en los anteriores a guardarlo. */
   iva_detalle: IvaAutorizado[] | null;
+  /** Período asociado de una nota (PeriodoAsoc), en lugar de comprobantes asociados. yyyy-mm-dd. */
+  periodo_asoc_desde: string | null;
+  periodo_asoc_hasta: string | null;
   cae: string | null;
   cae_vencimiento: string | null;
   arca_resultado: "A" | "R" | "P" | null;

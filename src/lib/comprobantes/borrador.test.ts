@@ -139,6 +139,8 @@ describe("armarBorrador", () => {
           lista_precio_id: LISTA,
           condicion_pago: "cuenta_corriente",
           observaciones: "Entrega en planta",
+          periodo_asoc_desde: null,
+          periodo_asoc_hasta: null,
           neto: 2300.9,
           no_gravado: 0,
           iva: 430.69,
@@ -300,6 +302,46 @@ describe("buscarProductos", () => {
   it("sin texto no devuelve nada y respeta el límite", () => {
     expect(buscarProductos(catalogo, "  ")).toEqual([]);
     expect(buscarProductos(catalogo, "o", 2)).toHaveLength(2);
+  });
+});
+
+describe("armarBorrador: notas asociadas a un período", () => {
+  const periodo = { desde: "2026-10-01", hasta: "2026-10-15" };
+  const armar = (cambios: Partial<BorradorEnviado>, extra: Partial<Parameters<typeof armarBorrador>[1]> = {}) =>
+    armarBorrador(enviado(cambios), { ...contexto, cuitEmisor: "23334771229", ...extra });
+
+  it("guarda el período, sin comprobantes asociados, y la letra sale del cliente", () => {
+    const r = armar({ clase: "nota_debito", periodoAsociado: periodo }, { condicionIvaCliente: "Consumidor Final" });
+    if ("errores" in r) throw new Error(r.errores.join(" "));
+    expect(r.borrador.cabecera).toMatchObject({
+      letra: "B",
+      tipo_arca: 7,
+      periodo_asoc_desde: "2026-10-01",
+      periodo_asoc_hasta: "2026-10-15",
+    });
+    expect(r.borrador.asociados).toEqual([]);
+  });
+
+  it("no acepta a la vez un comprobante cargado a mano y un período", () => {
+    const manual = { tipoArca: "6", puntoVenta: "7", numero: "150", fecha: "2026-01-10" };
+    expect(armar({ clase: "nota_debito", asociadoManual: manual, periodoAsociado: periodo })).toEqual({
+      errores: ["Una nota se asocia a comprobantes o a un período, no a los dos."],
+    });
+  });
+
+  it("informa un período inválido", () => {
+    const r = armar({ clase: "nota_debito", periodoAsociado: { desde: "2026-10-15", hasta: "2026-10-01" } });
+    expect(r).toEqual({ errores: ["Período asociado: el desde no puede ser posterior al hasta."] });
+  });
+
+  it("una factura y una nota con asociado de la base descartan el período", () => {
+    const factura = armar({ clase: "factura", periodoAsociado: periodo });
+    expect("borrador" in factura && factura.borrador.cabecera).toMatchObject({
+      periodo_asoc_desde: null,
+      periodo_asoc_hasta: null,
+    });
+    const nota = armar({ clase: "nota_credito", periodoAsociado: periodo }, { asociadoInterno: { tipoArca: 1 } });
+    expect("borrador" in nota && nota.borrador.cabecera).toMatchObject({ periodo_asoc_desde: null });
   });
 });
 

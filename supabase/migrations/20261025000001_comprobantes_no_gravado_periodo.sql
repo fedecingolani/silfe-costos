@@ -1,6 +1,7 @@
 -- =====================================================================
--- Silfe Costos - Comprobantes: ítems no gravados
+-- Silfe Costos - Comprobantes: ítems no gravados y período asociado
 --
+-- 1. Ítems no gravados
 -- Un ítem puede ser "no gravado" en lugar de llevar una alícuota de IVA
 -- (por ejemplo, el capital de un cheque rechazado en una nota de débito).
 -- Se modela explícito con comprobante_item.gravado:
@@ -12,12 +13,28 @@
 -- total = neto + no_gravado + iva. El array Iva (iva_detalle) sigue
 -- teniendo sólo las alícuotas gravadas.
 --
--- no_gravado queda fijo en verificación como el resto de lo enviado a ARCA
--- (CM004) y en un autorizado no cambia nada (CM001). Reemplaza
--- fn_comprobante_validar (20261024000005) con las mismas reglas más ésta.
+-- 2. Período asociado (PeriodoAsoc de ARCA)
+-- Una nota de crédito o débito puede asociarse a un período
+-- (periodo_asoc_desde / periodo_asoc_hasta) en lugar de a comprobantes:
+-- por ejemplo, la nota de débito de un cheque rechazado que se había
+-- tomado a cuenta. Reglas:
+--   - desde y hasta van juntos, desde <= hasta; una factura no lleva
+--     período (restricciones de la tabla);
+--   - una nota se asocia a comprobantes o a un período, no a los dos
+--     (CM007 en guardar_borrador_comprobante). ARCA admite los dos
+--     (10197 pide uno u otro): es una simplificación de la app;
+--   - que la nota tenga uno de los dos, y las reglas de ARCA del período
+--     (mismo mes, hasta no posterior a la nota), se exigen al autorizar:
+--     un borrador puede quedar sin asociar.
+--
+-- no_gravado y el período quedan fijos en verificación como el resto de
+-- lo enviado a ARCA (CM004) y en un autorizado no cambia nada (CM001).
+-- Reemplaza fn_comprobante_validar (20261024000005) con las mismas reglas
+-- más éstas.
 --
 -- guardar_borrador_comprobante (20261024000006) guarda además
--- p_comprobante.no_gravado y, por ítem, gravado (si no viene, gravado).
+-- p_comprobante.no_gravado, periodo_asoc_desde y periodo_asoc_hasta y, por
+-- ítem, gravado (si no viene, gravado). El resto, como antes.
 -- =====================================================================
 
 -- ----- Ítems no gravados -------------------------------------------------
@@ -45,6 +62,22 @@ comment on column comprobante.no_gravado is
   'Importe no gravado (suma de los ítems no gravados). Va a ARCA en ImpTotConc';
 comment on column comprobante.neto is 'Importe neto gravado (suma de los importes de los ítems gravados)';
 comment on column comprobante.total is 'neto + no_gravado + iva';
+
+-- ----- Período asociado ---------------------------------------------------
+
+alter table comprobante
+  add column periodo_asoc_desde date,
+  add column periodo_asoc_hasta date,
+  add constraint comprobante_periodo_asoc_check check (
+    (periodo_asoc_desde is null) = (periodo_asoc_hasta is null)
+    and (periodo_asoc_desde is null or periodo_asoc_desde <= periodo_asoc_hasta)
+  ),
+  add constraint comprobante_periodo_asoc_clase_check check (clase <> 'factura' or periodo_asoc_desde is null);
+
+comment on column comprobante.periodo_asoc_desde is
+  'Nota asociada a un período (PeriodoAsoc.FchDesde), en lugar de comprobantes asociados';
+comment on column comprobante.periodo_asoc_hasta is
+  'Nota asociada a un período (PeriodoAsoc.FchHasta), en lugar de comprobantes asociados';
 
 -- ----- Validación del comprobante ----------------------------------------
 
@@ -88,6 +121,8 @@ begin
     or new.receptor_domicilio is distinct from old.receptor_domicilio
     or new.receptor_provincia is distinct from old.receptor_provincia
     or new.iva_detalle is distinct from old.iva_detalle
+    or new.periodo_asoc_desde is distinct from old.periodo_asoc_desde
+    or new.periodo_asoc_hasta is distinct from old.periodo_asoc_hasta
   ) then
     raise exception 'El comprobante se está verificando con ARCA: sus datos no se pueden cambiar.'
       using errcode = 'CM004', hint = 'comprobante_bloqueado';
@@ -172,6 +207,8 @@ declare
   v_letra text := p_comprobante->>'letra';
   v_efectivos jsonb;
   v_asociado record;
+  v_periodo_desde date := (p_comprobante->>'periodo_asoc_desde')::date;
+  v_periodo_hasta date := (p_comprobante->>'periodo_asoc_hasta')::date;
 begin
   select pv.electronico into v_electronico
   from public.punto_venta pv
@@ -218,6 +255,14 @@ begin
 
   if v_clase = 'factura' and jsonb_array_length(v_efectivos) > 0 then
     raise exception 'Una factura no lleva comprobante asociado.'
+      using errcode = 'CM007', hint = 'asociado_invalido';
+  end if;
+  if v_clase = 'factura' and (v_periodo_desde is not null or v_periodo_hasta is not null) then
+    raise exception 'Una factura no lleva período asociado.'
+      using errcode = 'CM007', hint = 'asociado_invalido';
+  end if;
+  if (v_periodo_desde is not null or v_periodo_hasta is not null) and jsonb_array_length(v_efectivos) > 0 then
+    raise exception 'Una nota se asocia a comprobantes o a un período, no a los dos.'
       using errcode = 'CM007', hint = 'asociado_invalido';
   end if;
 
@@ -272,7 +317,7 @@ begin
   if v_id is null then
     insert into public.comprobante (
       punto_venta, ambiente, clase, letra, tipo_arca, fecha, fecha_vencimiento_pago, cliente_id,
-      lista_precio_id, condicion_pago, observaciones, neto, no_gravado, iva, total
+      lista_precio_id, condicion_pago, observaciones, periodo_asoc_desde, periodo_asoc_hasta, neto, no_gravado, iva, total
     )
     values (
       v_punto_venta,
@@ -286,6 +331,8 @@ begin
       (p_comprobante->>'lista_precio_id')::uuid,
       p_comprobante->>'condicion_pago',
       p_comprobante->>'observaciones',
+      v_periodo_desde,
+      v_periodo_hasta,
       coalesce((p_comprobante->>'neto')::numeric, 0),
       coalesce((p_comprobante->>'no_gravado')::numeric, 0),
       coalesce((p_comprobante->>'iva')::numeric, 0),
@@ -306,6 +353,8 @@ begin
         lista_precio_id = (p_comprobante->>'lista_precio_id')::uuid,
         condicion_pago = p_comprobante->>'condicion_pago',
         observaciones = p_comprobante->>'observaciones',
+        periodo_asoc_desde = v_periodo_desde,
+        periodo_asoc_hasta = v_periodo_hasta,
         neto = coalesce((p_comprobante->>'neto')::numeric, 0),
         no_gravado = coalesce((p_comprobante->>'no_gravado')::numeric, 0),
         iva = coalesce((p_comprobante->>'iva')::numeric, 0),
@@ -359,7 +408,7 @@ end;
 $$;
 
 comment on function public.guardar_borrador_comprobante(uuid, jsonb, jsonb, jsonb) is
-  'Crea o actualiza un borrador (o corrige un rechazado) y reemplaza sus ítems y, si se mandan, sus asociados, en una sola transacción';
+  'Crea o actualiza un borrador (o corrige un rechazado) y reemplaza sus ítems y, si se mandan, sus asociados (o su período asociado), en una sola transacción';
 
 revoke execute on function public.guardar_borrador_comprobante(uuid, jsonb, jsonb, jsonb) from public, anon;
 grant execute on function public.guardar_borrador_comprobante(uuid, jsonb, jsonb, jsonb) to authenticated;

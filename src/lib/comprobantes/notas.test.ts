@@ -59,6 +59,8 @@ describe("armarNota", () => {
       lista_precio_id: FACTURA.lista_precio_id,
       condicion_pago: "contado",
       observaciones: null,
+      periodo_asoc_desde: null,
+      periodo_asoc_hasta: null,
       neto: 1100,
       no_gravado: 0,
       iva: 220.5,

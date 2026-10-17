@@ -14,7 +14,7 @@ import {
   type ComprobanteItem,
   type IvaAutorizado,
 } from "@/lib/tipos";
-import { textoAsociado } from "./asociados";
+import { periodoDeFila, textoAsociado, textoPeriodo } from "./asociados";
 import { calcularTotales, tasaDeFila } from "./calculo";
 import { formatearNumero } from "./numero";
 import { urlQrArca } from "./qr";
@@ -45,6 +45,8 @@ export type FilaComprobantePdf = Pick<
   | "iva_detalle"
   | "cae"
   | "cae_vencimiento"
+  | "periodo_asoc_desde"
+  | "periodo_asoc_hasta"
 >;
 
 export type FilaItemPdf = Pick<
@@ -71,7 +73,8 @@ export type FilaEmisorPdf = Pick<
 export const COLUMNAS_COMPROBANTE_PDF =
   "id, punto_venta, ambiente, estado, clase, letra, tipo_arca, numero, fecha, fecha_vencimiento_pago, " +
   "condicion_pago, receptor_razon_social, receptor_doc_tipo, receptor_doc_nro, receptor_condicion_iva, " +
-  "receptor_domicilio, receptor_provincia, neto, no_gravado, iva, total, iva_detalle, cae, cae_vencimiento";
+  "receptor_domicilio, receptor_provincia, neto, no_gravado, iva, total, iva_detalle, cae, cae_vencimiento, " +
+  "periodo_asoc_desde, periodo_asoc_hasta";
 export const COLUMNAS_ITEM_PDF =
   "codigo, descripcion, observaciones, unidad, cantidad, precio_unitario, descuento_pct, gravado, alicuota_iva, importe, iva";
 export const COLUMNAS_EMISOR_PDF =
@@ -132,6 +135,8 @@ export type DatosPdfComprobante = {
   nombreArchivo: string;
   /** Notas: "A-00007-00000361 del 16/10/2026" por cada comprobante asociado (vacío en una factura). */
   asociados: string[];
+  /** Notas asociadas a un período: "01/10/2026 – 15/10/2026" (null si no tiene). */
+  periodoAsociado: string | null;
   /** Diferencias entre el IVA por alícuota impreso y el IVA guardado (para el log; vacío si coinciden). */
   inconsistencias: string[];
 };
@@ -273,6 +278,7 @@ export function armarDatosPdf({
 
   const iva = ivaDelComprobante(c, items);
   const ivaDe = new Map(iva.alicuotas.map((a) => [a.alicuota, a.importe]));
+  const periodo = c.clase === "factura" ? null : periodoDeFila(c);
 
   return {
     titulo: TITULOS[c.clase],
@@ -334,6 +340,7 @@ export function armarDatosPdf({
     homologacion: c.ambiente === "homologacion",
     nombreArchivo: `${NOMBRES_CLASE_COMPROBANTE[c.clase]} ${numero}`.trim(),
     asociados: c.clase === "factura" ? [] : asociados.map(textoAsociado),
+    periodoAsociado: periodo ? textoPeriodo(periodo) : null,
     inconsistencias: iva.inconsistencia ? [`${numero}: ${iva.inconsistencia}`] : [],
   };
 }

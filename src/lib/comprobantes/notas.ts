@@ -70,6 +70,8 @@ export function armarNota(
       lista_precio_id: origen.lista_precio_id,
       condicion_pago: origen.condicion_pago,
       observaciones: null,
+      periodo_asoc_desde: null,
+      periodo_asoc_hasta: null,
       neto: totales.neto,
       no_gravado: totales.noGravado,
       iva: totales.iva,

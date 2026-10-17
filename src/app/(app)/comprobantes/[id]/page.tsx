@@ -6,7 +6,13 @@ import { Encabezado, Migas, Pastilla, Tarjeta } from "@/components/ui";
 import { fecha, fechaHora, numero, pesos } from "@/lib/formato";
 import { hoyArgentina } from "@/lib/clientes/seguimiento";
 import { ivaDelComprobante, puedeImprimir } from "@/lib/comprobantes/pdf-datos";
-import { nombreTipoArca, notasPermitidas, textoAsociado } from "@/lib/comprobantes/asociados";
+import {
+  nombreTipoArca,
+  notasPermitidas,
+  periodoDeFila,
+  textoAsociado,
+  textoPeriodo,
+} from "@/lib/comprobantes/asociados";
 import {
   datosAsociado,
   leerAsociados,
@@ -38,7 +44,7 @@ const COLUMNAS_COMPROBANTE =
   "id, punto_venta, ambiente, estado, clase, letra, tipo_arca, numero, fecha, fecha_vencimiento_pago, cliente_id, " +
   "lista_precio_id, condicion_pago, observaciones, receptor_razon_social, receptor_doc_tipo, receptor_doc_nro, " +
   "receptor_condicion_iva, receptor_domicilio, receptor_provincia, neto, no_gravado, iva, total, iva_detalle, cae, " +
-  "cae_vencimiento, " +
+  "cae_vencimiento, periodo_asoc_desde, periodo_asoc_hasta, " +
   "arca_resultado, arca_observaciones, arca_errores, intento_numero, autorizado_en";
 const COLUMNAS_ITEM =
   "id, orden, producto_id, codigo, descripcion, observaciones, unidad, cantidad, precio_unitario, descuento_pct, " +
@@ -111,6 +117,7 @@ export default async function ComprobantePage({ params }: { params: Promise<{ id
   const asociados = c.clase === "factura" ? [] : await leerAsociados(supabase, c.id);
   if (typeof asociados === "string") return <p className="text-sm text-red-700">{asociados}</p>;
   const asociadosBase = asociados.map((a) => a.asociado_id).filter((v): v is string => Boolean(v));
+  const periodo = c.clase === "factura" ? null : periodoDeFila(c);
 
   const { data: clienteData } = await supabase
     .from("cliente")
@@ -174,6 +181,7 @@ export default async function ComprobantePage({ params }: { params: Promise<{ id
             observaciones: c.observaciones,
             ambiente: c.ambiente,
             cliente,
+            periodo: interno ? null : periodo,
             asociado: {
               interno:
                 interno && interno.tipo_arca && interno.letra
@@ -302,6 +310,11 @@ export default async function ComprobantePage({ params }: { params: Promise<{ id
                     ))}
                   </span>
                 </Dato>
+              </div>
+            )}
+            {periodo && (
+              <div className="col-span-2">
+                <Dato etiqueta="Período asociado">{textoPeriodo(periodo)}</Dato>
               </div>
             )}
             {c.observaciones && (

@@ -252,6 +252,34 @@ describe("feCAESolicitar", () => {
     expect(cuerpo).not.toContain("AlicIva");
   });
 
+  it("manda el período asociado de una nota después del array Iva, como pide el WSDL", async () => {
+    const { llamadas, fetchFalso } = fetchQueResponde(CAE_APROBADO);
+    await feCAESolicitar(fetchFalso, "homologacion", AUTH, {
+      ...SOLICITUD,
+      tipoComprobante: 2,
+      periodo: { desde: "2026-10-01", hasta: "2026-10-15" },
+    });
+    const cuerpo = String(llamadas[0].init.body);
+    expect(cuerpo).toContain(
+      "<AlicIva><Id>5</Id><BaseImp>1000.00</BaseImp><Importe>210.00</Importe></AlicIva></Iva>" +
+        "<PeriodoAsoc><FchDesde>20261001</FchDesde><FchHasta>20261015</FchHasta></PeriodoAsoc></FECAEDetRequest>",
+    );
+    expect(cuerpo).not.toContain("CbtesAsoc");
+  });
+
+  it("no manda a la vez comprobantes asociados y período asociado", async () => {
+    const { llamadas, fetchFalso } = fetchQueResponde(CAE_APROBADO);
+    await expect(
+      feCAESolicitar(fetchFalso, "homologacion", AUTH, {
+        ...SOLICITUD,
+        tipoComprobante: 2,
+        asociados: [{ tipo: 1, puntoVenta: 7, numero: 150 }],
+        periodo: { desde: "2026-10-01", hasta: "2026-10-15" },
+      }),
+    ).rejects.toThrow("Una nota se asocia a comprobantes o a un período, no a los dos.");
+    expect(llamadas).toHaveLength(0);
+  });
+
   it("devuelve el CAE, su vencimiento y las observaciones de un aprobado", async () => {
     const { fetchFalso } = fetchQueResponde(CAE_APROBADO);
     expect(await feCAESolicitar(fetchFalso, "produccion", AUTH, SOLICITUD)).toEqual({

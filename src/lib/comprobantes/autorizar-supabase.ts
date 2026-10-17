@@ -23,7 +23,7 @@ import {
   type RepositorioComprobantes,
   type ServiciosArca,
 } from "./autorizar";
-import { asociadoInterno, asociadoManual } from "./asociados";
+import { asociadoInterno, asociadoManual, periodoDeFila } from "./asociados";
 import { tasaDeFila } from "./calculo";
 import { leerAsociados, leerNotasSobre, saldoDe, type AsociadoLeido } from "./asociados-carga";
 
@@ -92,7 +92,7 @@ export function repositorioComprobantes(supabase: Supabase): RepositorioComproba
       const { data: c, error } = await supabase
         .from("comprobante")
         .select(
-          "id, estado, punto_venta, ambiente, clase, letra, tipo_arca, fecha, total, receptor_doc_nro, intento_numero, cliente_id",
+          "id, estado, punto_venta, ambiente, clase, letra, tipo_arca, fecha, total, receptor_doc_nro, intento_numero, cliente_id, periodo_asoc_desde, periodo_asoc_hasta",
         )
         .eq("id", id)
         .maybeSingle();
@@ -155,6 +155,7 @@ export function repositorioComprobantes(supabase: Supabase): RepositorioComproba
           iva: Number(i.iva),
         })),
         ...(await asociados(id, c.clase, cuitEmisor)),
+        periodo: periodoDeFila(c),
         cliente: {
           razonSocial: cliente.data.razon_social,
           cuit: cliente.data.cuit,

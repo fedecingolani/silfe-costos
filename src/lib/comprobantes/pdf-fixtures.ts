@@ -38,6 +38,8 @@ export const COMPROBANTE_EJEMPLO: FilaComprobantePdf = {
   cae: "76123456789012",
   cae_vencimiento: "2026-10-26",
   iva_detalle: [{ id: 5, alicuota: 21, base: 1400000, importe: 294000 }],
+  periodo_asoc_desde: null,
+  periodo_asoc_hasta: null,
 };
 
 export const ITEM_EJEMPLO: FilaItemPdf = {

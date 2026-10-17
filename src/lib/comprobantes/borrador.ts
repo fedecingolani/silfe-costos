@@ -18,7 +18,9 @@ import {
   type TipoComprobanteArca,
 } from "@/lib/tipos";
 import {
+  MENSAJE_ASOCIADOS_Y_PERIODO,
   leerAsociadoManual,
+  leerPeriodoAsociado,
   letraDeTipoArca,
   validarAsociadosNota,
   type AsociadoGuardado,
@@ -61,6 +63,12 @@ export type BorradorEnviado = {
    * sistema anterior). Se ignora si la nota ya tiene un asociado de la base.
    */
   asociadoManual?: AsociadoManualEnviado | null;
+  /**
+   * Período asociado (PeriodoAsoc), en lugar de un comprobante: una nota sin
+   * asociado de la base se asocia a uno cargado a mano o a un período, no a
+   * los dos. yyyy-mm-dd.
+   */
+  periodoAsociado?: { desde: string; hasta: string } | null;
 };
 
 /** Producto del catálogo, con los datos que se copian al renglón. */
@@ -86,6 +94,9 @@ export type CabeceraGuardada = {
   lista_precio_id: string | null;
   condicion_pago: CondicionPago;
   observaciones: string | null;
+  /** Período asociado de una nota (los dos o ninguno). */
+  periodo_asoc_desde: string | null;
+  periodo_asoc_hasta: string | null;
   neto: number;
   no_gravado: number;
   iva: number;
@@ -311,9 +322,11 @@ export function armarBorrador(
     });
   });
 
-  // Asociados: el de la base no se toca; el cargado a mano se reemplaza.
+  // Asociados: el de la base no se toca; el cargado a mano o el período se
+  // reemplazan. Una factura y una nota con asociado de la base no llevan período.
   let asociados: AsociadoGuardado[] | null = [];
   let letraAsociado: LetraComprobante | null = null;
+  let periodo: { desde: string; hasta: string } | null = null;
   if (clase && contexto.asociadoInterno) {
     const validos = validarAsociadosNota(clase, [contexto.asociadoInterno.tipoArca]);
     if ("error" in validos) errores.push(validos.error);
@@ -321,10 +334,20 @@ export function armarBorrador(
     asociados = null;
   } else if (clase && clase !== "factura") {
     const manual = leerAsociadoManual(enviado.asociadoManual, clase, fecha, contexto.cuitEmisor ?? null);
-    if ("errores" in manual) errores.push(...manual.errores);
-    else if (manual.asociado) {
+    const leido = leerPeriodoAsociado(enviado.periodoAsociado, fecha);
+    const hayManual = !("asociado" in manual) || manual.asociado !== null;
+    const hayPeriodo = !("periodo" in leido) || leido.periodo !== null;
+    if (hayManual && hayPeriodo) {
+      errores.push(MENSAJE_ASOCIADOS_Y_PERIODO);
+    } else if ("errores" in manual) {
+      errores.push(...manual.errores);
+    } else if ("errores" in leido) {
+      errores.push(...leido.errores);
+    } else if (manual.asociado) {
       asociados = [manual.asociado];
       letraAsociado = letraDeTipoArca((manual.asociado as { tipo_arca: number }).tipo_arca);
+    } else {
+      periodo = leido.periodo;
     }
   }
 
@@ -358,6 +381,8 @@ export function armarBorrador(
         lista_precio_id: listaPrecioId,
         condicion_pago: condicionPago!,
         observaciones: texto(enviado.observaciones),
+        periodo_asoc_desde: periodo?.desde ?? null,
+        periodo_asoc_hasta: periodo?.hasta ?? null,
         neto: totales.neto,
         no_gravado: totales.noGravado,
         iva: totales.iva,

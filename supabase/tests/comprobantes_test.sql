@@ -9,7 +9,7 @@
 begin;
 create extension if not exists pgtap with schema extensions;
 
-select plan(155);
+select plan(165);
 
 -- ---------------------------------------------------------------------
 -- Estructura
@@ -910,6 +910,77 @@ where id = 'a0000000-0000-0000-0000-000000000021';
 select throws_ok(
   $$update comprobante set no_gravado = 0 where id = 'a0000000-0000-0000-0000-000000000021'$$,
   'CM004', null, 'En verificación no cambia el importe no gravado enviado a ARCA'
+);
+update comprobante set estado = 'borrador', intento_numero = null where id = 'a0000000-0000-0000-0000-000000000021';
+
+-- ---------------------------------------------------------------------
+-- Notas asociadas a un período (PeriodoAsoc)
+-- ---------------------------------------------------------------------
+
+select has_column('public', 'comprobante', 'periodo_asoc_desde', 'Una nota puede asociarse a un período (desde)');
+select has_column('public', 'comprobante', 'periodo_asoc_hasta', 'Una nota puede asociarse a un período (hasta)');
+
+select throws_ok(
+  $$update comprobante set periodo_asoc_desde = '2026-10-01' where id = 'a0000000-0000-0000-0000-000000000021'$$,
+  '23514', null, 'El período asociado lleva desde y hasta'
+);
+select throws_ok(
+  $$update comprobante set periodo_asoc_desde = '2026-10-20', periodo_asoc_hasta = '2026-10-01'
+    where id = 'a0000000-0000-0000-0000-000000000021'$$,
+  '23514', null, 'El período asociado empieza antes de terminar'
+);
+select throws_ok(
+  $$insert into comprobante (punto_venta, ambiente, clase, cliente_id, periodo_asoc_desde, periodo_asoc_hasta)
+    values (9007, 'homologacion', 'factura', 'c0000000-0000-0000-0000-000000000001', '2026-10-01', '2026-10-31')$$,
+  '23514', null, 'Una factura no lleva período asociado'
+);
+
+select lives_ok(
+  $$select guardar_borrador_comprobante(
+      'a0000000-0000-0000-0000-000000000021',
+      '{"punto_venta": 9007, "clase": "nota_debito", "letra": "A", "tipo_arca": 2, "fecha": "2026-10-18",
+        "fecha_vencimiento_pago": "2026-10-18", "cliente_id": "c0000000-0000-0000-0000-000000000001",
+        "condicion_pago": "cuenta_corriente", "neto": 0, "no_gravado": 1000, "iva": 0, "total": 1000,
+        "periodo_asoc_desde": "2026-10-01", "periodo_asoc_hasta": "2026-10-15"}'::jsonb,
+      '[{"descripcion": "Cheque rechazado", "cantidad": 1, "precio_unitario": 1000, "descuento_pct": 0,
+         "gravado": false, "importe": 1000, "iva": 0}]'::jsonb,
+      '[]'::jsonb
+    )$$,
+  'guardar_borrador_comprobante guarda una nota asociada a un período, sin comprobantes asociados'
+);
+select results_eq(
+  $$select periodo_asoc_desde, periodo_asoc_hasta from comprobante where id = 'a0000000-0000-0000-0000-000000000021'$$,
+  $$values ('2026-10-01'::date, '2026-10-15'::date)$$,
+  'Se guarda el período asociado'
+);
+select throws_ok(
+  $$select guardar_borrador_comprobante(
+      'a0000000-0000-0000-0000-000000000021',
+      '{"punto_venta": 9007, "clase": "nota_debito", "letra": "A", "tipo_arca": 2, "fecha": "2026-10-18",
+        "fecha_vencimiento_pago": "2026-10-18", "cliente_id": "c0000000-0000-0000-0000-000000000001",
+        "condicion_pago": "cuenta_corriente", "neto": 0, "no_gravado": 1000, "iva": 0, "total": 1000,
+        "periodo_asoc_desde": "2026-10-01", "periodo_asoc_hasta": "2026-10-15"}'::jsonb,
+      '[]'::jsonb,
+      '[{"tipo_arca": 1, "punto_venta": 7, "numero": 150, "fecha": "2026-01-10", "cuit": "30712345671"}]'::jsonb
+    )$$,
+  'CM007', null, 'Una nota se asocia a comprobantes o a un período, no a los dos'
+);
+select throws_ok(
+  $$select guardar_borrador_comprobante(
+      null,
+      '{"punto_venta": 9007, "clase": "factura", "letra": "A", "tipo_arca": 1, "fecha": "2026-10-18",
+        "fecha_vencimiento_pago": "2026-10-18", "cliente_id": "c0000000-0000-0000-0000-000000000001",
+        "condicion_pago": "contado", "periodo_asoc_desde": "2026-10-01", "periodo_asoc_hasta": "2026-10-15"}'::jsonb,
+      '[]'::jsonb
+    )$$,
+  'CM007', null, 'guardar_borrador_comprobante no deja asociar un período a una factura'
+);
+
+update comprobante set estado = 'verificando', intento_numero = 1, letra = 'A', tipo_arca = 2
+where id = 'a0000000-0000-0000-0000-000000000021';
+select throws_ok(
+  $$update comprobante set periodo_asoc_hasta = '2026-10-16' where id = 'a0000000-0000-0000-0000-000000000021'$$,
+  'CM004', null, 'En verificación no cambia el período asociado enviado a ARCA'
 );
 update comprobante set estado = 'borrador', intento_numero = null where id = 'a0000000-0000-0000-0000-000000000021';
 
