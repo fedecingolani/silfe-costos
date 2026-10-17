@@ -9,7 +9,7 @@
 import { NOMBRES_CLASE_COMPROBANTE, type ClaseComprobante, type EstadoComprobante, type LetraComprobante } from "@/lib/tipos";
 import { notasPermitidas, type AsociadoGuardado } from "./asociados";
 import type { CabeceraGuardada, ItemGuardado } from "./borrador";
-import { calcularTotales } from "./calculo";
+import { calcularTotales, tasaDeFila } from "./calculo";
 import { tipoArcaDe } from "./letra";
 
 export type OrigenNota = {
@@ -54,7 +54,7 @@ export function armarNota(
       cantidad: Number(i.cantidad),
       precioUnitario: Number(i.precio_unitario),
       descuentoPct: Number(i.descuento_pct),
-      alicuotaIva: Number(i.alicuota_iva),
+      alicuotaIva: tasaDeFila(i),
     })),
   );
 
@@ -71,6 +71,7 @@ export function armarNota(
       condicion_pago: origen.condicion_pago,
       observaciones: null,
       neto: totales.neto,
+      no_gravado: totales.noGravado,
       iva: totales.iva,
       total: totales.total,
     },

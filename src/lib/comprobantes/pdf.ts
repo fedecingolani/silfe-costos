@@ -344,7 +344,8 @@ export async function generarPdfComprobante(datos: DatosPdfComprobante, logoPng?
     pagina.drawRectangle({ x: MARGEN, y: Y_BANDA, width: DERECHA - MARGEN, height: ALTO_BANDA, color: FONDO });
     const yBanda = Y_BANDA + 6;
     etiquetaValor(pagina, "Bruto:", datos.bruto, MARGEN + 6, yBanda, 9);
-    etiquetaValor(pagina, "Impuestos:", datos.impuestos, MARGEN + 180, yBanda, 9);
+    etiquetaValor(pagina, "No gravado:", datos.noGravado, MARGEN + 130, yBanda, 9);
+    etiquetaValor(pagina, "Impuestos:", datos.impuestos, MARGEN + 265, yBanda, 9);
     const total = `Total: ${datos.total}`;
     escribir(pagina, total, DERECHA - 6, yBanda - 0.5, negrita, 10.5, "derecha");
 

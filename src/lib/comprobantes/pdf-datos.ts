@@ -15,7 +15,7 @@ import {
   type IvaAutorizado,
 } from "@/lib/tipos";
 import { textoAsociado } from "./asociados";
-import { calcularTotales } from "./calculo";
+import { calcularTotales, tasaDeFila } from "./calculo";
 import { formatearNumero } from "./numero";
 import { urlQrArca } from "./qr";
 
@@ -39,6 +39,7 @@ export type FilaComprobantePdf = Pick<
   | "receptor_domicilio"
   | "receptor_provincia"
   | "neto"
+  | "no_gravado"
   | "iva"
   | "total"
   | "iva_detalle"
@@ -55,6 +56,7 @@ export type FilaItemPdf = Pick<
   | "cantidad"
   | "precio_unitario"
   | "descuento_pct"
+  | "gravado"
   | "alicuota_iva"
   | "importe"
   | "iva"
@@ -69,9 +71,9 @@ export type FilaEmisorPdf = Pick<
 export const COLUMNAS_COMPROBANTE_PDF =
   "id, punto_venta, ambiente, estado, clase, letra, tipo_arca, numero, fecha, fecha_vencimiento_pago, " +
   "condicion_pago, receptor_razon_social, receptor_doc_tipo, receptor_doc_nro, receptor_condicion_iva, " +
-  "receptor_domicilio, receptor_provincia, neto, iva, total, iva_detalle, cae, cae_vencimiento";
+  "receptor_domicilio, receptor_provincia, neto, no_gravado, iva, total, iva_detalle, cae, cae_vencimiento";
 export const COLUMNAS_ITEM_PDF =
-  "codigo, descripcion, observaciones, unidad, cantidad, precio_unitario, descuento_pct, alicuota_iva, importe, iva";
+  "codigo, descripcion, observaciones, unidad, cantidad, precio_unitario, descuento_pct, gravado, alicuota_iva, importe, iva";
 export const COLUMNAS_EMISOR_PDF =
   "cuit, razon_social, condicion_iva, domicilio_comercial, ingresos_brutos, inicio_actividades";
 
@@ -115,7 +117,10 @@ export type DatosPdfComprobante = {
   formaPago: string;
   items: ItemPdf[];
   ivaPorAlicuota: { etiqueta: string; importe: string }[];
+  /** Neto gravado. */
   bruto: string;
+  /** Importe no gravado (ImpTotConc). */
+  noGravado: string;
   impuestos: string;
   /** Con el signo: "$ 1.694.000,00". */
   total: string;
@@ -210,7 +215,7 @@ const TOLERANCIA = 0.005;
  */
 export function ivaDelComprobante(
   c: Pick<FilaComprobantePdf, "iva" | "iva_detalle">,
-  items: readonly Pick<FilaItemPdf, "cantidad" | "precio_unitario" | "descuento_pct" | "alicuota_iva">[],
+  items: readonly Pick<FilaItemPdf, "cantidad" | "precio_unitario" | "descuento_pct" | "gravado" | "alicuota_iva">[],
 ): { alicuotas: IvaAutorizado[]; origen: "autorizado" | "recalculado"; inconsistencia: string | null } {
   const guardado = Array.isArray(c.iva_detalle) ? c.iva_detalle : null;
   const alicuotas: IvaAutorizado[] =
@@ -225,7 +230,7 @@ export function ivaDelComprobante(
         cantidad: Number(i.cantidad),
         precioUnitario: Number(i.precio_unitario),
         descuentoPct: Number(i.descuento_pct),
-        alicuotaIva: Number(i.alicuota_iva),
+        alicuotaIva: tasaDeFila(i),
       })),
     ).ivaPorAlicuota;
   const origen = guardado ? "autorizado" : "recalculado";
@@ -302,7 +307,7 @@ export function armarDatosPdf({
       precio: precioFmt.format(Number(i.precio_unitario)),
       descuento: importeFmt.format(Number(i.descuento_pct)),
       importe: formatearImporte(Number(i.importe)),
-      alicuota: `${alicuotaFmt.format(Number(i.alicuota_iva))}%`,
+      alicuota: i.gravado === false ? "No grav." : `${alicuotaFmt.format(Number(i.alicuota_iva))}%`,
       importeConIva: formatearImporte(Number(i.importe) + Number(i.iva)),
     })),
     ivaPorAlicuota: ALICUOTAS_PIE.map((a) => ({
@@ -310,6 +315,7 @@ export function armarDatosPdf({
       importe: formatearImporte(ivaDe.get(a) ?? 0),
     })),
     bruto: formatearImporte(Number(c.neto)),
+    noGravado: formatearImporte(Number(c.no_gravado ?? 0)),
     impuestos: formatearImporte(Number(c.iva)),
     total: `$ ${formatearImporte(Number(c.total))}`,
     cae: c.cae ?? "",

@@ -140,6 +140,7 @@ describe("armarBorrador", () => {
           condicion_pago: "cuenta_corriente",
           observaciones: "Entrega en planta",
           neto: 2300.9,
+          no_gravado: 0,
           iva: 430.69,
           total: 2731.59,
         },
@@ -153,6 +154,7 @@ describe("armarBorrador", () => {
             cantidad: 2,
             precio_unitario: 1000.5,
             descuento_pct: 10,
+            gravado: true,
             alicuota_iva: 21,
             importe: 1800.9,
             iva: 378.19,
@@ -166,6 +168,7 @@ describe("armarBorrador", () => {
             cantidad: 1,
             precio_unitario: 500,
             descuento_pct: 0,
+            gravado: true,
             alicuota_iva: 10.5,
             importe: 500,
             iva: 52.5,
@@ -225,6 +228,40 @@ describe("armarBorrador", () => {
 
   it("rechaza datos que no son un borrador", () => {
     expect(armarBorrador(null, contexto)).toEqual({ errores: ["Los datos del comprobante no son válidos."] });
+  });
+});
+
+describe("armarBorrador: ítems no gravados", () => {
+  const conNoGravado = () =>
+    enviado({
+      items: [
+        { ...enviado().items[0], alicuotaIva: "no_gravado" },
+        { ...enviado().items[1], alicuotaIva: "no_gravado" },
+      ],
+    });
+
+  it("un ítem libre o de producto pasa a no gravado: sin alícuota ni IVA, y suma en no_gravado", () => {
+    const resultado = armarBorrador(conNoGravado(), contexto);
+    if (!("borrador" in resultado)) throw new Error(JSON.stringify(resultado));
+    expect(resultado.borrador.items.map((i) => [i.gravado, i.alicuota_iva, i.importe, i.iva])).toEqual([
+      [false, null, 1800.9, 0],
+      [false, null, 500, 0],
+    ]);
+    expect(resultado.borrador.cabecera).toMatchObject({ neto: 0, no_gravado: 2300.9, iva: 0, total: 2300.9 });
+  });
+
+  it("un producto con otra alícuota enviada conserva la del catálogo", () => {
+    const resultado = armarBorrador(enviado(), contexto);
+    expect("borrador" in resultado && resultado.borrador.items[0]).toMatchObject({ gravado: true, alicuota_iva: 21 });
+  });
+
+  it("calcula en vivo un renglón no gravado", () => {
+    expect(itemParaCalcular({ ...enviado().items[1], alicuotaIva: "no_gravado" })).toEqual({
+      cantidad: 1,
+      precioUnitario: 500,
+      descuentoPct: 0,
+      alicuotaIva: "no_gravado",
+    });
   });
 });
 

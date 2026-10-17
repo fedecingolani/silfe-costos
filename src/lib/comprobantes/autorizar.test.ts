@@ -262,6 +262,7 @@ describe("autorizar: camino feliz", () => {
       docNro: "20111111112",
       condicionIvaReceptorId: 1,
       neto: 1100,
+      noGravado: 0,
       iva: 220.5,
       total: 1320.5,
       alicuotas: [
@@ -287,6 +288,7 @@ describe("autorizar: camino feliz", () => {
         provincia: "Río Negro",
       },
       neto: 1100,
+      noGravado: 0,
       iva: 220.5,
       total: 1320.5,
       items: [{ id: "i1", importe: 1000, iva: 210 }],
@@ -309,6 +311,19 @@ describe("autorizar: camino feliz", () => {
     const { deps, solicitudes } = escenario({ datos });
     await autorizar(ID, deps);
     expect(solicitudes[0]).toMatchObject({ tipoComprobante: 3, asociados: datos.asociados });
+  });
+
+  it("manda lo no gravado en ImpTotConc, fuera del neto y del IVA por alícuota, y lo guarda", async () => {
+    const datos = datosBase();
+    datos.items = [
+      ...datos.items,
+      { id: "i3", cantidad: 1, precioUnitario: 500, descuentoPct: 0, alicuotaIva: "no_gravado", importe: 500, iva: 0 },
+    ];
+    const { deps, solicitudes, estado } = escenario({ datos });
+    expect((await autorizar(ID, deps)).estado).toBe("autorizado");
+    expect(solicitudes[0]).toMatchObject({ neto: 1100, noGravado: 500, iva: 220.5, total: 1820.5 });
+    expect(solicitudes[0].alicuotas.map((a) => a.id)).toEqual([4, 5]);
+    expect(estado.recalculado).toMatchObject({ neto: 1100, noGravado: 500, iva: 220.5, total: 1820.5 });
   });
 
   it("un rechazado vuelve a intentarse desde borrador", async () => {

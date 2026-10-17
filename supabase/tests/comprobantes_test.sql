@@ -9,7 +9,7 @@
 begin;
 create extension if not exists pgtap with schema extensions;
 
-select plan(146);
+select plan(155);
 
 -- ---------------------------------------------------------------------
 -- Estructura
@@ -850,6 +850,68 @@ select lives_ok(
     )$$,
   'Una nota B se asocia a una factura B'
 );
+
+-- ---------------------------------------------------------------------
+-- Ítems no gravados (ImpTotConc)
+-- ---------------------------------------------------------------------
+
+select has_column('public', 'comprobante', 'no_gravado', 'comprobante guarda el importe no gravado');
+select has_column('public', 'comprobante_item', 'gravado', 'Un ítem es gravado o no gravado');
+
+insert into comprobante (id, punto_venta, ambiente, clase, cliente_id)
+values ('a0000000-0000-0000-0000-000000000021', 9007, 'homologacion', 'nota_debito',
+        'c0000000-0000-0000-0000-000000000001');
+
+select lives_ok(
+  $$insert into comprobante_item (comprobante_id, descripcion, cantidad, precio_unitario, gravado, alicuota_iva, importe, iva)
+    values ('a0000000-0000-0000-0000-000000000021', 'Cheque rechazado', 1, 1000, false, null, 1000, 0)$$,
+  'Un ítem no gravado no lleva alícuota'
+);
+select throws_ok(
+  $$insert into comprobante_item (comprobante_id, descripcion, cantidad, precio_unitario, gravado, alicuota_iva)
+    values ('a0000000-0000-0000-0000-000000000021', 'x', 1, 1, false, 21)$$,
+  '23514', null, 'Un ítem no gravado no tiene alícuota'
+);
+select throws_ok(
+  $$insert into comprobante_item (comprobante_id, descripcion, cantidad, precio_unitario, alicuota_iva)
+    values ('a0000000-0000-0000-0000-000000000021', 'x', 1, 1, null)$$,
+  '23514', null, 'Un ítem gravado necesita la alícuota'
+);
+select throws_ok(
+  $$insert into comprobante_item (comprobante_id, descripcion, cantidad, precio_unitario, gravado, alicuota_iva, importe, iva)
+    values ('a0000000-0000-0000-0000-000000000021', 'x', 1, 100, false, null, 100, 21)$$,
+  '23514', null, 'Un ítem no gravado no lleva IVA'
+);
+
+select lives_ok(
+  $$select guardar_borrador_comprobante(
+      'a0000000-0000-0000-0000-000000000021',
+      '{"punto_venta": 9007, "clase": "nota_debito", "letra": "A", "tipo_arca": 2, "fecha": "2026-10-18",
+        "fecha_vencimiento_pago": "2026-10-18", "cliente_id": "c0000000-0000-0000-0000-000000000001",
+        "condicion_pago": "cuenta_corriente", "neto": 100, "no_gravado": 1000, "iva": 21, "total": 1121}'::jsonb,
+      '[{"descripcion": "Cheque rechazado", "cantidad": 1, "precio_unitario": 1000, "descuento_pct": 0,
+         "gravado": false, "alicuota_iva": null, "importe": 1000, "iva": 0},
+        {"descripcion": "Gastos bancarios", "cantidad": 1, "precio_unitario": 100, "descuento_pct": 0,
+         "alicuota_iva": 21, "importe": 100, "iva": 21}]'::jsonb
+    )$$,
+  'guardar_borrador_comprobante guarda ítems no gravados y el total no gravado'
+);
+select results_eq(
+  $$select c.no_gravado, c.total, i.gravado, i.alicuota_iva
+    from comprobante c join comprobante_item i on i.comprobante_id = c.id
+    where c.id = 'a0000000-0000-0000-0000-000000000021' order by i.orden$$,
+  $$values (1000.00::numeric(14,2), 1121.00::numeric(14,2), false, null::numeric(5,2)),
+           (1000.00::numeric(14,2), 1121.00::numeric(14,2), true, 21.00::numeric(5,2))$$,
+  'Un ítem sin gravado en el pedido es gravado'
+);
+
+update comprobante set estado = 'verificando', intento_numero = 1, letra = 'A', tipo_arca = 2
+where id = 'a0000000-0000-0000-0000-000000000021';
+select throws_ok(
+  $$update comprobante set no_gravado = 0 where id = 'a0000000-0000-0000-0000-000000000021'$$,
+  'CM004', null, 'En verificación no cambia el importe no gravado enviado a ARCA'
+);
+update comprobante set estado = 'borrador', intento_numero = null where id = 'a0000000-0000-0000-0000-000000000021';
 
 select has_function('public', 'guardar_borrador_comprobante', array['uuid', 'jsonb', 'jsonb', 'jsonb'],
   'guardar_borrador_comprobante recibe los asociados');

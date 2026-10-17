@@ -527,6 +527,11 @@ export const ALICUOTAS_IVA = [0, 2.5, 5, 10.5, 21, 27] as const;
 
 export type AlicuotaIva = (typeof ALICUOTAS_IVA)[number];
 
+/** Tasa de un ítem de comprobante: una alícuota de IVA o "no gravado" (va en ImpTotConc). */
+export const NO_GRAVADO = "no_gravado";
+
+export type TasaIva = AlicuotaIva | typeof NO_GRAVADO;
+
 /** Código y mensaje tal como los devuelve ARCA (Obs o Err). */
 export type MensajeArca = { code: number; msg: string };
 
@@ -559,8 +564,12 @@ export type Comprobante = {
   receptor_condicion_iva: CondicionIva | null;
   receptor_domicilio: string | null;
   receptor_provincia: string | null;
+  /** Neto gravado. */
   neto: number;
+  /** Suma de los ítems no gravados (ImpTotConc). */
+  no_gravado: number;
   iva: number;
+  /** neto + no_gravado + iva */
   total: number;
   /** IVA por alícuota enviado a ARCA. Vacío en los anteriores a guardarlo. */
   iva_detalle: IvaAutorizado[] | null;
@@ -591,7 +600,10 @@ export type ComprobanteItem = {
   /** Sin IVA, 4 decimales. */
   precio_unitario: number;
   descuento_pct: number;
-  alicuota_iva: AlicuotaIva;
+  /** false: no gravado, sin alícuota ni IVA. */
+  gravado: boolean;
+  /** Vacía en un ítem no gravado. */
+  alicuota_iva: AlicuotaIva | null;
   importe: number;
   iva: number;
 };

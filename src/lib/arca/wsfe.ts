@@ -123,9 +123,17 @@ export type SolicitudCae = {
   docTipo: number;
   docNro: string;
   condicionIvaReceptorId: number;
+  /** Neto gravado (ImpNeto). */
   neto: number;
+  /** Importe no gravado (ImpTotConc). */
+  noGravado: number;
   iva: number;
   total: number;
+  /**
+   * Array Iva, sólo alícuotas gravadas. Vacío (sin ítems gravados) se omite:
+   * con ImpIVA 0 ARCA sólo acepta el array con la alícuota 0% (10018), y lo
+   * exige sólo si ImpNeto es mayor a cero (10070).
+   */
   alicuotas: readonly AlicuotaSolicitud[];
   asociados?: readonly AsociadoSolicitud[];
 };
@@ -213,7 +221,7 @@ export async function feCAESolicitar(
   const detalle =
     `<Concepto>1</Concepto><DocTipo>${s.docTipo}</DocTipo><DocNro>${escaparXml(s.docNro)}</DocNro>` +
     `<CbteDesde>${s.numero}</CbteDesde><CbteHasta>${s.numero}</CbteHasta><CbteFch>${fechaWsfe(s.fecha)}</CbteFch>` +
-    `<ImpTotal>${importe(s.total)}</ImpTotal><ImpTotConc>0.00</ImpTotConc><ImpNeto>${importe(s.neto)}</ImpNeto>` +
+    `<ImpTotal>${importe(s.total)}</ImpTotal><ImpTotConc>${importe(s.noGravado)}</ImpTotConc><ImpNeto>${importe(s.neto)}</ImpNeto>` +
     `<ImpOpEx>0.00</ImpOpEx><ImpTrib>0.00</ImpTrib><ImpIVA>${importe(s.iva)}</ImpIVA>` +
     `<MonId>PES</MonId><MonCotiz>1</MonCotiz><CondicionIVAReceptorId>${s.condicionIvaReceptorId}</CondicionIVAReceptorId>` +
     armarAsociados(s.asociados) +

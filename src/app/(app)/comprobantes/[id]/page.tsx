@@ -37,11 +37,12 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const COLUMNAS_COMPROBANTE =
   "id, punto_venta, ambiente, estado, clase, letra, tipo_arca, numero, fecha, fecha_vencimiento_pago, cliente_id, " +
   "lista_precio_id, condicion_pago, observaciones, receptor_razon_social, receptor_doc_tipo, receptor_doc_nro, " +
-  "receptor_condicion_iva, receptor_domicilio, receptor_provincia, neto, iva, total, iva_detalle, cae, cae_vencimiento, " +
+  "receptor_condicion_iva, receptor_domicilio, receptor_provincia, neto, no_gravado, iva, total, iva_detalle, cae, " +
+  "cae_vencimiento, " +
   "arca_resultado, arca_observaciones, arca_errores, intento_numero, autorizado_en";
 const COLUMNAS_ITEM =
   "id, orden, producto_id, codigo, descripcion, observaciones, unidad, cantidad, precio_unitario, descuento_pct, " +
-  "alicuota_iva, importe, iva";
+  "gravado, alicuota_iva, importe, iva";
 
 type ComprobanteLeido = Omit<Comprobante, "creado_por" | "creado_en" | "actualizado_en" | "moneda">;
 type ItemLeido = Omit<ComprobanteItem, "comprobante_id">;
@@ -202,7 +203,8 @@ export default async function ComprobantePage({ params }: { params: Promise<{ id
               cantidad: Number(i.cantidad),
               precio_unitario: Number(i.precio_unitario),
               descuento_pct: Number(i.descuento_pct),
-              alicuota_iva: Number(i.alicuota_iva),
+              gravado: i.gravado,
+              alicuota_iva: i.alicuota_iva === null ? null : Number(i.alicuota_iva),
             })),
           }}
           contexto={contexto}
@@ -379,7 +381,9 @@ export default async function ComprobantePage({ params }: { params: Promise<{ id
                   <td className="text-right tabular-nums">{numero(Number(i.precio_unitario), 4)}</td>
                   <td className="text-right tabular-nums">{numero(Number(i.descuento_pct), 2)}</td>
                   <td className="text-right tabular-nums">{pesos(Number(i.importe))}</td>
-                  <td className="text-right tabular-nums">{numero(Number(i.alicuota_iva), 1)}%</td>
+                  <td className="text-right tabular-nums">
+                    {i.gravado ? `${numero(Number(i.alicuota_iva), 1)}%` : "No grav."}
+                  </td>
                   <td className="text-right tabular-nums">{pesos(Number(i.importe) + Number(i.iva))}</td>
                 </tr>
               ))}
@@ -390,6 +394,10 @@ export default async function ComprobantePage({ params }: { params: Promise<{ id
           <div className="flex justify-between">
             <dt className="text-stone-500">Neto gravado</dt>
             <dd className="tabular-nums">{pesos(Number(c.neto))}</dd>
+          </div>
+          <div className="flex justify-between">
+            <dt className="text-stone-500">No gravado</dt>
+            <dd className="tabular-nums">{pesos(Number(c.no_gravado))}</dd>
           </div>
           {ivaPorAlicuota.map((a) => (
             <div key={a.id} className="flex justify-between">

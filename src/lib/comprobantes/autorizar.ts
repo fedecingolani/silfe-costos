@@ -118,6 +118,7 @@ export type BorradorRecalculado = {
     provincia: string | null;
   };
   neto: number;
+  noGravado: number;
   iva: number;
   total: number;
   /** Sólo los renglones cuyo importe o IVA cambió. */
@@ -312,6 +313,7 @@ function recalcular(datos: DatosAutorizacion, letraAsociado: LetraComprobante | 
       provincia: cliente.provincia?.trim() || null,
     },
     neto: totales.neto,
+    noGravado: totales.noGravado,
     iva: totales.iva,
     total: totales.total,
     items: items
@@ -329,6 +331,7 @@ function recalcular(datos: DatosAutorizacion, letraAsociado: LetraComprobante | 
     docNro: doc.docNro,
     condicionIvaReceptorId: condicionIvaReceptorId(condicionIva),
     neto: totales.neto,
+    noGravado: totales.noGravado,
     iva: totales.iva,
     total: totales.total,
     alicuotas: totales.ivaPorAlicuota.map(({ id, base, importe }) => ({ id, base, importe })),

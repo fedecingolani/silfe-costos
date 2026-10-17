@@ -24,6 +24,7 @@ import {
   type ServiciosArca,
 } from "./autorizar";
 import { asociadoInterno, asociadoManual } from "./asociados";
+import { tasaDeFila } from "./calculo";
 import { leerAsociados, leerNotasSobre, saldoDe, type AsociadoLeido } from "./asociados-carga";
 
 type Supabase = Awaited<ReturnType<typeof createClient>>;
@@ -101,7 +102,7 @@ export function repositorioComprobantes(supabase: Supabase): RepositorioComproba
       const [items, cliente, puntoVenta, emisor] = await Promise.all([
         supabase
           .from("comprobante_item")
-          .select("id, cantidad, precio_unitario, descuento_pct, alicuota_iva, importe, iva")
+          .select("id, cantidad, precio_unitario, descuento_pct, gravado, alicuota_iva, importe, iva")
           .eq("comprobante_id", id)
           .order("orden"),
         supabase
@@ -149,7 +150,7 @@ export function repositorioComprobantes(supabase: Supabase): RepositorioComproba
           cantidad: Number(i.cantidad),
           precioUnitario: Number(i.precio_unitario),
           descuentoPct: Number(i.descuento_pct),
-          alicuotaIva: Number(i.alicuota_iva),
+          alicuotaIva: tasaDeFila(i),
           importe: Number(i.importe),
           iva: Number(i.iva),
         })),
@@ -189,6 +190,7 @@ export function repositorioComprobantes(supabase: Supabase): RepositorioComproba
         receptor_domicilio: d.receptor.domicilio,
         receptor_provincia: d.receptor.provincia,
         neto: d.neto,
+        no_gravado: d.noGravado,
         iva: d.iva,
         total: d.total,
       });

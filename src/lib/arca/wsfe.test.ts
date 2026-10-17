@@ -179,6 +179,7 @@ const SOLICITUD: SolicitudCae = {
   docNro: "20111111112",
   condicionIvaReceptorId: 1,
   neto: 1100,
+  noGravado: 0,
   iva: 220.5,
   total: 1320.5,
   alicuotas: [
@@ -221,6 +222,34 @@ describe("feCAESolicitar", () => {
       "<CondicionIVAReceptorId>1</CondicionIVAReceptorId><CbtesAsoc><CbteAsoc><Tipo>1</Tipo><PtoVta>7</PtoVta>" +
         "<Nro>150</Nro><Cuit>23334771229</Cuit><CbteFch>20260110</CbteFch></CbteAsoc></CbtesAsoc><Iva>",
     );
+  });
+
+  it("informa lo no gravado en ImpTotConc, aparte del neto gravado", async () => {
+    const { llamadas, fetchFalso } = fetchQueResponde(CAE_APROBADO);
+    await feCAESolicitar(fetchFalso, "homologacion", AUTH, { ...SOLICITUD, noGravado: 500, total: 1820.5 });
+    expect(String(llamadas[0].init.body)).toContain(
+      "<ImpTotal>1820.50</ImpTotal><ImpTotConc>500.00</ImpTotConc><ImpNeto>1100.00</ImpNeto>",
+    );
+  });
+
+  it("con sólo ítems no gravados manda ImpNeto 0 y omite el array Iva (10018 y 10070)", async () => {
+    const { llamadas, fetchFalso } = fetchQueResponde(CAE_APROBADO);
+    await feCAESolicitar(fetchFalso, "homologacion", AUTH, {
+      ...SOLICITUD,
+      tipoComprobante: 2,
+      neto: 0,
+      noGravado: 150000,
+      iva: 0,
+      total: 150000,
+      alicuotas: [],
+    });
+    const cuerpo = String(llamadas[0].init.body);
+    expect(cuerpo).toContain(
+      "<ImpTotal>150000.00</ImpTotal><ImpTotConc>150000.00</ImpTotConc><ImpNeto>0.00</ImpNeto>" +
+        "<ImpOpEx>0.00</ImpOpEx><ImpTrib>0.00</ImpTrib><ImpIVA>0.00</ImpIVA>",
+    );
+    expect(cuerpo).not.toContain("<Iva>");
+    expect(cuerpo).not.toContain("AlicIva");
   });
 
   it("devuelve el CAE, su vencimiento y las observaciones de un aprobado", async () => {

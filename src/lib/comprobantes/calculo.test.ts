@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { calcularItem, calcularTotales } from "./calculo";
+import { NO_GRAVADO, calcularItem, calcularTotales, tasaDeFila } from "./calculo";
 
 describe("calcularItem", () => {
   it("multiplica cantidad por precio y aplica la alícuota", () => {
@@ -61,6 +61,7 @@ describe("calcularTotales", () => {
     // Por renglón: 0.0105 → 0.01 (× 3 = 0.03). Sobre la base: 0.15 × 21% = 0.0315 → 0.03.
     expect(totales).toEqual({
       neto: 0.15,
+      noGravado: 0,
       iva: 0.03,
       total: 0.18,
       ivaPorAlicuota: [{ id: 5, alicuota: 21, base: 0.15, importe: 0.03 }],
@@ -91,12 +92,49 @@ describe("calcularTotales", () => {
   });
 
   it("sin ítems da cero", () => {
-    expect(calcularTotales([])).toEqual({ neto: 0, iva: 0, total: 0, ivaPorAlicuota: [] });
+    expect(calcularTotales([])).toEqual({ neto: 0, noGravado: 0, iva: 0, total: 0, ivaPorAlicuota: [] });
   });
 
   it("rechaza una alícuota que ARCA no acepta", () => {
     expect(() =>
       calcularTotales([{ cantidad: 1, precioUnitario: 1, descuentoPct: 0, alicuotaIva: 22 }]),
     ).toThrow("La alícuota de IVA 22% no es una de las de ARCA.");
+  });
+});
+
+describe("ítems no gravados", () => {
+  it("un renglón no gravado no lleva IVA", () => {
+    expect(calcularItem({ cantidad: 2, precioUnitario: 100, descuentoPct: 0, alicuotaIva: NO_GRAVADO })).toEqual({
+      importe: 200,
+      iva: 0,
+    });
+  });
+
+  it("suma lo no gravado aparte del neto gravado y fuera del IVA por alícuota", () => {
+    const totales = calcularTotales([
+      { cantidad: 1, precioUnitario: 1000, descuentoPct: 0, alicuotaIva: 21 },
+      { cantidad: 1, precioUnitario: 500, descuentoPct: 0, alicuotaIva: NO_GRAVADO },
+      { cantidad: 2, precioUnitario: 250, descuentoPct: 10, alicuotaIva: NO_GRAVADO },
+    ]);
+    expect(totales).toEqual({
+      neto: 1000,
+      noGravado: 950,
+      iva: 210,
+      total: 2160,
+      ivaPorAlicuota: [{ id: 5, alicuota: 21, base: 1000, importe: 210 }],
+    });
+  });
+
+  it("con sólo ítems no gravados no hay neto ni IVA, y el total es lo no gravado", () => {
+    expect(
+      calcularTotales([{ cantidad: 1, precioUnitario: 150000, descuentoPct: 0, alicuotaIva: NO_GRAVADO }]),
+    ).toEqual({ neto: 0, noGravado: 150000, iva: 0, total: 150000, ivaPorAlicuota: [] });
+  });
+
+  it("lee la tasa de una fila guardada: no gravado o la alícuota", () => {
+    expect(tasaDeFila({ gravado: false, alicuota_iva: null })).toBe(NO_GRAVADO);
+    expect(tasaDeFila({ gravado: true, alicuota_iva: "10.5" })).toBe(10.5);
+    // Una fila sin la columna gravado (anterior a los no gravados) es gravada.
+    expect(tasaDeFila({ alicuota_iva: 21 })).toBe(21);
   });
 });

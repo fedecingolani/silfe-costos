@@ -23,6 +23,7 @@ const ITEMS: ItemGuardado[] = [
     cantidad: 2,
     precio_unitario: 500,
     descuento_pct: 0,
+    gravado: true,
     alicuota_iva: 21,
     importe: 1000,
     iva: 210,
@@ -36,6 +37,7 @@ const ITEMS: ItemGuardado[] = [
     cantidad: 1,
     precio_unitario: 100,
     descuento_pct: 0,
+    gravado: true,
     alicuota_iva: 10.5,
     importe: 100,
     iva: 10.5,
@@ -58,6 +60,7 @@ describe("armarNota", () => {
       condicion_pago: "contado",
       observaciones: null,
       neto: 1100,
+      no_gravado: 0,
       iva: 220.5,
       total: 1320.5,
     });

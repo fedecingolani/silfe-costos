@@ -225,6 +225,7 @@ describe("CbtesAsoc en el pedido a ARCA", () => {
       docNro: "20111111112",
       condicionIvaReceptorId: 1,
       neto: 100,
+      noGravado: 0,
       iva: 21,
       total: 121,
       alicuotas: [{ id: 5, base: 100, importe: 21 }],
