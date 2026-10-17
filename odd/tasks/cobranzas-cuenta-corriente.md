@@ -183,7 +183,7 @@ corriente** de cada cliente y administrar la **cartera de cheques** recibidos.
 
 | ID | Tarea | Ruta | Estado |
 | --- | --- | --- | --- |
-| T1 | Comprobantes: ítem no gravado (`ImpTotConc`), `PeriodoAsoc`, PDF y tests | delegada (writer) | [ ] |
+| T1 | Comprobantes: ítem no gravado (`ImpTotConc`), `PeriodoAsoc`, PDF y tests | delegada (writer) | [x] |
 | T2 | Esquema: recibo, medios, cheque, historial, imputación, vistas de saldo y cuenta corriente, inmutabilidad y RLS (pgTAP en rojo primero) | delegada (writer) | [ ] |
 | T3 | Lógica pura: validación de recibo, imputación, saldo a favor y transiciones de cheques (Vitest) | delegada (writer) | [ ] |
 | T4 | Cobranza de cuenta corriente y pago de contado: pantallas y acciones, emisión con número | delegada (writer) | [ ] |
@@ -192,6 +192,34 @@ corriente** de cada cliente y administrar la **cartera de cheques** recibidos.
 | T7 | Cuenta corriente: ficha del cliente y listado general | delegada (writer) | [ ] |
 | T8 | PDF del recibo y anulación | delegada (writer) | [ ] |
 | T9 | Recorrido completo en local (y con ARCA de homologación cuando vuelva) | orquestador | [ ] |
+
+## Progreso
+
+### T1 — Ítem no gravado y período asociado (17/10/2026)
+
+- Commits: `082e44f` feat(comprobantes): ítems no gravados (ImpTotConc); `c729c82` feat(comprobantes): nota
+  de débito o crédito asociada a un período. Migración `20261025000001_comprobantes_no_gravado_periodo.sql`
+  (sólo local; falta `db push`).
+- **No gravado:** `comprobante_item.gravado` (false: sin alícuota, IVA 0) y `comprobante.no_gravado`
+  (ImpTotConc). `neto` sigue siendo sólo lo gravado; `total = neto + no_gravado + iva`; `iva_detalle`
+  sólo alícuotas gravadas. Sin ítems gravados se manda ImpNeto 0 y se omite el array `Iva` (ARCA 10018:
+  con ImpIVA 0 el array sólo va con la alícuota 0%; 10070: es obligatorio sólo si ImpNeto > 0).
+  En la app, la tasa de un ítem es `AlicuotaIva | "no_gravado"`: un `Number()` sobre ella da NaN y el
+  cálculo falla en lugar de tomarla como 0%.
+- **Período asociado:** `comprobante.periodo_asoc_desde/hasta` (los dos o ninguno, desde ≤ hasta, nunca
+  en una factura). Una nota lleva comprobantes asociados **o** un período, no los dos (ARCA admite ambos
+  según 10197; simplificación de la app). Al autorizar: mismo mes (10209) y hasta ≤ fecha de la nota
+  (10208). Con período la letra sale del cliente y no hay control de saldo de NC. `PeriodoAsoc` va
+  después de `Iva` (orden del WSDL: … CbtesAsoc, Tributos, Iva, Opcionales, Compradores, PeriodoAsoc).
+- Ambos campos quedan fijos en verificación (CM004) y en autorizado (CM001); el RPC
+  `guardar_borrador_comprobante` los guarda (misma firma).
+- Checks: `npm test` 481 ok; `npm run typecheck` ok; `npm run lint` ok; `npm run build` ok;
+  `supabase migration up --local` + `supabase test db` 399 ok; `supabase db reset --local` +
+  `supabase test db` 399 ok. Datos locales de prueba restaurados después del reset.
+
+## Próximo paso
+
+- T2: esquema de recibo, medios, cheque, historial, imputación y vistas de saldo (pgTAP en rojo primero).
 
 ## Criterios de aceptación
 
