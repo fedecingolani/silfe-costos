@@ -625,3 +625,141 @@ export type ComprobanteAsociado = {
   fecha: string | null;
   cuit: string | null;
 };
+
+// ---------------------------------------------------------------------
+// Cobranzas, cartera de cheques y cuenta corriente
+// ---------------------------------------------------------------------
+
+export const ESTADOS_RECIBO = ["borrador", "emitido", "anulado"] as const;
+
+export type EstadoRecibo = (typeof ESTADOS_RECIBO)[number];
+
+export const TIPOS_MEDIO_PAGO = ["efectivo", "transferencia", "cheque", "echeq", "retencion"] as const;
+
+export type TipoMedioPago = (typeof TIPOS_MEDIO_PAGO)[number];
+
+export const NOMBRES_MEDIO_PAGO: Record<TipoMedioPago, string> = {
+  efectivo: "Efectivo",
+  transferencia: "Transferencia / depósito",
+  cheque: "Cheque",
+  echeq: "E-cheq",
+  retencion: "Retención",
+};
+
+export const TIPOS_RETENCION = ["iibb", "ganancias", "iva", "suss"] as const;
+
+export type TipoRetencion = (typeof TIPOS_RETENCION)[number];
+
+export const NOMBRES_RETENCION: Record<TipoRetencion, string> = {
+  iibb: "IIBB",
+  ganancias: "Ganancias",
+  iva: "IVA",
+  suss: "SUSS",
+};
+
+export type TipoCheque = "fisico" | "echeq";
+
+/** anulado: su recibo se anuló estando el cheque en cartera (ya no cuenta). */
+export const ESTADOS_CHEQUE = ["en_cartera", "depositado", "entregado", "rechazado", "anulado"] as const;
+
+export type EstadoCheque = (typeof ESTADOS_CHEQUE)[number];
+
+export const NOMBRES_ESTADO_CHEQUE: Record<EstadoCheque, string> = {
+  en_cartera: "En cartera",
+  depositado: "Depositado",
+  entregado: "Entregado",
+  rechazado: "Rechazado",
+  anulado: "Anulado",
+};
+
+/** Estado de pago de un débito (calculado en v_comprobante_saldo). */
+export const ESTADOS_PAGO = ["pendiente", "parcial", "cancelado"] as const;
+
+export type EstadoPago = (typeof ESTADOS_PAGO)[number];
+
+/** Fila de recibo. */
+export type Recibo = {
+  id: string;
+  punto_venta: number;
+  /** Vacío en borrador. */
+  numero: number | null;
+  /** R-00001-00000001; vacío en borrador. */
+  numero_texto: string | null;
+  /** yyyy-mm-dd */
+  fecha: string;
+  cliente_id: string;
+  total: number;
+  estado: EstadoRecibo;
+  motivo_anulacion: string | null;
+  /** Pago de una factura o ND de contado. */
+  comprobante_contado_id: string | null;
+  observaciones: string | null;
+  creado_por: string | null;
+  creado_en: string;
+  actualizado_en: string;
+  emitido_en: string | null;
+  anulado_en: string | null;
+};
+
+/** Fila de recibo_medio. */
+export type ReciboMedio = {
+  id: string;
+  recibo_id: string;
+  orden: number;
+  tipo: TipoMedioPago;
+  importe: number;
+  banco: string | null;
+  referencia: string | null;
+  cheque_id: string | null;
+  retencion_tipo: TipoRetencion | null;
+  retencion_jurisdiccion: string | null;
+  certificado: string | null;
+  fecha_retencion: string | null;
+};
+
+/** Fila de cheque. */
+export type Cheque = {
+  id: string;
+  recibo_id: string;
+  cliente_id: string;
+  tipo: TipoCheque;
+  banco: string;
+  numero: string;
+  fecha_emision: string | null;
+  fecha_pago: string;
+  librador: string | null;
+  librador_cuit: string | null;
+  importe: number;
+  estado: EstadoCheque;
+  estado_fecha: string;
+  estado_observacion: string | null;
+  entregado_a: string | null;
+  /** Nota de débito por el rechazo. */
+  nd_comprobante_id: string | null;
+  creado_en: string;
+};
+
+/** Fila de cheque_estado (historial). */
+export type ChequeEstado = {
+  id: number;
+  cheque_id: string;
+  estado: EstadoCheque;
+  fecha: string;
+  observacion: string | null;
+  creado_por: string | null;
+  creado_en: string;
+};
+
+/** Fila de imputacion: sale de un recibo o de una nota de crédito. */
+export type Imputacion = {
+  id: string;
+  recibo_id: string | null;
+  nota_credito_id: string | null;
+  /** Débito (factura o nota de débito). */
+  comprobante_id: string;
+  importe: number;
+  fecha: string;
+  automatica: boolean;
+  creado_por: string | null;
+  creado_en: string;
+};

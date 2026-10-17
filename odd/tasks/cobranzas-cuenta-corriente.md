@@ -185,7 +185,7 @@ corriente** de cada cliente y administrar la **cartera de cheques** recibidos.
 | --- | --- | --- | --- |
 | T1 | Comprobantes: ítem no gravado (`ImpTotConc`), `PeriodoAsoc`, PDF y tests | delegada (writer) | [x] |
 | T2 | Esquema: recibo, medios, cheque, historial, imputación, vistas de saldo y cuenta corriente, inmutabilidad y RLS (pgTAP en rojo primero) | delegada (writer) | [x] |
-| T3 | Lógica pura: validación de recibo, imputación, saldo a favor y transiciones de cheques (Vitest) | delegada (writer) | [ ] |
+| T3 | Lógica pura: validación de recibo, imputación, saldo a favor y transiciones de cheques (Vitest) | delegada (writer) | [x] |
 | T4 | Cobranza de cuenta corriente y pago de contado: pantallas y acciones, emisión con número | delegada (writer) | [ ] |
 | T5 | Saldo a favor automático al autorizar, imputación de NC y estado de pago en comprobantes | delegada (writer) | [ ] |
 | T6 | Cartera de cheques con estados, y rechazo con ND obligatoria | delegada (writer) | [ ] |
@@ -219,7 +219,7 @@ corriente** de cada cliente y administrar la **cartera de cheques** recibidos.
 
 ### T2 — Esquema de cobranzas (17/10/2026)
 
-- Commit: feat(cobranzas): recibos, cheques, imputaciones y vistas de cuenta corriente. Migraciones
+- Commit: `bdfab47` feat(cobranzas): recibos, cheques, imputaciones y vistas de cuenta corriente. Migraciones
   `20261026000001_cobranzas.sql` y `20261026000002_rls_cobranzas.sql` (sólo local; falta `db push`).
   Tests `supabase/tests/cobranzas_test.sql` (148, en rojo antes de la migración).
 - **Numeración:** tabla `recibo_punto_venta (numero, nombre, activo, ultimo_numero)`, con el 1 creado.
@@ -258,9 +258,36 @@ corriente** de cada cliente y administrar la **cartera de cheques** recibidos.
   (conocida: hay una credencial de homologación local); `supabase db reset --local` + `supabase test db`
   547 ok. Datos locales restaurados (el volcado ahora resuelve `producto_id` por código).
 
+### T3 — Lógica pura de cobranzas (17/10/2026)
+
+- Commit: feat(cobranzas): validación de recibos, imputación, saldo a favor y transiciones de cheques
+  (hash en el próximo commit de documentación). Vitest en rojo primero (4 archivos sin implementación).
+- `src/lib/cobranzas/dinero.ts`: centavos enteros (`aCentavos`, `aPesos`, `sumarPesos`, `textoPesos`). Los
+  helpers de `comprobantes/calculo.ts` son privados y trabajan con 4 decimales y BigInt; para sumar importes
+  de 2 decimales alcanza con centavos enteros (mismo criterio que `saldoNotaCredito`).
+- `recibo.ts`: `validarRecibo` (cliente, fecha, ≥1 medio, importes > 0; cheque: banco, número, fecha de pago,
+  CUIT del librador de 11 dígitos si se carga; retención: tipo, certificado, fecha y jurisdicción en IIBB),
+  `totalRecibo`, `formatearNumeroRecibo` → `R-00001-00000001`.
+- `imputacion.ts`: `validarImputaciones` (≤ saldo de cada débito, suma ≤ total, sin negativos ni duplicados;
+  un importe 0 se ignora), `saldoAFavor`, `completarEnOrden` (de la más vieja a la más nueva) y
+  `pagoContado` (medios = total exacto; sólo comprobantes de contado).
+- `saldo-a-favor.ts`: `aplicarSaldoAFavor(creditos, debito)` → imputaciones automáticas de los créditos más
+  viejos a los más nuevos hasta el total del débito; un débito de contado devuelve `[]`.
+- `cheques.ts`: `TRANSICIONES_CHEQUE`, `puedePasar`, `puedeAnularRecibo`, `armarNotaDebitoRechazo(cheque,
+  contexto)` → `NotaArmada` (el mismo tipo que `armarNota`, listo para `guardar_borrador_comprobante`):
+  ND de cuenta corriente con un ítem no gravado "Cheque rechazado N° … – banco" por el importe; asociada a
+  las facturas que canceló el recibo (letra de esas facturas; si son de letras distintas, error) o, si fue a
+  cuenta, al período del 1° del mes del recibo a la fecha del recibo (letra del cliente), validado con
+  `validarPeriodoAsociado` (10208/10209).
+- Tipos compartidos en `src/lib/tipos.ts`: estados de recibo, cheque y pago, medios, retenciones y filas
+  `Recibo`, `ReciboMedio`, `Cheque`, `ChequeEstado`, `Imputacion`.
+- Tamaño: ~800 líneas (la mitad son tests) más ~170 de tipos.
+- Checks: `npm test` 513 ok; `npm run typecheck` ok; `npm run lint` ok; `npm run build` ok; `supabase test db`
+  547, falla sólo `arca_configuracion_test` 26 (conocida, con los datos locales restaurados).
+
 ## Próximo paso
 
-- T3: lógica pura de recibo, imputación, saldo a favor y cheques (Vitest en rojo primero).
+- T4: cobranza de cuenta corriente y pago de contado (pantallas, acciones y emisión con número).
 
 ## Criterios de aceptación
 
