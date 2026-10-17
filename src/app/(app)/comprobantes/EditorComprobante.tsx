@@ -8,6 +8,7 @@ import { numero, pesos } from "@/lib/formato";
 import { validarCuit } from "@/lib/clientes/validaciones";
 import { calcularItem, calcularTotales } from "@/lib/comprobantes/calculo";
 import { letraYTipoNota } from "@/lib/comprobantes/letra";
+import { validarParaAutorizar } from "@/lib/comprobantes/validacion";
 import {
   TIPOS_ASOCIADO_MANUAL,
   letraDeTipoArca,
@@ -269,6 +270,33 @@ export function EditorComprobante({
     return JSON.stringify(enviado);
   }
 
+  /**
+   * Problemas que la pantalla ya conoce y que harían rechazar la autorización.
+   * Si hay alguno, no se pide confirmación: se muestran directo. El servidor
+   * vuelve a validar todo al autorizar.
+   */
+  function problemasParaAutorizar(): string[] {
+    const problemas = validarParaAutorizar(
+      {
+        clase,
+        letra: letra === "A" || letra === "B" ? letra : null,
+        fecha,
+        receptor: {
+          razonSocial: cliente?.razon_social ?? null,
+          condicionIva: cliente?.condicion_iva ?? null,
+          cuit: cliente?.cuit ?? null,
+        },
+        items: calculables.filter((c) => c !== null),
+      },
+      hoy,
+    );
+    if (calculables.some((c) => c === null)) problemas.push("Hay ítems incompletos: revisá cantidad, precio y alícuota.");
+    if (superaSaldo && interno?.saldo != null) {
+      problemas.push(`La nota de crédito supera el saldo disponible (${pesos(interno.saldo)}).`);
+    }
+    return problemas;
+  }
+
   /** Guarda y, si se pide, abre la confirmación para autorizar. */
   function guardar(paraAutorizar: boolean) {
     setMensaje(null);
@@ -281,6 +309,12 @@ export function EditorComprobante({
       const esNuevo = id === null;
       setId(resultado.id);
       if (paraAutorizar) {
+        const problemas = problemasParaAutorizar();
+        if (problemas.length > 0) {
+          // Se queda en la pantalla para que el mensaje se vea; el id ya quedó guardado.
+          setMensaje({ error: `Se guardó el borrador, pero no se puede autorizar: ${problemas.join(" ")}` });
+          return;
+        }
         setResumen(resultado.resumen ?? null);
         confirmacion.current?.showModal();
         return;

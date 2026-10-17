@@ -18,17 +18,18 @@ export function BuscadorCliente({
 }) {
   const [texto, setTexto] = useState("");
   const [resultados, setResultados] = useState<ClienteEncontrado[]>([]);
-  const [buscando, setBuscando] = useState(false);
+  // Texto de la última búsqueda terminada: mientras no coincide con lo tipeado
+  // (espera entre teclas o pedido en curso) se muestra "Buscando…", no "ninguno".
+  const [buscado, setBuscado] = useState("");
 
   useEffect(() => {
     if (texto.trim().length < 2) return;
     let vigente = true;
     const espera = setTimeout(async () => {
-      setBuscando(true);
       const encontrados = await buscarClientes(texto);
       if (vigente) {
         setResultados(encontrados);
-        setBuscando(false);
+        setBuscado(texto);
       }
     }, 250);
     return () => {
@@ -65,6 +66,7 @@ export function BuscadorCliente({
   }
 
   const conTexto = texto.trim().length >= 2;
+  const buscando = buscado !== texto;
   return (
     <div className="relative">
       <input

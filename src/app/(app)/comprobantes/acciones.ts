@@ -312,7 +312,10 @@ export async function buscarClientes(texto: string): Promise<ClienteEncontrado[]
     .or(filtro)
     .order("razon_social")
     .limit(15);
-  if (error) return [];
+  if (error) {
+    console.error("buscarClientes:", error.message);
+    return [];
+  }
   return (data ?? []) as ClienteEncontrado[];
 }
 
