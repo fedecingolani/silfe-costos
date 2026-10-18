@@ -186,8 +186,8 @@ corriente** de cada cliente y administrar la **cartera de cheques** recibidos.
 | T1 | Comprobantes: ítem no gravado (`ImpTotConc`), `PeriodoAsoc`, PDF y tests | delegada (writer) | [x] |
 | T2 | Esquema: recibo, medios, cheque, historial, imputación, vistas de saldo y cuenta corriente, inmutabilidad y RLS (pgTAP en rojo primero) | delegada (writer) | [x] |
 | T3 | Lógica pura: validación de recibo, imputación, saldo a favor y transiciones de cheques (Vitest) | delegada (writer) | [x] |
-| T4 | Cobranza de cuenta corriente y pago de contado: pantallas y acciones, emisión con número | delegada (writer) | [ ] |
-| T5 | Saldo a favor automático al autorizar, imputación de NC y estado de pago en comprobantes | delegada (writer) | [ ] |
+| T4 | Cobranza de cuenta corriente y pago de contado: pantallas y acciones, emisión con número | delegada (writer) | [x] |
+| T5 | Saldo a favor automático al autorizar, imputación de NC y estado de pago en comprobantes | delegada (writer) | [x] |
 | T6 | Cartera de cheques con estados, y rechazo con ND obligatoria | delegada (writer) | [ ] |
 | T7 | Cuenta corriente: ficha del cliente y listado general | delegada (writer) | [ ] |
 | T8 | PDF del recibo y anulación | delegada (writer) | [ ] |
@@ -285,9 +285,56 @@ corriente** de cada cliente y administrar la **cartera de cheques** recibidos.
 - Checks: `npm test` 513 ok; `npm run typecheck` ok; `npm run lint` ok; `npm run build` ok; `supabase test db`
   547, falla sólo `arca_configuracion_test` 26 (conocida, con los datos locales restaurados).
 
+### T4 — Cobranza de cuenta corriente y pago de contado (18/10/2026)
+
+- Commit: `75a0bb5` feat(cobranzas): cobranza de cuenta corriente y pago de contado. Migración
+  `20261027000001_cobranzas_saldo_a_favor.sql` (sólo local; falta `db push`).
+- **Guardado atómico:** RPC `guardar_borrador_recibo(p_id, p_recibo, p_medios, p_imputaciones)` (security
+  invoker, sólo authenticated). Crea el recibo o, si es borrador, borra sus imputaciones, medios y cheques y los
+  vuelve a crear; total = suma de medios. Las imputaciones se insertan ordenadas por comprobante (mismo orden de
+  bloqueo). La acción `guardarRecibo` valida antes con `validarRecibo` + `validarImputaciones` (o `pagoContado`)
+  contra los saldos actuales (`armarRecibo` en `src/lib/cobranzas/guardado.ts`).
+- **Cheques de un borrador:** se crean en_cartera al guardar, pero no son cartera hasta emitir (T6 tiene que
+  filtrar por recibo emitido). Al borrar el borrador se van en cascada con su historial; no hizo falta cambiar el
+  esquema (test pgTAP).
+- **Pantallas:** Ventas → Cobranzas (`/cobranzas`, filtros desde/hasta/cliente/estado), `/cobranzas/nueva`
+  (editor: cliente con BuscadorCliente, medios por tipo, total en vivo, imputación con "Completar en orden",
+  imputado / total / queda a favor, saldo a favor actual del cliente) y `/cobranzas/[id]` (borrador: editor;
+  emitido/anulado: detalle con medios, imputaciones enlazadas y queda a favor; PDF y Anular deshabilitados hasta
+  T8). "Emitir recibo" guarda, pide confirmación y llama a `emitir_recibo`; los CB0xx se traducen en
+  `src/lib/cobranzas/errores.ts`.
+- **Pago de contado:** el detalle de un comprobante autorizado de contado (débito de cuenta corriente) muestra
+  "Contado – pago pendiente" con "Registrar pago" (`/cobranzas/nueva?contado=<id>`: cliente fijo, sin tabla de
+  imputación, una imputación por el total y medios = total exacto) o "Pagado – Recibo R-…". Si ya hay un borrador
+  o un recibo emitido para ese comprobante, `nueva` abre ese recibo.
+- Tamaño: ~2200 líneas (editor y pantallas ~1500, tests ~330), por encima de las 400 orientativas: son tres
+  pantallas nuevas con su editor; partirlas dejaría la cobranza sin poder emitirse.
+
+### T5 — Saldo a favor automático, NC y estado de pago (18/10/2026)
+
+- Commit: `47bb25b` feat(cobranzas): saldo a favor automático, imputación de notas de crédito y estado de pago.
+  pgTAP en rojo primero (8 fallas), después verde.
+- **Dónde se aplica:** trigger `trg_comprobante_aplicar_creditos` (AFTER UPDATE en comprobante al pasar a
+  autorizado), en la misma transacción que el cambio de estado: cubre los electrónicos (`marcarAutorizado`), los
+  no electrónicos y SQL directo. Factura/ND de cuenta corriente (producción o no electrónica) → imputaciones
+  automáticas de `v_cliente_saldo_a_favor` (fecha, alta). NC → a sus asociados de la base de cuenta corriente,
+  hasta su saldo; el resto a favor. Período, sistema anterior y asociados de contado: la NC queda a favor.
+  Contado y homologación: nada.
+- **Seguridad:** la aplicación va en un bloque con `exception`: si falla, se registra un WARNING y la
+  autorización (con un CAE ya otorgado por ARCA) igual se guarda. Un `pg_advisory_xact_lock` por cliente
+  serializa autorizaciones simultáneas.
+- **Estado de pago:** columna "Pago" en el listado de comprobantes (pendiente/parcial/cancelado de
+  `v_comprobante_saldo`, consultado en lotes de 100 ids; "—" en borradores, homologación y NC) y tarjeta
+  "Cobranza" en el detalle con saldo pendiente e imputaciones recibidas (recibos emitidos y NC, enlazados).
+- Checks (T4 y T5): `npm test` 530 ok; `npm run typecheck` ok; `npm run lint` ok; `npm run build` ok;
+  `supabase migration up --local` + `supabase test db` 572, falla sólo `arca_configuracion_test` 26 (conocida);
+  `supabase db reset --local` + `supabase test db` 572 ok; datos locales restaurados. Recorrido por PostgREST
+  local con JWT firmado (guardar, emitir, re-emitir → CB002, autorizar otra factura → saldo a favor aplicado) y
+  filas temporales borradas. `next dev` con Supabase local: las rutas nuevas responden 307 a /login, sin 500.
+
 ## Próximo paso
 
-- T4: cobranza de cuenta corriente y pago de contado (pantallas, acciones y emisión con número).
+- T6: cartera de cheques (filtrar por recibo emitido) y rechazo con ND obligatoria.
 
 ## Criterios de aceptación
 
