@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { Encabezado, Pastilla, Tarjeta, Vacio } from "@/components/ui";
 import { fecha, pesos } from "@/lib/formato";
 import { filtroBusquedaClientes } from "@/lib/clientes/busqueda";
+import { NOMBRES_ESTADO_PAGO, TONO_ESTADO_PAGO, enLotes, mapaSaldos } from "@/lib/cobranzas/estado-pago";
 import {
   NOMBRES_ESTADO,
   TONO_ESTADO,
@@ -68,6 +69,18 @@ export default async function ComprobantesPage({
   const { data, error } = await consulta;
   if (error) return <p className="text-sm text-red-700">Error al cargar los comprobantes: {error.message}</p>;
   const filas = ordenarListado((data ?? []) as unknown as Fila[]);
+
+  // Estado de pago de los débitos de cuenta corriente (no hay de borradores,
+  // homologación ni notas de crédito). En lotes, para no alargar la URL.
+  const ids = filas.filter((c) => c.estado === "autorizado" && c.clase !== "nota_credito").map((c) => c.id);
+  const lotes = await Promise.all(
+    enLotes(ids, 100).map((lote) =>
+      supabase.from("v_comprobante_saldo").select("comprobante_id, saldo, estado_pago").in("comprobante_id", lote),
+    ),
+  );
+  const errorSaldos = lotes.find((l) => l.error)?.error;
+  if (errorSaldos) return <p className="text-sm text-red-700">Error al cargar el estado de pago: {errorSaldos.message}</p>;
+  const saldos = mapaSaldos(lotes.flatMap((l) => l.data ?? []));
   const hayFiltros =
     Boolean(filtros.desde || filtros.hasta || filtros.cliente || filtros.clase || filtros.estado) ||
     filtros.ambiente !== ambienteActivo;
@@ -181,6 +194,7 @@ export default async function ComprobantesPage({
                 <th>Cliente</th>
                 <th className="text-right">Total</th>
                 <th>Estado</th>
+                <th>Pago</th>
                 <th>CAE</th>
               </tr>
             </thead>
@@ -188,7 +202,7 @@ export default async function ComprobantesPage({
               {filas.length === 0 && (
                 <Vacio
                   mensaje={hayFiltros ? "Ningún comprobante coincide con los filtros." : "Todavía no hay comprobantes."}
-                  colSpan={7}
+                  colSpan={8}
                 />
               )}
               {filas.map((c) => (
@@ -204,6 +218,15 @@ export default async function ComprobantesPage({
                   <td className="text-right tabular-nums">{pesos(Number(c.total))}</td>
                   <td>
                     <Pastilla tono={TONO_ESTADO[c.estado]}>{NOMBRES_ESTADO[c.estado]}</Pastilla>
+                  </td>
+                  <td>
+                    {saldos.get(c.id) ? (
+                      <Pastilla tono={TONO_ESTADO_PAGO[saldos.get(c.id)!.estadoPago]}>
+                        {NOMBRES_ESTADO_PAGO[saldos.get(c.id)!.estadoPago]}
+                      </Pastilla>
+                    ) : (
+                      "—"
+                    )}
                   </td>
                   <td className="tabular-nums">{c.cae ?? "—"}</td>
                 </tr>

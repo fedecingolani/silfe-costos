@@ -213,6 +213,10 @@ export function repositorioComprobantes(supabase: Supabase): RepositorioComproba
     },
 
     async marcarAutorizado(id, d) {
+      // En la misma transacción, el trigger trg_comprobante_aplicar_creditos
+      // (20261027000001) aplica el saldo a favor del cliente a una factura o
+      // ND de cuenta corriente de producción, o imputa una nota de crédito a
+      // sus asociados. Si eso falla no deshace la autorización.
       await actualizar(id, ["verificando"], {
         estado: "autorizado",
         numero: d.numero,

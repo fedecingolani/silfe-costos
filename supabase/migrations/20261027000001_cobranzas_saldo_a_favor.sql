@@ -12,7 +12,102 @@
 --    el borrador: cheque.recibo_id es on delete cascade, y su historial
 --    (cheque_estado) cae en cascada con el cheque.
 --
+-- 2. Saldo a favor automático (trigger trg_comprobante_aplicar_creditos,
+--    AFTER UPDATE en comprobante, cuando pasa a autorizado):
+--    - factura o nota de débito de cuenta corriente (producción o no
+--      electrónica): se le imputan los créditos del cliente con algo
+--      disponible (v_cliente_saldo_a_favor), del más viejo al más nuevo,
+--      hasta cubrirla o agotarlos (imputaciones automáticas);
+--    - nota de crédito (producción o no electrónica): se imputa a sus
+--      comprobantes asociados de la base (de cuenta corriente, del mismo
+--      cliente) hasta su saldo pendiente; el resto queda a favor. Las
+--      asociadas a un período o a comprobantes del sistema anterior
+--      quedan enteras a favor; también lo que corresponda a un asociado
+--      de contado (se paga por su total desde la factura);
+--    - contado nunca consume saldo a favor; homologación no toca la
+--      cuenta corriente.
+--    Corre en la misma transacción que el cambio de estado: vale para
+--    los electrónicos (marcarAutorizado de autorizar-supabase.ts) y para
+--    los no electrónicos, y también para SQL directo.
+--    Si la aplicación falla, NO deshace la autorización: un CAE que ARCA
+--    ya otorgó tiene que quedar guardado (si no, el comprobante quedaría
+--    en verificación para siempre). La falla se registra como WARNING y
+--    el saldo a favor queda sin aplicar (sigue disponible).
+--    Un candado por cliente (pg_advisory_xact_lock) serializa dos
+--    autorizaciones simultáneas del mismo cliente: la segunda ve lo que
+--    imputó la primera.
 -- =====================================================================
+
+-- ----- Saldo a favor automático ----------------------------------------------
+
+create or replace function public.fn_comprobante_aplicar_creditos()
+returns trigger
+language plpgsql
+set search_path = ''
+as $$
+declare
+  v_restante numeric;
+  v_importe numeric;
+  v_fila record;
+begin
+  begin
+    if public.fn_es_debito_cc(new.clase, new.estado, new.ambiente) then
+      if new.condicion_pago <> 'cuenta_corriente' then
+        return null;
+      end if;
+      perform pg_advisory_xact_lock(hashtextextended('saldo_a_favor:' || new.cliente_id::text, 0));
+      v_restante := new.total - public.fn_imputado_debito(new.id, null, null);
+      for v_fila in
+        select f.recibo_id, f.nota_credito_id, f.disponible
+        from public.v_cliente_saldo_a_favor f
+        where f.cliente_id = new.cliente_id
+        order by f.fecha, f.creado_en, coalesce(f.recibo_id, f.nota_credito_id)
+      loop
+        exit when v_restante <= 0;
+        v_importe := least(v_restante, v_fila.disponible);
+        insert into public.imputacion (recibo_id, nota_credito_id, comprobante_id, importe, automatica)
+        values (v_fila.recibo_id, v_fila.nota_credito_id, new.id, v_importe, true);
+        v_restante := v_restante - v_importe;
+      end loop;
+
+    elsif public.fn_es_nota_credito_cc(new.clase, new.estado, new.ambiente) then
+      perform pg_advisory_xact_lock(hashtextextended('saldo_a_favor:' || new.cliente_id::text, 0));
+      v_restante := new.total - (
+        select coalesce(sum(i.importe), 0) from public.imputacion i where i.nota_credito_id = new.id
+      );
+      for v_fila in
+        select c.id, c.total - public.fn_imputado_debito(c.id, null, null) as saldo
+        from public.comprobante_asociado a
+        join public.comprobante c on c.id = a.asociado_id
+        where a.comprobante_id = new.id
+          and c.cliente_id = new.cliente_id
+          and c.condicion_pago = 'cuenta_corriente'
+          and public.fn_es_debito_cc(c.clase, c.estado, c.ambiente)
+        order by c.fecha, c.numero, c.id
+      loop
+        exit when v_restante <= 0;
+        continue when v_fila.saldo <= 0;
+        v_importe := least(v_restante, v_fila.saldo);
+        insert into public.imputacion (nota_credito_id, comprobante_id, importe, automatica)
+        values (new.id, v_fila.id, v_importe, true);
+        v_restante := v_restante - v_importe;
+      end loop;
+    end if;
+  exception when others then
+    raise warning 'No se pudo aplicar el saldo a favor al comprobante %: % (%)', new.id, sqlerrm, sqlstate;
+  end;
+  return null;
+end;
+$$;
+
+comment on function public.fn_comprobante_aplicar_creditos() is
+  'Al autorizar: aplica el saldo a favor a una factura o ND de cuenta corriente, o imputa una NC a sus asociados. Nunca deshace la autorización';
+
+create trigger trg_comprobante_aplicar_creditos after update on comprobante
+  for each row when (old.estado is distinct from 'autorizado' and new.estado = 'autorizado')
+  execute function public.fn_comprobante_aplicar_creditos();
+
+revoke execute on function public.fn_comprobante_aplicar_creditos() from anon, authenticated, public;
 
 -- ----- Guardado atómico de un borrador -----------------------------------------
 

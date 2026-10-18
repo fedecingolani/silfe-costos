@@ -17,7 +17,7 @@
 begin;
 create extension if not exists pgtap with schema extensions;
 
-select plan(159);
+select plan(173);
 
 -- ---------------------------------------------------------------------
 -- Estructura
@@ -921,6 +921,166 @@ select throws_ok(
       '{"cliente_id": "cb000000-0000-0000-0000-000000000003", "fecha": "2026-10-19"}',
       '[{"tipo": "efectivo", "importe": 20}]', '[]')$$,
   'CB001', null, 'Un recibo emitido no se guarda como borrador'
+);
+
+-- ---------------------------------------------------------------------
+-- Saldo a favor automático al autorizar (C5) e imputación de notas de
+-- crédito a sus asociados (C6)
+-- ---------------------------------------------------------------------
+
+reset role;
+insert into cliente (id, razon_social, condicion_iva) values
+  ('cb000000-0000-0000-0000-000000000005', 'Cliente con saldo a favor', 'Responsable Inscripto'),
+  ('cb000000-0000-0000-0000-000000000006', 'Cliente con notas de crédito', 'Responsable Inscripto');
+
+-- C5: un recibo de 100 sin imputar (todo a favor).
+insert into recibo (id, punto_venta, cliente_id, fecha, total) values
+  ('cb200000-0000-0000-0000-000000000051', 9, 'cb000000-0000-0000-0000-000000000005', '2026-10-05', 100);
+insert into recibo_medio (recibo_id, tipo, importe) values ('cb200000-0000-0000-0000-000000000051', 'efectivo', 100);
+select emitir_recibo('cb200000-0000-0000-0000-000000000051');
+
+insert into comprobante (id, punto_venta, ambiente, clase, letra, tipo_arca, cliente_id, condicion_pago, total, fecha)
+values
+  ('cb100000-0000-0000-0000-000000000051', 9199, null, 'factura', 'A', 1,
+   'cb000000-0000-0000-0000-000000000005', 'contado', 30, '2026-10-06'),
+  ('cb100000-0000-0000-0000-000000000052', 9107, 'homologacion', 'factura', 'A', 1,
+   'cb000000-0000-0000-0000-000000000005', 'cuenta_corriente', 40, '2026-10-06'),
+  ('cb100000-0000-0000-0000-000000000053', 9199, null, 'factura', 'A', 1,
+   'cb000000-0000-0000-0000-000000000005', 'cuenta_corriente', 70, '2026-10-07'),
+  ('cb100000-0000-0000-0000-000000000054', 9107, 'produccion', 'factura', 'A', 1,
+   'cb000000-0000-0000-0000-000000000005', 'cuenta_corriente', 50, '2026-10-08');
+
+set local role authenticated;
+
+update comprobante set estado = 'autorizado', numero = 51 where id = 'cb100000-0000-0000-0000-000000000051';
+select is(
+  (select count(*) from imputacion where comprobante_id = 'cb100000-0000-0000-0000-000000000051'),
+  0::bigint,
+  'Una factura de contado no consume saldo a favor al autorizarse'
+);
+
+update comprobante set estado = 'verificando', intento_numero = 52 where id = 'cb100000-0000-0000-0000-000000000052';
+update comprobante set estado = 'autorizado', numero = 52, cae = '12345678901234', cae_vencimiento = '2026-12-31'
+where id = 'cb100000-0000-0000-0000-000000000052';
+select is(
+  (select count(*) from imputacion where comprobante_id = 'cb100000-0000-0000-0000-000000000052'),
+  0::bigint,
+  'Un comprobante de homologación no toca el saldo a favor'
+);
+
+update comprobante set estado = 'autorizado', numero = 53 where id = 'cb100000-0000-0000-0000-000000000053';
+select results_eq(
+  $$select recibo_id::text, importe, automatica from imputacion
+    where comprobante_id = 'cb100000-0000-0000-0000-000000000053'$$,
+  $$values ('cb200000-0000-0000-0000-000000000051', 70.00::numeric, true)$$,
+  'Al autorizar una factura de cuenta corriente se le aplica el saldo a favor'
+);
+select is(
+  (select estado_pago from v_comprobante_saldo where comprobante_id = 'cb100000-0000-0000-0000-000000000053'),
+  'cancelado',
+  'La factura cubierta por el saldo a favor queda cancelada'
+);
+
+update comprobante set estado = 'verificando', intento_numero = 54 where id = 'cb100000-0000-0000-0000-000000000054';
+update comprobante set estado = 'autorizado', numero = 54, cae = '12345678901234', cae_vencimiento = '2026-12-31'
+where id = 'cb100000-0000-0000-0000-000000000054';
+select results_eq(
+  $$select saldo, estado_pago from v_comprobante_saldo where comprobante_id = 'cb100000-0000-0000-0000-000000000054'$$,
+  $$values (20.00::numeric, 'parcial')$$,
+  'Una electrónica de producción consume lo que queda a favor (30 de 50)'
+);
+select is(
+  (select saldo_a_favor from v_cliente_saldo where cliente_id = 'cb000000-0000-0000-0000-000000000005'),
+  0.00::numeric,
+  'El saldo a favor se agotó'
+);
+
+select anular_recibo('cb200000-0000-0000-0000-000000000051', 'Cargado al cliente equivocado');
+select results_eq(
+  $$select comprobante_id::text, saldo, estado_pago from v_comprobante_saldo
+    where cliente_id = 'cb000000-0000-0000-0000-000000000005' and condicion_pago = 'cuenta_corriente'
+    order by fecha$$,
+  $$values ('cb100000-0000-0000-0000-000000000053', 70.00::numeric, 'pendiente'),
+           ('cb100000-0000-0000-0000-000000000054', 50.00::numeric, 'pendiente')$$,
+  'Anular el recibo deshace también lo aplicado automáticamente'
+);
+
+-- C6: notas de crédito.
+reset role;
+insert into comprobante (id, punto_venta, ambiente, clase, letra, tipo_arca, cliente_id, condicion_pago, total, fecha,
+                         periodo_asoc_desde, periodo_asoc_hasta)
+values
+  ('cb100000-0000-0000-0000-000000000061', 9199, null, 'factura', 'A', 1,
+   'cb000000-0000-0000-0000-000000000006', 'cuenta_corriente', 80, '2026-10-01', null, null),
+  ('cb100000-0000-0000-0000-000000000062', 9199, null, 'nota_credito', 'A', 3,
+   'cb000000-0000-0000-0000-000000000006', 'cuenta_corriente', 30, '2026-10-02', null, null),
+  ('cb100000-0000-0000-0000-000000000063', 9199, null, 'nota_credito', 'A', 3,
+   'cb000000-0000-0000-0000-000000000006', 'cuenta_corriente', 60, '2026-10-03', null, null),
+  ('cb100000-0000-0000-0000-000000000064', 9199, null, 'nota_credito', 'A', 3,
+   'cb000000-0000-0000-0000-000000000006', 'cuenta_corriente', 15, '2026-10-04', '2026-10-01', '2026-10-04'),
+  ('cb100000-0000-0000-0000-000000000065', 9199, null, 'factura', 'A', 1,
+   'cb000000-0000-0000-0000-000000000006', 'contado', 20, '2026-10-05', null, null),
+  ('cb100000-0000-0000-0000-000000000066', 9199, null, 'nota_credito', 'A', 3,
+   'cb000000-0000-0000-0000-000000000006', 'cuenta_corriente', 5, '2026-10-06', null, null),
+  ('cb100000-0000-0000-0000-000000000067', 9199, null, 'factura', 'A', 1,
+   'cb000000-0000-0000-0000-000000000006', 'cuenta_corriente', 100, '2026-10-07', null, null);
+update comprobante set estado = 'autorizado', numero = 61 where id = 'cb100000-0000-0000-0000-000000000061';
+update comprobante set estado = 'autorizado', numero = 65 where id = 'cb100000-0000-0000-0000-000000000065';
+insert into comprobante_asociado (comprobante_id, asociado_id) values
+  ('cb100000-0000-0000-0000-000000000062', 'cb100000-0000-0000-0000-000000000061'),
+  ('cb100000-0000-0000-0000-000000000063', 'cb100000-0000-0000-0000-000000000061'),
+  ('cb100000-0000-0000-0000-000000000066', 'cb100000-0000-0000-0000-000000000065');
+set local role authenticated;
+
+update comprobante set estado = 'autorizado', numero = 62 where id = 'cb100000-0000-0000-0000-000000000062';
+select results_eq(
+  $$select nota_credito_id::text, importe, automatica from imputacion
+    where comprobante_id = 'cb100000-0000-0000-0000-000000000061'$$,
+  $$values ('cb100000-0000-0000-0000-000000000062', 30.00::numeric, true)$$,
+  'Una nota de crédito se imputa sola a su comprobante asociado'
+);
+
+update comprobante set estado = 'autorizado', numero = 63 where id = 'cb100000-0000-0000-0000-000000000063';
+select results_eq(
+  $$select nota_credito_id::text, imputado, disponible from v_cliente_saldo_a_favor
+    where cliente_id = 'cb000000-0000-0000-0000-000000000006'$$,
+  $$values ('cb100000-0000-0000-0000-000000000063', 50.00::numeric, 10.00::numeric)$$,
+  'Imputa hasta el saldo pendiente del asociado y el resto queda a favor'
+);
+select is(
+  (select estado_pago from v_comprobante_saldo where comprobante_id = 'cb100000-0000-0000-0000-000000000061'),
+  'cancelado',
+  'El asociado queda cancelado'
+);
+
+update comprobante set estado = 'autorizado', numero = 64 where id = 'cb100000-0000-0000-0000-000000000064';
+select is(
+  (select disponible from v_cliente_saldo_a_favor where nota_credito_id = 'cb100000-0000-0000-0000-000000000064'),
+  15.00::numeric,
+  'Una nota de crédito asociada a un período queda entera a favor'
+);
+
+update comprobante set estado = 'autorizado', numero = 66 where id = 'cb100000-0000-0000-0000-000000000066';
+select results_eq(
+  $$select (select count(*) from imputacion where nota_credito_id = 'cb100000-0000-0000-0000-000000000066'),
+           (select saldo from v_comprobante_saldo where comprobante_id = 'cb100000-0000-0000-0000-000000000065')$$,
+  $$values (0::bigint, 20.00::numeric)$$,
+  'Una nota de crédito sobre una factura de contado no la imputa: queda a favor'
+);
+
+update comprobante set estado = 'autorizado', numero = 67 where id = 'cb100000-0000-0000-0000-000000000067';
+select results_eq(
+  $$select (select count(*) from imputacion where comprobante_id = 'cb100000-0000-0000-0000-000000000067' and automatica),
+           (select saldo from v_comprobante_saldo where comprobante_id = 'cb100000-0000-0000-0000-000000000067'),
+           (select saldo_a_favor from v_cliente_saldo where cliente_id = 'cb000000-0000-0000-0000-000000000006')$$,
+  $$values (3::bigint, 70.00::numeric, 0.00::numeric)$$,
+  'La próxima factura de cuenta corriente consume lo que las notas dejaron a favor (10 + 15 + 5)'
+);
+select is(
+  (select count(*) from v_cliente_saldo
+   where cliente_id::text like 'cb000000-%' and saldo <> deuda_pendiente - saldo_a_favor),
+  0::bigint,
+  'Después de las aplicaciones automáticas, saldo = pendientes − a favor'
 );
 
 reset role;

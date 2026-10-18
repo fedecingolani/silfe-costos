@@ -27,13 +27,15 @@ import {
   NOMBRES_CONDICION_PAGO,
   type Comprobante,
   type ComprobanteItem,
+  type EstadoPago,
   type MensajeArca,
   type TipoComprobanteArca,
 } from "@/lib/tipos";
 import type { ClienteEncontrado } from "../acciones";
 import { cargarContextoEditor, cargarPrecios } from "../datos";
 import { EditorComprobante } from "../EditorComprobante";
-import { reciboDeContado } from "../../cobranzas/datos";
+import { imputacionesRecibidas, reciboDeContado, type ImputacionRecibida } from "../../cobranzas/datos";
+import { NOMBRES_ESTADO_PAGO, TONO_ESTADO_PAGO } from "@/lib/cobranzas/estado-pago";
 import { AccionesDetalle } from "./AccionesDetalle";
 
 export const dynamic = "force-dynamic";
@@ -254,16 +256,25 @@ export default async function ComprobantePage({ params }: { params: Promise<{ id
   };
   const saldo = c.estado === "autorizado" && c.clase !== "nota_credito" ? saldoDe([esteComoAsociado], notas) : null;
 
-  // Pago de contado: débito de cuenta corriente (autorizado, producción o no electrónico) de contado.
+  // Cuenta corriente: sólo los débitos (factura o ND autorizada, de
+  // producción o no electrónica) tienen saldo, estado de pago e imputaciones.
+  let pago: { saldo: number; estadoPago: EstadoPago; imputaciones: ImputacionRecibida[] } | null = null;
   let pagoContado: { recibo: { id: string; numero_texto: string | null } | null } | null = null;
-  if (c.estado === "autorizado" && c.condicion_pago === "contado") {
-    const [{ data: debito, error: errorDebito }, recibos] = await Promise.all([
-      supabase.from("v_comprobante_saldo").select("comprobante_id").eq("comprobante_id", c.id).maybeSingle(),
-      reciboDeContado(supabase, c.id),
+  if (c.estado === "autorizado" && c.clase !== "nota_credito") {
+    const [{ data: debito, error: errorDebito }, recibidas] = await Promise.all([
+      supabase.from("v_comprobante_saldo").select("saldo, estado_pago").eq("comprobante_id", c.id).maybeSingle(),
+      imputacionesRecibidas(supabase, c.id),
     ]);
     if (errorDebito) return <p className="text-sm text-red-700">{errorDebito.message}</p>;
-    if (typeof recibos === "string") return <p className="text-sm text-red-700">{recibos}</p>;
-    if (debito) pagoContado = { recibo: recibos.find((r) => r.estado === "emitido") ?? null };
+    if (typeof recibidas === "string") return <p className="text-sm text-red-700">{recibidas}</p>;
+    if (debito) {
+      pago = { saldo: Number(debito.saldo), estadoPago: debito.estado_pago as EstadoPago, imputaciones: recibidas };
+      if (c.condicion_pago === "contado") {
+        const recibos = await reciboDeContado(supabase, c.id);
+        if (typeof recibos === "string") return <p className="text-sm text-red-700">{recibos}</p>;
+        pagoContado = { recibo: recibos.find((r) => r.estado === "emitido") ?? null };
+      }
+    }
   }
 
   return (
@@ -396,6 +407,36 @@ export default async function ComprobantePage({ params }: { params: Promise<{ id
                     <span className="tabular-nums">{pesos(n.total)}</span>
                     <Pastilla tono={TONO_ESTADO[n.estado]}>{NOMBRES_ESTADO[n.estado]}</Pastilla>
                   </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Tarjeta>
+      )}
+
+      {pago && (
+        <Tarjeta
+          titulo="Cobranza"
+          descripcion={`Saldo pendiente: ${pesos(pago.saldo)}`}
+          acciones={<Pastilla tono={TONO_ESTADO_PAGO[pago.estadoPago]}>{NOMBRES_ESTADO_PAGO[pago.estadoPago]}</Pastilla>}
+          className="mt-4"
+        >
+          {pago.imputaciones.length === 0 ? (
+            <p className="p-4 text-sm text-stone-500">Todavía no recibió pagos ni notas de crédito.</p>
+          ) : (
+            <ul className="divide-y divide-stone-100 text-sm">
+              {pago.imputaciones.map((i) => (
+                <li key={i.id} className="flex items-center justify-between gap-2 px-4 py-2">
+                  <span>
+                    <Link href={i.href} className="text-marca-700 hover:underline">
+                      {i.texto}
+                    </Link>
+                    <span className="ml-2 text-xs text-stone-500">
+                      {fecha(i.fecha)}
+                      {i.automatica && " · automática"}
+                    </span>
+                  </span>
+                  <span className="tabular-nums">{pesos(i.importe)}</span>
                 </li>
               ))}
             </ul>

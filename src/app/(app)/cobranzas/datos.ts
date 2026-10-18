@@ -185,3 +185,53 @@ export function medioEditable(m: MedioLeido): MedioBorrador {
         : null,
   };
 }
+
+/** Imputación vigente recibida por un débito: de un recibo emitido o de una nota de crédito. */
+export type ImputacionRecibida = {
+  id: string;
+  importe: number;
+  fecha: string;
+  automatica: boolean;
+  texto: string;
+  href: string;
+};
+
+type FilaImputacionRecibida = {
+  id: string;
+  importe: number | string;
+  fecha: string;
+  automatica: boolean;
+  recibo: { id: string; numero_texto: string | null; estado: string } | null;
+  nota: { id: string; letra: string | null; punto_venta: number; numero: number | null } | null;
+};
+
+/** Pagos (recibos emitidos) y notas de crédito imputados a un débito, por fecha. */
+export async function imputacionesRecibidas(
+  supabase: Supabase,
+  comprobanteId: string,
+): Promise<ImputacionRecibida[] | string> {
+  const { data, error } = await supabase
+    .from("imputacion")
+    .select(
+      "id, importe, fecha, automatica, recibo:recibo_id(id, numero_texto, estado), " +
+        "nota:nota_credito_id(id, letra, punto_venta, numero)",
+    )
+    .eq("comprobante_id", comprobanteId)
+    .order("fecha")
+    .order("creado_en");
+  if (error) return `No se pudieron leer los pagos del comprobante: ${error.message}`;
+  return ((data ?? []) as unknown as FilaImputacionRecibida[])
+    .filter((i) => i.nota || i.recibo?.estado === "emitido")
+    .map((i) => ({
+      id: i.id,
+      importe: Number(i.importe),
+      fecha: i.fecha,
+      automatica: i.automatica,
+      texto: i.recibo
+        ? `Recibo ${i.recibo.numero_texto ?? ""}`.trim()
+        : `Nota de crédito ${i.nota?.letra ?? ""}-${String(i.nota?.punto_venta ?? "").padStart(5, "0")}-${String(
+            i.nota?.numero ?? "",
+          ).padStart(8, "0")}`,
+      href: i.recibo ? `/cobranzas/${i.recibo.id}` : `/comprobantes/${i.nota?.id}`,
+    }));
+}
