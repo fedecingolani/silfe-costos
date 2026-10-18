@@ -9,16 +9,26 @@ import {
   type AmbienteArca,
   type ArcaCredencialVisible,
   type ArcaEmisor,
+  type PuntoVenta,
 } from "@/lib/tipos";
-import { guardarCredencial, guardarEmisor, probarConexion } from "./acciones";
+import {
+  agregarPuntoVenta,
+  borrarPuntoVenta,
+  cambiarActivoPuntoVenta,
+  guardarCredencial,
+  guardarEmisor,
+  probarConexion,
+} from "./acciones";
 import { FormularioCredencial } from "./FormularioCredencial";
 import { FormularioEmisor } from "./FormularioEmisor";
 import { PruebaConexion } from "./PruebaConexion";
+import { PuntosVenta } from "./PuntosVenta";
 
 export const dynamic = "force-dynamic";
 
 // Columnas explícitas: la clave privada cifrada y el ticket nunca se leen acá.
-const COLUMNAS_EMISOR = "cuit, razon_social, condicion_iva, punto_venta, ambiente";
+const COLUMNAS_EMISOR =
+  "cuit, razon_social, condicion_iva, ambiente, domicilio_comercial, ingresos_brutos, inicio_actividades";
 const COLUMNAS_CREDENCIAL =
   "ambiente, certificado_titular, certificado_cuit, certificado_vence, ta_expira, actualizado_en";
 
@@ -82,18 +92,19 @@ function Credencial({
 
 export default async function ArcaPage() {
   const supabase = await createClient();
-  const [{ data: emisorData, error: errorEmisor }, { data: credencialesData, error: errorCredenciales }] =
-    await Promise.all([
-      supabase.from("arca_emisor").select(COLUMNAS_EMISOR).eq("id", true).maybeSingle(),
-      supabase.from("arca_credencial").select(COLUMNAS_CREDENCIAL),
-    ]);
+  const [
+    { data: emisorData, error: errorEmisor },
+    { data: credencialesData, error: errorCredenciales },
+    { data: puntosData, error: errorPuntos },
+  ] = await Promise.all([
+    supabase.from("arca_emisor").select(COLUMNAS_EMISOR).eq("id", true).maybeSingle(),
+    supabase.from("arca_credencial").select(COLUMNAS_CREDENCIAL),
+    supabase.from("punto_venta").select("numero, nombre, electronico, activo").order("numero"),
+  ]);
 
-  if (errorEmisor || errorCredenciales) {
-    return (
-      <p className="text-sm text-red-700">
-        Error al cargar la configuración de ARCA: {(errorEmisor ?? errorCredenciales)?.message}
-      </p>
-    );
+  const errorCarga = errorEmisor ?? errorCredenciales ?? errorPuntos;
+  if (errorCarga) {
+    return <p className="text-sm text-red-700">Error al cargar la configuración de ARCA: {errorCarga.message}</p>;
   }
 
   const emisor = emisorData as Omit<ArcaEmisor, "id" | "actualizado_en"> | null;
@@ -101,6 +112,8 @@ export default async function ArcaPage() {
   const sinSecreto = leerClaveCifrado() === null;
   const ahora = new Date();
   const ambienteActivo = emisor?.ambiente ?? "homologacion";
+  const puntos = (puntosData ?? []) as Pick<PuntoVenta, "numero" | "nombre" | "electronico" | "activo">[];
+  const electronicosActivos = puntos.filter((p) => p.electronico && p.activo).map((p) => Number(p.numero));
 
   return (
     <>
@@ -127,11 +140,23 @@ export default async function ArcaPage() {
             titulo="Probar conexión"
             descripcion={`Con el ambiente activo: ${NOMBRES_AMBIENTE_ARCA[ambienteActivo].toLowerCase()}.`}
           >
-            <PruebaConexion accion={probarConexion} deshabilitado={sinSecreto} />
+            <PruebaConexion accion={probarConexion} deshabilitado={sinSecreto} puntosVenta={electronicosActivos} />
           </Tarjeta>
         </div>
 
         <div className="space-y-6">
+          <Tarjeta
+            titulo="Puntos de venta"
+            descripcion="Los activos se ofrecen al cargar un comprobante. Los electrónicos autorizan en ARCA."
+          >
+            <PuntosVenta
+              puntos={puntos}
+              agregar={agregarPuntoVenta}
+              cambiarActivo={cambiarActivoPuntoVenta}
+              borrar={borrarPuntoVenta}
+            />
+          </Tarjeta>
+
           {AMBIENTES_ARCA.map((ambiente) => (
             <Credencial
               key={ambiente}

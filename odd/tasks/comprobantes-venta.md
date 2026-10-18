@@ -1,0 +1,494 @@
+# Comprobantes de venta con CAE (Fase 8 del roadmap, Ventas) — SPEC
+
+> Estado: **spec cerrada, sin implementar** (preguntas respondidas el 15–16/10/2026).
+
+## Objetivo
+
+Cargar, autorizar en ARCA (CAE), consultar e imprimir **facturas, notas de crédito y notas de
+débito** desde Sil-Fe ERP, y reemplazar al sistema de facturación actual en el punto de venta 7.
+
+## Problema y por qué
+
+Hoy se factura con otro sistema. La conexión con ARCA ya funciona (`/configuracion/arca`:
+certificado de producción, ticket WSAA y `FECompUltimoAutorizado`, que da Factura A = 360 en el
+punto de venta 7). Falta poder emitir comprobantes con los datos de clientes y productos que ya
+están en la app.
+
+Referencias usadas para esta spec:
+- **Pantalla del sistema actual:** cliente, comprobante, fecha, vencimiento del cobro, punto de
+  venta, número, condición de pago, "más opciones", ítems (producto/servicio, centro de costo,
+  observaciones, cantidad, precio con 4 decimales, % descuento, importe, IVA, total),
+  "percepciones e impuestos" y totales bruto / impuestos / total.
+- **Factura impresa** (`A-00002-00000157`, de otra empresa, como modelo del formato):
+  - encabezado con logo, razón social, domicilio, condición IVA, CUIT, IIBB e inicio de
+    actividades; letra con código (`A` / `001`), número y fecha;
+  - receptor: razón social, domicilio, CUIT y condición IVA;
+  - moneda, provincia destino, fecha de vencimiento y forma de pago;
+  - ítems con código, artículo, observaciones, cantidad, precio, % dto, importe, alícuota e
+    importe con IVA;
+  - pie con IVA discriminado por alícuota (2.5 / 5 / 10.5 / 21 / 27), bruto, impuestos y total;
+    QR de ARCA, CAE y vencimiento del CAE.
+- **Formulario preimpreso** (`A-09999-00000190`): solo datos (fecha, receptor, CUIT, condición,
+  moneda, ítems con cantidad/precio/importe, totales), posicionados para imprimir sobre papel
+  con el diseño ya impreso.
+
+## Alcance
+
+**Entra:**
+- Factura, Nota de Crédito y Nota de Débito, letras **A y B** (el emisor es Responsable
+  Inscripto).
+- Concepto **Productos** (código 1).
+- Moneda pesos.
+- CRUD de borradores, autorización en ARCA, listado, detalle y PDF.
+
+**No entra (por ahora):** letra C/M, exportación (E), servicios con período facturado, moneda
+extranjera, percepciones/otros tributos, remitos, cuenta corriente/cobranzas, envío por mail.
+
+## Reglas de negocio
+
+### Ciclo de vida: "CRUD" sólo sobre borradores
+
+| Estado | Se puede | No se puede |
+| --- | --- | --- |
+| `borrador` | crear, editar, duplicar, borrar, autorizar | imprimir como válido |
+| `autorizado` (tiene CAE) | ver, imprimir PDF, duplicar, generar nota de crédito/débito asociada | editar, borrar |
+| `rechazado` | ver el motivo, volver a borrador para corregir | — |
+
+- Un comprobante autorizado **no se edita ni se borra nunca**: es un documento fiscal. Para
+  corregirlo o anularlo se emite una **nota de crédito** asociada (total o parcial).
+- El borrador no tiene número. El número se asigna **al autorizar**.
+
+### Letra y tipo de comprobante
+
+Según la condición IVA del receptor (emisor Responsable Inscripto):
+
+| Receptor | Letra | Factura / NC / ND (código ARCA) |
+| --- | --- | --- |
+| Responsable Inscripto | A | 1 / 3 / 2 |
+| Monotributista | A | 1 / 3 / 2 |
+| Exento | B | 6 / 8 / 7 |
+| Consumidor Final | B | 6 / 8 / 7 |
+
+- La letra se calcula; el usuario elige sólo "Factura / Nota de crédito / Nota de débito".
+- Si el cliente no tiene condición IVA cargada, no se puede autorizar: se pide completarla.
+
+### Receptor
+
+- **Letra A:** CUIT válida obligatoria (`DocTipo 80`, validada con `validarCuit`).
+- **Letra B:** CUIT (`80`), DNI (`96`) u "otro" (`99`). Consumidor final sin identificar sólo
+  por debajo del tope que fija ARCA (el tope se valida contra ARCA, no se hardcodea).
+- `CondicionIVAReceptorId` (obligatorio en WSFE): RI = 1, Exento = 4, Consumidor Final = 5,
+  Monotributista = 6.
+- **Snapshot:** al autorizar se copian al comprobante razón social, CUIT, domicilio, condición
+  IVA y provincia del cliente. Si después cambia la ficha del cliente, la factura no cambia.
+
+### Numeración (sin intervención del usuario)
+
+1. Al autorizar se toma un bloqueo por (ambiente, punto de venta, tipo de comprobante), con el
+   mismo patrón que el ticket WSAA.
+2. Se consulta `FECompUltimoAutorizado` y se usa **último + 1**.
+3. Se llama a `FECAESolicitar`.
+4. Si ARCA rechaza por número no correlativo (otro sistema emitió en el medio), se vuelve a
+   consultar el último y se reintenta **una sola vez**.
+5. **Respuesta perdida** (timeout o corte después de enviar): el comprobante queda en estado
+   `verificando`. Antes de reintentar se consulta `FECompConsultar` con ese número.
+   - Si ARCA lo tiene, se guarda su CAE.
+   - Si no, se reintenta.
+   - Nunca se pide un CAE dos veces a ciegas.
+
+### Ítems y precios
+
+- **Producto:** se elige del catálogo (`producto`, `TERMINADO` o `SUBGRUPO`). Se copian código,
+  nombre, unidad de venta y `alicuota_iva`.
+- **Ítem libre:** descripción y alícuota a mano (para conceptos que no son productos, como
+  "Desarrollo de producto" en la factura de referencia).
+- **Precio unitario sin IVA**, con 4 decimales.
+  - Por defecto sale de la **lista de precios elegida en el comprobante** (`lista_precio_item.precio_final`, que ya es sin IVA).
+  - Si el producto no está en esa lista, queda en 0 y hay que cargarlo.
+  - Siempre se puede editar.
+- Descuento por ítem en %.
+- Observaciones por ítem (texto que se imprime debajo de la descripción).
+- Cálculo por ítem: `importe = cantidad × precio × (1 − dto%)`, redondeado a 2 decimales;
+  `iva = importe × alícuota`.
+- Totales para WSFE:
+  - `ImpNeto` = suma de importes gravados;
+  - `ImpIVA` = suma por alícuota, cada alícuota redondeada a 2 decimales;
+  - `ImpTotConc` = 0, `ImpOpEx` = 0 y `ImpTrib` = 0 (no entran en el alcance);
+  - `ImpTotal` = `ImpNeto` + `ImpIVA`;
+  - array `Iva` con un registro por alícuota (Id 3 = 0%, 4 = 10.5%, 5 = 21%, 6 = 27%, 8 = 5%,
+    9 = 2.5%).
+- Mismo cálculo en el servidor al autorizar (lo que se ve en pantalla no es la fuente de
+  verdad).
+
+### Fechas
+
+- **Fecha del comprobante:** hoy por defecto. Para concepto Productos, ARCA acepta hasta
+  ±5 días; no puede ser anterior al último comprobante autorizado de ese tipo y punto de venta.
+- **Vencimiento del cobro:** por defecto igual a la fecha. Se imprime; no va a ARCA en
+  concepto Productos.
+
+### Notas de crédito / débito
+
+- Se crean desde una factura autorizada ("Generar nota de crédito" / "Generar nota de débito"). Copia los
+  ítems para ajustar cantidades o precios. Desde una nota de débito autorizada, sólo la nota de crédito.
+- Llevan la letra del comprobante asociado (ARCA rechaza otra), aunque la condición IVA del cliente haya cambiado.
+- Una nota de crédito no supera el total de la factura menos sus otras notas de crédito (sólo asociados de la
+  base: de los cargados a mano no se conoce el importe).
+- Llevan comprobante asociado (`CbtesAsoc`: tipo, punto de venta, número, CUIT, fecha).
+- **Facturas viejas** (1 a 360, emitidas con el sistema anterior): no están en la base. Para
+  una NC sobre ellas se cargan a mano los datos del comprobante asociado.
+
+### Ambiente
+
+- Se emite en el ambiente activo de `/configuracion/arca`. En homologación el comprobante se
+  marca "SIN VALIDEZ FISCAL" en pantalla y en el PDF.
+- La numeración y los listados se separan por ambiente: los comprobantes de prueba nunca se
+  mezclan con los reales.
+
+## Datos
+
+Tablas nuevas (nombres siguiendo las convenciones del repo, RLS en migración aparte):
+
+- `comprobante`:
+  - **Identificación:** `id`, `ambiente`, `estado` (borrador | verificando | autorizado | rechazado), `clase` (factura | nota_credito | nota_debito), `letra`, `tipo_arca`, `punto_venta`, `numero` (null en borrador).
+  - **Fechas:** `fecha`, `fecha_vencimiento_pago`.
+  - **Venta:** `cliente_id`, `lista_precio_id`, `condicion_pago`, `observaciones`, `moneda` ('PES').
+  - **Snapshot del receptor:** `receptor_razon_social`, `receptor_doc_tipo`, `receptor_doc_nro`, `receptor_condicion_iva`, `receptor_domicilio`, `receptor_provincia`.
+  - **Totales:** `neto`, `iva`, `total`.
+  - **Resultado ARCA:** `cae`, `cae_vencimiento`, `arca_resultado`, `arca_observaciones` (jsonb), `arca_errores` (jsonb).
+  - **Auditoría:** `creado_por`, `creado_en`, `autorizado_en`.
+  - Único (`ambiente`, `punto_venta`, `tipo_arca`, `numero`) cuando `numero` no es null.
+  - Trigger que impide modificar o borrar un comprobante `autorizado`.
+- `comprobante_item`: `id`, `comprobante_id`, `orden`, `producto_id` (null en ítem libre),
+  `codigo`, `descripcion`, `observaciones`, `unidad`, `cantidad`, `precio_unitario`
+  (numeric 4 dec), `descuento_pct`, `alicuota_iva`, `importe`, `iva`.
+- `comprobante_asociado`: `comprobante_id`, `asociado_id` (si está en la base) o tipo + punto
+  de venta + número + fecha + CUIT (si es viejo).
+- `arca_emisor` suma: domicilio comercial, ingresos brutos, inicio de actividades y logo, que
+  hacen falta para el PDF.
+- **Puntos de venta** (`punto_venta`): `numero`, `nombre`, `electronico` (bool), `activo`.
+  - Arranca con el **7, electrónico**, que reemplaza a `arca_emisor.punto_venta`. Se migra el
+    valor y se deja de usar esa columna.
+  - **Electrónico:** el número lo da ARCA (último autorizado + 1) y se pide CAE.
+  - **No electrónico** (se crea después): no pasa por ARCA. El número se asigna en nuestra base
+    con una secuencia por (punto de venta, tipo), dentro de la misma transacción que "emite" el
+    comprobante. Qué datos lleva depende de la pregunta 1 (CAI o documento interno).
+  - `comprobante.punto_venta` referencia a esta tabla. El listado y la numeración se separan por
+    punto de venta.
+
+## Pantallas
+
+Menú **Ventas → Comprobantes**.
+
+- **Listado:**
+  - Columnas: fecha, tipo y letra, número (`A-00007-00000361`), cliente, total, estado y CAE.
+  - Filtros: rango de fechas, cliente, tipo, estado y ambiente.
+  - Se ven todos los estados; los borradores arriba.
+- **Nuevo / editar borrador** (inspirado en la pantalla actual):
+  - **Cabecera:** cliente (buscador, igual que en clientes), clase de comprobante, fecha,
+    vencimiento del cobro, condición de pago, lista de precios.
+  - **Datos que se muestran calculados:** punto de venta, letra, y número "se asigna al
+    autorizar".
+  - **"Más opciones":** observaciones generales.
+  - **Ítems:** producto o libre, observaciones, cantidad, precio, % dto, importe, IVA y total
+    por fila. "Agregar ítem" y quitar fila.
+  - **Totales:** neto, IVA discriminado por alícuota, y total.
+  - Botones: **Guardar borrador** y **Autorizar en ARCA**. El segundo pide confirmación y
+    muestra el resumen: "Se va a emitir Factura A al cliente X por $Y. No se puede deshacer".
+  - **Validaciones antes de autorizar:** receptor completo, al menos un ítem, cantidades > 0,
+    total > 0, fecha dentro del rango.
+  - Los errores y observaciones de ARCA se muestran tal cual llegan, con código y texto.
+- **Detalle del comprobante autorizado:** todos los datos de solo lectura, CAE y vencimiento,
+  y botones "PDF", "Duplicar" y "Generar nota de crédito".
+
+## Impresión
+
+- **PDF de una sola copia** con el formato de la factura de referencia y los datos de Silfe:
+  - QR de ARCA, que es obligatorio: JSON con los datos del comprobante en base64, en
+    `https://www.arca.gob.ar/fe/qr/?p=…`;
+  - leyenda "Comprobante Autorizado" con el CAE y su vencimiento.
+- Generado en el Worker con `pdf-lib`, igual que las listas de precios. El QR necesita una
+  librería pura JS o una implementación propia; hay que validar que funcione en el Worker.
+- **Formulario preimpreso** (decidido): es un **formato de impresión** que se usa **sólo para
+  comprobantes no electrónicos** (sin CAE, sin validez fiscal).
+  - Imprime sólo los datos, en coordenadas fijas, sobre el papel ya diseñado. Sin logo, sin
+    líneas, sin encabezados de columna, y sin CAE ni QR.
+  - Las coordenadas salen del PDF de referencia `A-09999-00000190` y quedan en una constante
+    (en mm), para poder ajustarlas sin tocar la lógica.
+  - Se imprime al 100% en A4: el PDF no debe escalar.
+- Los comprobantes **electrónicos** se imprimen sólo con el PDF completo.
+
+## Fuera de la app (pase)
+
+- Cortar el sistema anterior el mismo día que se empieza a emitir desde acá. Los dos nunca
+  emiten a la vez en el punto de venta 7.
+- Antes, probar todo en homologación: la tarjeta de homologación de producción tiene que tener
+  `silfe-homo.crt`.
+
+## Preguntas abiertas
+
+1. ~~Preimpreso y comprobantes no electrónicos~~ **Respondido:**
+   - Los comprobantes no electrónicos son **documentos sin validez fiscal**. Van por su propio
+     punto de venta, con numeración en nuestra base, sin ARCA y sin CAE.
+   - El formulario preimpreso se usa **sólo** para ellos.
+   - **Decisión del usuario (16/10):** el documento sin validez fiscal se maneja **igual que el
+     fiscal**: mismas clases (factura / NC / ND), misma letra A/B según el receptor, mismos ítems,
+     totales, estados e inmutabilidad. La única diferencia es que **no se pide CAE**. Al
+     "emitir", el número se asigna en nuestra base y pasa directo a `autorizado` sin CAE.
+     - Se advirtió que la práctica habitual es la leyenda "DOCUMENTO NO VÁLIDO COMO FACTURA" y
+       no usar letra; el usuario decidió mantener el mismo formato.
+2. ~~Punto de venta 2 vs 7~~ **Respondido:** los comprobantes electrónicos van por el **7**.
+   Más adelante se crea otro punto de venta para los no electrónicos (ver "Puntos de venta" en
+   Datos).
+3. ~~Centro de costo~~ **Respondido:** no se usa; queda afuera (ni columna ni campo).
+4. ~~Percepciones e impuestos~~ **Respondido:** Silfe **no es agente** de percepción. `Tributos`
+   e `ImpTrib` = 0 quedan fuera del alcance, y la sección "Percepciones e impuestos" de la
+   pantalla actual no se replica.
+5. ~~Condición de pago~~ **Respondido:**
+   - Dos opciones fijas: **Cuenta corriente** y **Contado**.
+     - Columna `condicion_pago` con check `('cuenta_corriente','contado')`.
+     - Por defecto Cuenta corriente, como en el sistema actual.
+     - Con Contado, el vencimiento del cobro es la fecha del comprobante.
+   - **Segunda etapa:** en el sistema actual, Contado abre la carga del pago y genera el asiento
+     automático. Queda fuera de este alcance, junto con cobranzas y contabilidad.
+6. ~~Lista de precios por cliente~~ **Respondido:** se elige en cada comprobante. El cliente no
+   tiene lista asignada; por defecto se propone la lista creada más recientemente.
+7. ~~Servicios~~ **Respondido:** por ahora no. Sólo concepto Productos (1). Los ítems libres
+   como "Desarrollo de producto" se facturan igual como concepto 1.
+8. ~~Copias~~ **Respondido:** una sola copia, sin leyenda Original/Duplicado.
+
+## Checklist (tentativo, se ajusta al cerrar las preguntas)
+
+| ID | Tarea | Ruta | Estado |
+| --- | --- | --- | --- |
+| T1 | Migraciones `comprobante`, `comprobante_item`, `comprobante_asociado`, campos nuevos del emisor, triggers de inmutabilidad y RLS (pgTAP en rojo primero) | delegada (writer) | [x] |
+| T2 | `src/lib/comprobantes/`: letra/tipo, cálculo de totales e IVA por alícuota, armado y parseo de `FECAESolicitar`, `FECompConsultar`, QR. Extraer el `AlmacenTicket` de Supabase a un módulo compartido (Vitest) | delegada (writer) | [x] |
+| T3 | Autorización: bloqueo por punto de venta y tipo, último + 1, reintento correlativo, estado `verificando` y reconciliación | delegada (writer) | [x] |
+| T4 | Pantallas: listado, alta/edición de borrador y detalle | delegada (writer) | [x] |
+| T5 | Impresión: PDF completo con QR para comprobantes electrónicos | delegada (writer) | [x] |
+| T6 | Notas de crédito/débito con comprobante asociado | delegada (writer) | [x] |
+| T7 | Recorrido en homologación: Factura A, Factura B, NC parcial, rechazo de ARCA y respuesta perdida simulada | orquestador | [ ] |
+| T8 | **Segunda etapa:** punto de venta no electrónico (numeración propia, sin ARCA) e impresión en formulario preimpreso | delegada (writer) | [ ] |
+
+## Entrega
+
+- Previsión: ~3000 líneas en la etapa 1 (T1–T7).
+- Estrategia: PR único al terminar la etapa 1, igual que en `arca-configuracion`. Los commits separan cada tarea.
+- Rutas: T1–T6 delegadas (cada una toca 2 o más archivos no triviales); T7 orquestador.
+
+## Criterios de aceptación
+
+- Un borrador se puede editar y borrar; un autorizado no (ni desde la app ni con SQL directo).
+- Autorizar una Factura A en homologación devuelve CAE, numera último + 1 y el PDF muestra QR,
+  CAE y vencimiento.
+- Un cliente Consumidor Final genera Factura B; un RI o Monotributista, Factura A.
+- Si ARCA rechaza, el comprobante queda `rechazado` con el código y mensaje de ARCA, sin número
+  consumido.
+- Una respuesta perdida no genera un CAE duplicado.
+- Dos autorizaciones simultáneas en el mismo punto de venta y tipo no chocan en el número.
+- Los totales del PDF coinciden con lo enviado a ARCA.
+
+## Checks
+
+- Test-first: pgTAP (restricciones, inmutabilidad, RLS) y Vitest (letra, totales, redondeo,
+  armado/parseo SOAP con `fetch` simulado, QR).
+- `npm test`, `supabase test db`, `npm run typecheck`, `npm run lint`, `npm run build`.
+- Recorrido en el navegador en homologación.
+
+## Progreso
+
+- Rama `feat/comprobantes-venta` creada desde `main` (6dc480f).
+- T1 (delegada, writer: 3 archivos SQL no triviales): migraciones `20261024000001_comprobantes.sql` y
+  `20261024000002_rls_comprobantes.sql`, test `supabase/tests/comprobantes_test.sql` (86 pruebas). Commit `b347aa7`.
+  - RED observado (tablas inexistentes) y luego GREEN con `supabase test db supabase/tests/comprobantes_test.sql`.
+  - Bloqueo de numeración: tabla `comprobante_numeracion_bloqueo` + funciones `tomar_bloqueo_numeracion`
+    (devuelve el vencimiento como llave, o null si está tomado) y `liberar_bloqueo_numeracion` (security invoker).
+  - Errores de los triggers con SQLSTATE propio: CM001 autorizado inmutable, CM002 transición inválida,
+    CM003 borrado no permitido, CM004 ítems/asociados bloqueados, CM005 punto de venta inconsistente.
+  - Pendiente: `supabase/tests/arca_configuracion_test.sql` (fuera de la superficie de T1) espera las columnas
+    viejas de `arca_emisor` y falla con las tres nuevas; hay que sumarlas a su `columns_are`.
+- T2 (delegada, writer: 6 módulos con tests): `src/lib/comprobantes/` (`letra`, `calculo`, `validacion`, `numero`,
+  `qr`), `feCAESolicitar` y `feCompConsultar` en `src/lib/arca/wsfe.ts`, `src/lib/arca/almacen-ticket.ts`
+  (extraído de las acciones de `/configuracion/arca`, mismo comportamiento) y tipos en `src/lib/tipos.ts`.
+  - RED observado (módulos y funciones inexistentes) y luego GREEN con Vitest. Los tests de `almacen-ticket` son de
+    caracterización del código movido (no hubo RED: el comportamiento no cambia).
+  - Cálculo con enteros (BigInt) y redondeo mitad hacia arriba; IVA por alícuota sobre la base sumada.
+  - QR con `https://www.arca.gob.ar/fe/qr/?p=<base64>`.
+  - Checks: `npm test`, `npm run typecheck`, `npm run lint`, `npm run build` en verde; `supabase test db` con la
+    falla pendiente de `arca_configuracion_test.sql` (ver T1).
+  - Commit `9f8d687`. Luego `6be8f3d`: `arca_configuracion_test.sql` con las columnas nuevas del emisor
+    (`supabase test db` en verde).
+- Revisión nativa de T1 + T2: **aprobada**, con tres advertencias no bloqueantes, corregidas en el commit `e2a7d85`
+  (delegada, writer):
+  - `validarParaAutorizar` informaba como válida una fecha vacía o mal formada (el `NaN` pasaba el control de ±5 días).
+  - `feCAESolicitar` devolvía `A` sin CAE cuando ARCA no lo informaba. Ahora lanza `RespuestaArcaIncierta`.
+  - Migración `20261024000003_comprobantes_verificando.sql`:
+    - `verificando → autorizado` exige `numero = intento_numero`;
+    - en verificación no cambian el punto de venta, el ambiente, la clase, la letra, el tipo, el cliente, la fecha,
+      los totales ni la copia del receptor (CM004);
+    - `intento_numero` sólo cambia en verificación (CM002).
+  - RED observado (3 Vitest, 20 pgTAP) y luego GREEN.
+- T3 (delegada, writer: orquestación + cableado + acción, 3 archivos no triviales con tests):
+  - `src/lib/comprobantes/autorizar.ts`: lógica pura con dependencias inyectadas (repositorio, ARCA, reloj y espera).
+  - `autorizar-supabase.ts`: cableado real (updates condicionales al estado esperado, RPC del bloqueo,
+    `obtenerTicket` con `almacenTicket`).
+  - Acción `autorizarComprobante(id)` en `src/app/(app)/comprobantes/acciones.ts`.
+  - Bloqueo: hasta 7 intentos de `tomar_bloqueo_numeracion` con 6 esperas de 500 ms; se libera en `finally` sólo si
+    se tomó.
+  - Reintento por 10016 una sola vez. Si no se puede consultar el último para reintentar, se guarda el rechazo
+    (ARCA ya respondió R).
+  - Reconciliación bajo el mismo bloqueo, comparando total (±0,005) y documento (sólo dígitos):
+    - si coincide, se autoriza con el CAE de ARCA;
+    - si ARCA tiene otros datos, queda `rechazado` con `arca_errores` `[{code: 0, msg}]` y `arca_resultado` nulo;
+    - si ARCA no lo tiene, vuelve a borrador y sigue el flujo normal una vez.
+  - RED observado (módulo inexistente) y luego GREEN: 27 tests de `autorizar` con dobles en memoria.
+  - El cableado contra Supabase no tiene prueba automática: la `service_role` local no tiene permisos sobre
+    `comprobante`. Se verificó con `typecheck` y contra el esquema; el recorrido real queda para T7.
+  - Commit `21c5ac7`. Checks: `npm test` (295), `npm run typecheck`, `npm run lint`, `npm run build` y
+    `supabase test db` (341) en verde.
+
+- Revisión nativa de T3: **aprobada**, con dos advertencias no bloqueantes, corregidas en T4 (unidad A, delegada,
+  writer):
+  - la reconciliación que encuentra el comprobante en ARCA sin vencimiento del CAE devolvía el error sin
+    `estado: 'verificando'` (la fila seguía en verificación). Ahora devuelve `verificando` con el mismo mensaje de
+    "respuesta incierta, apretá «Autorizar» de nuevo" que la emisión;
+  - un asociado cargado a mano con datos nulos se convertía en `NaN`. `asociadoManual` (`src/lib/comprobantes/asociados.ts`)
+    valida tipo, punto de venta, número, fecha y CUIT y devuelve un error legible antes de tocar ARCA.
+  - RED observado (1 test de `autorizar`, módulo `asociados` inexistente) y luego GREEN. Commit `c19e0aa`.
+
+- T4, unidad B (delegada, writer): puntos de venta y datos del emisor en `/configuracion/arca`.
+  - Migración `20261024000004_puntos_venta_emisor.sql`: vuelve a copiar `arca_emisor.punto_venta` a `punto_venta`
+    (por si cambió), crea el 7 electrónico si la tabla está vacía y borra la columna.
+  - Formulario del emisor sin punto de venta y con domicilio comercial, ingresos brutos e inicio de actividades.
+  - Tarjeta "Puntos de venta": listado, alta (número, nombre, electrónico), activar/desactivar y borrar (la clave
+    foránea lo impide si tiene comprobantes; se informa que hay que desactivarlo).
+  - "Probar conexión" usa el electrónico activo de número más bajo, con un select si hay varios; sin ninguno, avisa.
+  - RED observado en `arca_configuracion_test.sql` (3 fallas: columna todavía presente) y luego GREEN. Commit `7929b5d`.
+
+- T4, unidad C (delegada, writer): pantallas de `/comprobantes`.
+  - Guardado atómico con la función `guardar_borrador_comprobante(p_id, p_comprobante, p_items)` (security invoker,
+    sólo `authenticated`), agregada a `20261024000004_puntos_venta_emisor.sql` porque era la única migración dentro de
+    la superficie autorizada. Crea o actualiza, reemplaza los ítems, toma el ambiente activo del emisor al crear en un
+    punto de venta electrónico (y lo conserva al actualizar), pasa un rechazado a borrador limpiando los mensajes de
+    ARCA. Errores: CM004 (ya no es borrador), CM005 (punto de venta inexistente), CM006 (comprobante inexistente; P0002
+    llega de PostgREST como un 500 sin cuerpo).
+  - Lógica pura con Vitest: `borrador.ts` (lectura y validación de lo enviado, importes y totales en el servidor,
+    vencimiento según condición de pago, precio de la lista, buscador de productos, mensajes de error) y `listado.ts`
+    (filtros de la URL, orden con borradores arriba, nombres y número visible).
+  - Acciones: `guardarBorrador`, `borrarBorrador`, `duplicarComprobante` (fecha de hoy, mismo cliente, cabecera e
+    ítems), `buscarClientes` (reusa `filtroBusquedaClientes`), `preciosDeLista`; `autorizarComprobante` ahora
+    devuelve también el estado.
+  - Pantallas: listado con filtros y aviso de homologación; editor de borrador/rechazado (cliente, clase, fecha,
+    vencimiento, condición, lista, punto de venta, observaciones, ítems de producto o libres con cálculo en vivo,
+    totales por alícuota, guardar, autorizar con confirmación, borrar y duplicar); detalle de autorizado/verificando
+    con "Verificar con ARCA", "Duplicar" y lugares reservados (deshabilitados) para PDF (T5) y nota de crédito (T6).
+    Menú Ventas → Comprobantes.
+  - RED observado (pgTAP de la función: 12 fallas; módulos `borrador` y `listado` inexistentes) y luego GREEN.
+  - Sin prueba automática de las pantallas: se verificaron las consultas contra la base local con un JWT de
+    `authenticated` firmado localmente y el arranque con `next dev` (307 a /login, sin 500).
+  - Commit `fe94524`. Checks: `npm test` (347), `npm run typecheck`, `npm run lint`, `npm run build` y
+    `supabase test db` (356) en verde.
+
+- Revisión nativa de T4: **la declinó el usuario**. T4 quedó verificada por los checks del writer (ver arriba).
+
+- T5 (delegada, writer: generador, mapeo, carga y ruta, varios archivos no triviales con tests): PDF del comprobante.
+  - QR: `qrcode-generator@1.4.4` (JS puro, sin canvas ni dependencias nativas), corrección M, versión automática y
+    zona de silencio de 4 módulos. `qr-matriz.ts` devuelve la matriz y el PDF dibuja los módulos oscuros como
+    rectángulos vectoriales (un rectángulo por tramo horizontal), sin PNG. El QR mide 85 pt (≈ 30 mm).
+  - `pdf-datos.ts` (puro): `armarDatosPdf` (título, letra, código de ARCA con 3 dígitos, CUIT con guiones, fechas
+    dd/mm/aaaa, documento del receptor, IVA de las alícuotas 2,5 / 5 / 10,5 / 21 / 27 con cero las que no tiene,
+    totales de la fila, URL del QR, nombre del archivo), `validarImprimible`, `paginar` y `dispositionEnLinea`.
+  - Números con formato argentino (1.400.000,00), como el resto de la app; el sistema anterior usa 1,400,000.00.
+  - `pdf.ts` (puro, pdf-lib, texto saneado a WinAnsi): encabezado con logo, letra, código y datos del emisor;
+    receptor; moneda, provincia, vencimiento y forma de pago; tabla con banda gris; pie con IVA por alícuota, banda
+    de totales, QR, "Comprobante Autorizado", CAE y su vencimiento. Encabezado y receptor en todas las páginas; pie
+    sólo en la última; "Página N de M" en todas; marca diagonal "HOMOLOGACIÓN – SIN VALIDEZ FISCAL" en homologación.
+  - Paginación: las páginas se llenan en orden; si la última no deja lugar para el pie, su último renglón pasa a
+    una página nueva (o la nueva lleva sólo el pie si ni ese renglón entra).
+  - `pdf-descarga.ts` y la ruta `/comprobantes/[id]/pdf` (`force-dynamic`): columnas explícitas (nada de
+    `arca_credencial`); 404 si no existe, 409 con texto legible si no está autorizado, si el punto de venta no es
+    electrónico o si faltan CAE o CUIT del emisor; logo de `public/` con el mismo tiempo máximo (`MS_LOGO`) que las
+    listas. El cargador del logo de las listas es privado y quedaba fuera de la superficie: se copió (10 líneas).
+  - `Content-Disposition: inline` con `Factura A-00007-00000361.pdf` (y nombre UTF-8 para las notas de crédito/débito).
+  - Detalle: el botón "PDF" abre el PDF en otra pestaña si está autorizado en un punto de venta electrónico.
+  - RED observado (módulos inexistentes) y luego GREEN: 35 tests nuevos (mapeo, formatos, paginación, QR, generador
+    con 1 y 40 ítems y homologación, carga con cliente simulado).
+  - Checks: `npm test` (382), `npm run typecheck`, `npm run lint`, `npm run build` y `npx opennextjs-cloudflare
+    build` en verde; `qrcode-generator` queda dentro de `.open-next/server-functions/default/handler.mjs`.
+  - Sin prueba automática de la ruta contra la base: el recorrido real queda para T7.
+  - Commit `3b708a5`.
+
+- Revisión nativa de T5: **aprobada**, con una advertencia y una sugerencia no bloqueantes, corregidas en T6
+  (unidad A, delegada, writer). Commit `c5686aa`:
+  - advertencia: el PDF recalculaba el IVA por alícuota de los ítems mientras bruto, impuestos y total salían de lo
+    guardado. Ahora `comprobante.iva_detalle` (migración `20261024000005_comprobantes_notas.sql`) guarda el array `Iva`
+    enviado a ARCA, escrito en el mismo update que pasa a `verificando`. Queda fijo: CM004 en verificación, CM001 en un
+    autorizado (`fn_comprobante_validar` reemplazada con el campo nuevo). El PDF y el detalle usan lo guardado y
+    recalculan sólo en comprobantes anteriores (`iva_detalle` nulo); si la suma no da el IVA guardado, la ruta lo deja
+    en el log (`console.warn`) sin cortar la impresión;
+  - sugerencia: `puedeImprimir` (pura, en `pdf-datos.ts`) es la única regla para la ruta del PDF y el botón del
+    detalle: estado, punto de venta electrónico, CAE y CUIT del emisor. El botón deshabilitado muestra el motivo.
+  - RED observado (4 pgTAP, 10 Vitest) y luego GREEN.
+
+- T6, unidad B (delegada, writer: lógica pura, función SQL, acciones y pantallas). Commit `4d99500`:
+  - "Generar nota de crédito / débito" en el detalle de una factura autorizada (`notasPermitidas`): borrador con el
+    mismo cliente, punto de venta (o el electrónico activo más bajo), lista y condición de pago, fecha de hoy, ítems
+    copiados y la factura como asociado (`armarNota`, acción `generarNota`); abre el editor.
+  - Desde una nota de débito autorizada sólo se genera la **nota de crédito** que la anula. No hay nota de débito
+    sobre una nota de débito (el ajuste nuevo se asocia a la factura) ni ninguna nota sobre una nota de crédito.
+  - **Letra:** la nota hereda la del asociado (`letraYTipoNota`), no la de la condición IVA actual del cliente; si
+    difiere, el editor avisa. Con asociado a mano, la letra sale de su tipo. La misma regla en `armarBorrador` y en
+    `autorizar` (que además valida asociado obligatorio, clase admitida y una sola letra: `validarAsociadosNota`).
+  - **Asociado a mano** (sistema anterior): en el editor, si la clase es nota y no hay asociado de la base, sección
+    "Comprobante asociado" con tipo (Factura A/B; también ND A/B para una nota de crédito), punto de venta, número y
+    fecha. La CUIT es la del emisor. La nota de crédito ya se puede cargar desde "Nuevo comprobante" para esto.
+  - `guardar_borrador_comprobante(p_id, p_comprobante, p_items, p_asociados default null)` reemplaza a la de tres
+    parámetros: `null` no toca los asociados guardados, un array los reemplaza en la misma transacción. Valida (CM007,
+    mensaje legible) que un asociado de la base esté autorizado, sea de una clase admitida y de un mismo ambiente; la
+    nota toma **el ambiente del asociado** (no el activo del emisor). Una factura no lleva asociados. Limpia
+    `iva_detalle` de un intento anterior.
+  - **Saldo:** una nota de crédito con asociados de la base no supera su total menos las otras notas de crédito
+    autorizadas **o en verificación** (éstas pueden quedar autorizadas: se descuentan para no pasarse). Se bloquea al
+    autorizar con el saldo disponible en el mensaje; el editor lo muestra y avisa si se pasa. Con asociado a mano no
+    hay control (no se conoce el importe): el editor lo aclara.
+  - Detalle: "Comprobante asociado" enlazado (o "(sistema anterior)"); en una factura, sus notas con estado, total y
+    enlace, y el saldo para notas de crédito. PDF: "Comprobante asociado: A-00007-00000361 del 10/10/2026" debajo del
+    receptor, a la derecha. Títulos y códigos verificados: NC 3/8 (`003`/`008`) y ND 2/7 (`002`/`007`).
+  - `CbtesAsoc` con `Tipo`, `PtoVta`, `Nro`, `Cuit` (emisor) y `CbteFch` para asociados de la base y a mano: test sobre
+    el cuerpo SOAP de `feCAESolicitar`. "Duplicar" copia los asociados.
+  - Lectura compartida en `asociados-carga.ts` (dos consultas en lugar de un embed: `comprobante_asociado` tiene dos
+    claves foráneas a `comprobante`).
+  - RED observado (14 pgTAP; 38 Vitest y el módulo `notas` inexistente) y luego GREEN. `asociados-carga.ts` se escribió
+    junto con sus tests (lectura y armado, sin RED propio).
+  - Tamaño: ~1.900 líneas agregadas (720 de tests, ~280 de SQL), más que la guía de 400: la regla de la letra, el
+    asociado, el saldo y la función SQL se tocan entre sí y no quedaban comprobables por separado.
+  - Checks: `npm test` (440), `npm run typecheck`, `npm run lint`, `npm run build` y `supabase test db` (374) en verde.
+    La migración 000005 se aplicó con `supabase migration up --local` tras la unidad A; la parte de la unidad B se
+    volvió a aplicar con `psql` en la base local. Consultas y función verificadas contra PostgREST local con un JWT de
+    `authenticated` firmado localmente (filas temporales borradas). `next dev` con Supabase local: 307 a /login en las
+    rutas de comprobantes, sin 500.
+
+- Revisión nativa de T6: **aprobada**, con una advertencia y dos sugerencias no bloqueantes, corregidas (delegada,
+  writer). Commit `a1c32f5`:
+  - advertencia (carrera del saldo): `autorizar` leía el saldo de la nota de crédito antes del bloqueo de numeración.
+    Ahora lo vuelve a leer con el bloqueo tomado (`RepositorioComprobantes.saldoNotaCredito`) y, si se pasa, devuelve
+    el error legible sin llamar a ARCA y libera el bloqueo. Serializa dos notas de crédito sobre la misma factura en
+    el **mismo** punto de venta (ambiente y tipo salen del asociado). **Riesgo residual:** el punto de venta de la
+    nota lo elige el usuario (`armarNota` usa el de la factura sólo si sigue activo y el editor lo deja cambiar), así
+    que dos notas sobre la misma factura en puntos de venta distintos toman bloqueos distintos y pueden pasar las dos.
+    Cerrarlo del todo pide un control en la base o un bloqueo por factura (pendiente de decidir);
+  - sugerencia: `guardar_borrador_comprobante` (migración `20261024000006_comprobantes_notas_asociados.sql`) valida
+    siempre los asociados que quedan (los del pedido o, con `p_asociados` null, los guardados) contra la clase y letra
+    nuevas: factura sin asociados, asociado autorizado, clase admitida, **misma letra que el asociado de la base**
+    (regla nueva en la base; la app ya la cumplía) y un mismo ambiente. Mismo CM007;
+  - sugerencia: `autorizar-supabase.test.ts` cubre con un cliente de Supabase falso los CbtesAsoc (base y a mano),
+    "ya no existe", el saldo, la exclusión de la nota que se autoriza y las notas repetidas.
+  - RED observado (4 pgTAP, 2 Vitest) y luego GREEN; los tests del repositorio cubren código existente (sin RED).
+  - Checks: `npm test` (449), `npm run typecheck`, `npm run lint`, `npm run build`, `supabase migration up --local` y
+    `supabase test db` (380) en verde.
+- Revisión nativa de las correcciones de T6 (a1c32f5): aprobada con 2 sugerencias. Corregida: si el asociado de la base desaparece entre la carga y el bloqueo, la nota de crédito se frena (antes seguía a ARCA sin control de saldo); test en rojo primero. Pendiente (sugerencia): pgTAP de pasar a `factura` una nota con asociados guardados y de la derivación del ambiente con `p_asociados` null.
+- T7 parcial (16/10), sin ARCA: `wswhomo.afip.gov.ar` (WSFE homologación) corta las conexiones desde la Mac y desde Cloudflare (520); WSAA homologación y WSFE producción responden. Recorrido de pantallas en local OK: buscador de clientes, letra A/B, precio desde la lista, cálculo por ítem y por alícuota, guardar borrador, validación de fecha, falla de ARCA antes del CAE (queda borrador, bloqueo liberado, ticket guardado), Contado fija el vencimiento, borrar borrador, detalle de autorizado (simulado por SQL con CAE de prueba), PDF 200, nota de crédito con letra heredada y tope de saldo, duplicar. Corregido en de07b13: el modal de confirmación ya no aparece si la pantalla sabe que la autorización va a fallar, y el buscador muestra "Buscando…" en vez de "ningún cliente" mientras espera. Pendiente: CAE real, rechazo de ARCA y respuesta perdida, cuando vuelva WSFE homologación. Detalle visual: en anchos angostos la tabla de ítems se desborda.
+
+## Próximo paso
+
+T7: recorrido en homologación (Factura A, Factura B, NC parcial, rechazo de ARCA y respuesta perdida simulada).

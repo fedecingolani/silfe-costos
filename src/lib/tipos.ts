@@ -437,8 +437,12 @@ export type ArcaEmisor = {
   cuit: string | null;
   razon_social: string | null;
   condicion_iva: CondicionIvaEmisor | null;
-  punto_venta: number | null;
   ambiente: AmbienteArca;
+  /** Datos que se imprimen en los comprobantes. */
+  domicilio_comercial: string | null;
+  ingresos_brutos: string | null;
+  /** yyyy-mm-dd */
+  inicio_actividades: string | null;
   actualizado_en: string;
 };
 
@@ -474,4 +478,135 @@ export type TicketAcceso = {
   token: string;
   sign: string;
   expira: Date;
+};
+
+// ---------------------------------------------------------------------
+// Comprobantes de venta
+// ---------------------------------------------------------------------
+
+/** Fila de punto_venta. */
+export type PuntoVenta = {
+  numero: number;
+  nombre: string | null;
+  /** true: numera y autoriza en ARCA (CAE). false: numeración propia, sin ARCA. */
+  electronico: boolean;
+  activo: boolean;
+  creado_en: string;
+};
+
+export const ESTADOS_COMPROBANTE = ["borrador", "verificando", "autorizado", "rechazado"] as const;
+
+export type EstadoComprobante = (typeof ESTADOS_COMPROBANTE)[number];
+
+export const CLASES_COMPROBANTE = ["factura", "nota_credito", "nota_debito"] as const;
+
+export type ClaseComprobante = (typeof CLASES_COMPROBANTE)[number];
+
+export const NOMBRES_CLASE_COMPROBANTE: Record<ClaseComprobante, string> = {
+  factura: "Factura",
+  nota_credito: "Nota de crédito",
+  nota_debito: "Nota de débito",
+};
+
+export type LetraComprobante = "A" | "B";
+
+/** Códigos de ARCA: A = 1 / 2 / 3, B = 6 / 7 / 8 (factura / nota de débito / nota de crédito). */
+export type TipoComprobanteArca = 1 | 2 | 3 | 6 | 7 | 8;
+
+export const CONDICIONES_PAGO = ["cuenta_corriente", "contado"] as const;
+
+export type CondicionPago = (typeof CONDICIONES_PAGO)[number];
+
+export const NOMBRES_CONDICION_PAGO: Record<CondicionPago, string> = {
+  cuenta_corriente: "Cuenta corriente",
+  contado: "Contado",
+};
+
+/** Alícuotas de IVA que acepta ARCA, en %. */
+export const ALICUOTAS_IVA = [0, 2.5, 5, 10.5, 21, 27] as const;
+
+export type AlicuotaIva = (typeof ALICUOTAS_IVA)[number];
+
+/** Código y mensaje tal como los devuelve ARCA (Obs o Err). */
+export type MensajeArca = { code: number; msg: string };
+
+/** IVA de una alícuota tal como se envió a ARCA (array Iva de FECAESolicitar). */
+export type IvaAutorizado = { id: number; alicuota: number; base: number; importe: number };
+
+/** Fila de comprobante. Los importes llegan de Postgres como números. */
+export type Comprobante = {
+  id: string;
+  punto_venta: number;
+  /** Vacío en puntos de venta no electrónicos. */
+  ambiente: AmbienteArca | null;
+  estado: EstadoComprobante;
+  clase: ClaseComprobante;
+  letra: LetraComprobante | null;
+  tipo_arca: TipoComprobanteArca | null;
+  /** Vacío hasta autorizar. */
+  numero: number | null;
+  /** yyyy-mm-dd */
+  fecha: string;
+  fecha_vencimiento_pago: string;
+  cliente_id: string;
+  lista_precio_id: string | null;
+  condicion_pago: CondicionPago;
+  observaciones: string | null;
+  moneda: string;
+  receptor_razon_social: string | null;
+  receptor_doc_tipo: number | null;
+  receptor_doc_nro: string | null;
+  receptor_condicion_iva: CondicionIva | null;
+  receptor_domicilio: string | null;
+  receptor_provincia: string | null;
+  neto: number;
+  iva: number;
+  total: number;
+  /** IVA por alícuota enviado a ARCA. Vacío en los anteriores a guardarlo. */
+  iva_detalle: IvaAutorizado[] | null;
+  cae: string | null;
+  cae_vencimiento: string | null;
+  arca_resultado: "A" | "R" | "P" | null;
+  arca_observaciones: MensajeArca[] | null;
+  arca_errores: MensajeArca[] | null;
+  /** Número enviado a ARCA mientras el comprobante está en verificación. */
+  intento_numero: number | null;
+  creado_por: string | null;
+  creado_en: string;
+  actualizado_en: string;
+  autorizado_en: string | null;
+};
+
+/** Fila de comprobante_item. producto_id vacío = ítem libre. */
+export type ComprobanteItem = {
+  id: string;
+  comprobante_id: string;
+  orden: number;
+  producto_id: string | null;
+  codigo: string | null;
+  descripcion: string;
+  observaciones: string | null;
+  unidad: string | null;
+  cantidad: number;
+  /** Sin IVA, 4 decimales. */
+  precio_unitario: number;
+  descuento_pct: number;
+  alicuota_iva: AlicuotaIva;
+  importe: number;
+  iva: number;
+};
+
+/**
+ * Fila de comprobante_asociado: apunta a un comprobante de la base
+ * (asociado_id) o lleva a mano los datos de uno del sistema anterior.
+ */
+export type ComprobanteAsociado = {
+  id: string;
+  comprobante_id: string;
+  asociado_id: string | null;
+  tipo_arca: TipoComprobanteArca | null;
+  punto_venta: number | null;
+  numero: number | null;
+  fecha: string | null;
+  cuit: string | null;
 };

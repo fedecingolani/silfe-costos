@@ -1,12 +1,13 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { Pastilla } from "@/components/ui";
 import { fechaHora } from "@/lib/formato";
+import { enviarSinReiniciar } from "@/lib/formularios";
 import { NOMBRES_AMBIENTE_ARCA } from "@/lib/tipos";
 import type { EstadoPruebaConexion } from "./acciones";
 
-type Accion = (estado: EstadoPruebaConexion) => Promise<EstadoPruebaConexion>;
+type Accion = (estado: EstadoPruebaConexion, formData: FormData) => Promise<EstadoPruebaConexion>;
 
 const NOMBRES_COMPROBANTE: Record<number, string> = { 1: "Factura A", 11: "Factura C" };
 
@@ -15,12 +16,49 @@ function Estado({ valor }: { valor: string }) {
 }
 
 /** Botón "Probar conexión" y el resultado de cada paso: servidores, login y último comprobante. */
-export function PruebaConexion({ accion, deshabilitado }: { accion: Accion; deshabilitado: boolean }) {
+export function PruebaConexion({
+  accion,
+  deshabilitado,
+  puntosVenta,
+}: {
+  accion: Accion;
+  deshabilitado: boolean;
+  /** Puntos de venta electrónicos activos, de menor a mayor. */
+  puntosVenta: number[];
+}) {
   const [estado, accionFormulario, pendiente] = useActionState(accion, undefined);
+  const [puntoVenta, setPuntoVenta] = useState(puntosVenta[0] !== undefined ? String(puntosVenta[0]) : "");
   const r = estado?.resultado;
   return (
-    <form action={accionFormulario} className="space-y-3 p-4 text-sm">
-      <button disabled={pendiente || deshabilitado} className="boton-primario">
+    <form onSubmit={enviarSinReiniciar(accionFormulario)} className="space-y-3 p-4 text-sm">
+      {puntosVenta.length === 0 ? (
+        <p className="text-stone-600">
+          No hay ningún punto de venta electrónico activo: agregá uno en «Puntos de venta» para consultar el último
+          comprobante.
+        </p>
+      ) : (
+        puntosVenta.length > 1 && (
+          <div>
+            <label className="etiqueta" htmlFor="prueba-punto-venta">
+              Punto de venta
+            </label>
+            <select
+              id="prueba-punto-venta"
+              name="punto_venta"
+              value={puntoVenta}
+              onChange={(e) => setPuntoVenta(e.target.value)}
+              className="campo"
+            >
+              {puntosVenta.map((n) => (
+                <option key={n} value={n}>
+                  {n}
+                </option>
+              ))}
+            </select>
+          </div>
+        )
+      )}
+      <button disabled={pendiente || deshabilitado || puntosVenta.length === 0} className="boton-primario">
         {pendiente ? "Probando…" : "Probar conexión"}
       </button>
 

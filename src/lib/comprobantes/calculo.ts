@@ -1,0 +1,97 @@
+/**
+ * Importes de un comprobante. Todo se calcula con enteros (BigInt) a partir
+ * de cantidades y precios con 4 decimales, descuento y alícuota con 2, para
+ * no arrastrar errores de coma flotante. Redondeo: mitad hacia arriba, a
+ * centavos.
+ *
+ * - Renglón: importe = cantidad × precio × (1 − dto%), redondeado; su IVA es
+ *   informativo (para la pantalla y el PDF).
+ * - Comprobante: el IVA se calcula por alícuota sobre la base sumada de esa
+ *   alícuota y se redondea una vez. Es lo que pide WSFE: cada AlicIva lleva
+ *   BaseImp e Importe ≈ BaseImp × alícuota, e ImpIVA es la suma de los
+ *   Importe. Por eso la suma de los IVA de los renglones puede diferir en
+ *   algún centavo del IVA del comprobante; manda el del comprobante.
+ * - total = neto + iva.
+ */
+import type { AlicuotaIva } from "@/lib/tipos";
+
+export type ItemACalcular = {
+  cantidad: number;
+  precioUnitario: number;
+  /** 0 a 100 */
+  descuentoPct: number;
+  /** En %: 0, 2.5, 5, 10.5, 21 o 27. */
+  alicuotaIva: number;
+};
+
+export type IvaPorAlicuota = { id: number; alicuota: AlicuotaIva; base: number; importe: number };
+
+export type Totales = { neto: number; iva: number; total: number; ivaPorAlicuota: IvaPorAlicuota[] };
+
+/** Código de ARCA (AlicIva.Id) por alícuota. */
+const ID_ALICUOTA = new Map<number, number>([
+  [0, 3],
+  [10.5, 4],
+  [21, 5],
+  [27, 6],
+  [5, 8],
+  [2.5, 9],
+]);
+
+/** Valor decimal escalado a entero: escalar(1.2345, 4) = 12345n. */
+function escalar(valor: number, decimales: number): bigint {
+  return BigInt(Math.round(valor * 10 ** decimales));
+}
+
+/** División entera redondeando la mitad hacia arriba (valores no negativos). */
+function dividirRedondeando(numerador: bigint, divisor: bigint): bigint {
+  return (numerador * 2n + divisor) / (divisor * 2n);
+}
+
+function aPesos(centavos: bigint): number {
+  return Number(centavos) / 100;
+}
+
+function importeEnCentavos(item: ItemACalcular): bigint {
+  // cantidad × 10^4, precio × 10^4 y (1 − dto%) × 10^4 (100% = 10000 con el % a 2 decimales):
+  // el producto queda en escala 10^12 y los centavos son escala 10^2.
+  const producto = escalar(item.cantidad, 4) * escalar(item.precioUnitario, 4) * (10000n - escalar(item.descuentoPct, 2));
+  return dividirRedondeando(producto, 10n ** 10n);
+}
+
+function ivaEnCentavos(baseCentavos: bigint, alicuota: number): bigint {
+  return dividirRedondeando(baseCentavos * escalar(alicuota, 2), 10000n);
+}
+
+export function calcularItem(item: ItemACalcular): { importe: number; iva: number } {
+  const importe = importeEnCentavos(item);
+  return { importe: aPesos(importe), iva: aPesos(ivaEnCentavos(importe, item.alicuotaIva)) };
+}
+
+export function calcularTotales(items: readonly ItemACalcular[]): Totales {
+  const bases = new Map<number, bigint>();
+  for (const item of items) {
+    if (!ID_ALICUOTA.has(item.alicuotaIva)) {
+      throw new Error(`La alícuota de IVA ${item.alicuotaIva}% no es una de las de ARCA.`);
+    }
+    bases.set(item.alicuotaIva, (bases.get(item.alicuotaIva) ?? 0n) + importeEnCentavos(item));
+  }
+
+  let neto = 0n;
+  let iva = 0n;
+  const ivaPorAlicuota: IvaPorAlicuota[] = [];
+  for (const [alicuota, base] of bases) {
+    const importe = ivaEnCentavos(base, alicuota);
+    neto += base;
+    iva += importe;
+    ivaPorAlicuota.push({
+      id: ID_ALICUOTA.get(alicuota)!,
+      alicuota: alicuota as AlicuotaIva,
+      base: aPesos(base),
+      importe: aPesos(importe),
+    });
+  }
+  ivaPorAlicuota.sort((a, b) => a.id - b.id);
+
+  return { neto: aPesos(neto), iva: aPesos(iva), total: aPesos(neto + iva), ivaPorAlicuota };
+}

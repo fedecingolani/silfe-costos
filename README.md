@@ -110,9 +110,15 @@ por código.
 ## ARCA (factura electrónica)
 
 En **Configuración → ARCA** (`/configuracion/arca`) se cargan los datos del emisor (CUIT,
-razón social, condición frente al IVA, punto de venta y ambiente activo) y, por ambiente
-(homologación y producción), el certificado de ARCA y su clave privada. "Probar conexión"
-consulta el estado de los servidores, hace login en WSAA y lee el último comprobante autorizado.
+razón social, condición frente al IVA, ambiente activo y los datos que se imprimen en el
+comprobante: domicilio comercial, ingresos brutos e inicio de actividades), los puntos de venta
+y, por ambiente (homologación y producción), el certificado de ARCA y su clave privada.
+"Probar conexión" consulta el estado de los servidores, hace login en WSAA y lee el último
+comprobante autorizado en un punto de venta electrónico activo.
+
+- Puntos de venta: número, nombre, si es electrónico (numera y pide CAE en ARCA) y si está
+  activo (sólo los activos se ofrecen en los comprobantes nuevos). Uno con comprobantes no se
+  borra: se desactiva.
 
 - La clave privada y el ticket de acceso se guardan cifrados (AES-256-GCM) con el secreto
   `ARCA_CLAVE_CIFRADO`. La clave privada nunca vuelve al navegador.
@@ -122,6 +128,18 @@ consulta el estado de los servidores, hace login en WSAA y lee el último compro
   volver a subir las credenciales.
 - El ticket de WSAA dura 12 horas y se reutiliza. Si ARCA responde que ya entregó uno que la
   app no guardó, hay que esperar a que venza.
+
+## Comprobantes de venta
+
+En **Ventas → Comprobantes** (`/comprobantes`) se cargan facturas y notas de débito como
+borradores y se autorizan en ARCA (CAE). El listado filtra por fechas, cliente, tipo, estado y
+ambiente (por defecto, el activo); los borradores van arriba.
+
+- Un borrador se guarda entero o no se guarda: la cabecera y los ítems van juntos en la función
+  `guardar_borrador_comprobante`. Los importes y totales se recalculan en el servidor.
+- "Autorizar en ARCA" guarda, muestra un resumen para confirmar y pide el CAE. Un comprobante
+  que quedó "verificando" (respuesta perdida) se verifica con ARCA antes de volver a pedirlo.
+- Un autorizado no se modifica ni se borra; se puede duplicar como borrador nuevo.
 
 ## Seguridad
 

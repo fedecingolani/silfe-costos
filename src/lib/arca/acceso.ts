@@ -9,7 +9,7 @@
  * consigue espera un poco y vuelve a leer.
  *
  * La base se accede con un AlmacenTicket para poder probar esta lógica sin
- * Supabase; la implementación real está en las acciones de la pantalla.
+ * Supabase; la implementación real está en src/lib/arca/almacen-ticket.ts.
  */
 import type { AmbienteArca, TicketAcceso } from "@/lib/tipos";
 import { cifrar, descifrar } from "./cifrado";

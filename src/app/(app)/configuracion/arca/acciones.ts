@@ -10,12 +10,14 @@ import {
   type AmbienteArca,
   type CondicionIvaEmisor,
 } from "@/lib/tipos";
-import { obtenerTicket, type AlmacenTicket } from "@/lib/arca/acceso";
+import { obtenerTicket } from "@/lib/arca/acceso";
+import { almacenTicket } from "@/lib/arca/almacen-ticket";
 import { analizarCertificado, validarCredencial } from "@/lib/arca/certificado";
 import { cifrar } from "@/lib/arca/cifrado";
 import { esCuitValida, normalizarCuit } from "@/lib/arca/cuit";
 import { MENSAJE_SIN_SECRETO, leerClaveCifrado } from "@/lib/arca/secreto";
 import type { FetchArca } from "@/lib/arca/wsaa";
+import { esFechaValida } from "@/lib/comprobantes/validacion";
 import {
   feCompUltimoAutorizado,
   feDummy,
@@ -67,9 +69,9 @@ export async function guardarEmisor(
   if (!(CONDICIONES_IVA_EMISOR as readonly string[]).includes(condicionIva)) {
     return { error: "Elegí la condición frente al IVA." };
   }
-  const puntoVenta = aNumero(formData.get("punto_venta"));
-  if (puntoVenta === null || !Number.isInteger(puntoVenta) || puntoVenta < 1 || puntoVenta > 99999) {
-    return { error: "El punto de venta tiene que ser un número entero entre 1 y 99999." };
+  const inicioActividades = aTexto(formData.get("inicio_actividades"));
+  if (inicioActividades !== null && !esFechaValida(inicioActividades)) {
+    return { error: "La fecha de inicio de actividades no es válida." };
   }
   const ambiente = String(formData.get("ambiente") ?? "");
   if (!(AMBIENTES_ARCA as readonly string[]).includes(ambiente)) {
@@ -83,8 +85,10 @@ export async function guardarEmisor(
       cuit,
       razon_social: razonSocial,
       condicion_iva: condicionIva,
-      punto_venta: puntoVenta,
       ambiente,
+      domicilio_comercial: aTexto(formData.get("domicilio_comercial")),
+      ingresos_brutos: aTexto(formData.get("ingresos_brutos")),
+      inicio_actividades: inicioActividades,
     })
     .eq("id", true)
     .select("id");
@@ -93,6 +97,57 @@ export async function guardarEmisor(
   if ((data ?? []).length !== 1) return { error: "No se pudieron guardar los datos del emisor: no se actualizó ningún registro." };
   revalidatePath(RUTA);
   return { ok: "Datos del emisor guardados." };
+}
+
+// ----- Puntos de venta ---------------------------------------------------
+
+export async function agregarPuntoVenta(
+  _estado: EstadoFormularioArca,
+  formData: FormData,
+): Promise<EstadoFormularioArca> {
+  const numero = aNumero(formData.get("numero"));
+  if (numero === null || !Number.isInteger(numero) || numero < 1 || numero > 99999) {
+    return { error: "El número del punto de venta tiene que ser un entero entre 1 y 99999." };
+  }
+  const nombre = aTexto(formData.get("nombre"));
+  const electronico = formData.get("electronico") === "on";
+
+  const supabase = await createClient();
+  const { error } = await supabase.from("punto_venta").insert({ numero, nombre, electronico });
+  if (error) {
+    if (error.code === "23505") return { error: `El punto de venta ${numero} ya existe.` };
+    return { error: `No se pudo agregar el punto de venta: ${error.message}` };
+  }
+  revalidatePath(RUTA);
+  return { ok: `Punto de venta ${numero} agregado.` };
+}
+
+/** Activa o desactiva un punto de venta. Uno inactivo no se ofrece en los comprobantes nuevos. */
+export async function cambiarActivoPuntoVenta(numero: number, activo: boolean): Promise<EstadoFormularioArca> {
+  if (!Number.isInteger(numero)) return { error: "Punto de venta inválido." };
+  const supabase = await createClient();
+  const { data, error } = await supabase.from("punto_venta").update({ activo }).eq("numero", numero).select("numero");
+  if (error) return { error: `No se pudo actualizar el punto de venta: ${error.message}` };
+  if ((data ?? []).length !== 1) return { error: "No se encontró el punto de venta." };
+  revalidatePath(RUTA);
+  return { ok: activo ? `Punto de venta ${numero} activado.` : `Punto de venta ${numero} desactivado.` };
+}
+
+/** Borra un punto de venta sin comprobantes. Si tiene, hay que desactivarlo. */
+export async function borrarPuntoVenta(numero: number): Promise<EstadoFormularioArca> {
+  if (!Number.isInteger(numero)) return { error: "Punto de venta inválido." };
+  const supabase = await createClient();
+  const { data, error } = await supabase.from("punto_venta").delete().eq("numero", numero).select("numero");
+  if (error) {
+    // 23503: lo referencia algún comprobante (clave foránea).
+    if (error.code === "23503") {
+      return { error: `El punto de venta ${numero} tiene comprobantes: no se puede borrar, desactivalo.` };
+    }
+    return { error: `No se pudo borrar el punto de venta: ${error.message}` };
+  }
+  if ((data ?? []).length !== 1) return { error: "No se encontró el punto de venta." };
+  revalidatePath(RUTA);
+  return { ok: `Punto de venta ${numero} borrado.` };
 }
 
 // ----- Credenciales ------------------------------------------------------
@@ -159,76 +214,46 @@ export async function guardarCredencial(
   return { ok: `Credenciales de ${NOMBRES_AMBIENTE_ARCA[ambiente].toLowerCase()} guardadas.` };
 }
 
-// ----- Ticket de acceso guardado en arca_credencial ----------------------
-
-type Supabase = Awaited<ReturnType<typeof createClient>>;
-
-function almacenTicket(supabase: Supabase, ambiente: AmbienteArca): AlmacenTicket {
-  const tabla = () => supabase.from("arca_credencial");
-  const almacen: AlmacenTicket = {
-    async leer() {
-      const { data, error } = await tabla()
-        .select("ta_cifrado, ta_expira, ta_bloqueado_hasta")
-        .eq("ambiente", ambiente)
-        .single();
-      if (error || !data) throw new Error(`No se pudo leer el ticket de acceso: ${error?.message ?? "sin datos"}`);
-      return { taCifrado: data.ta_cifrado, taExpira: data.ta_expira, taBloqueadoHasta: data.ta_bloqueado_hasta };
-    },
-    async tomarBloqueo(hasta, ahora) {
-      // Update condicional: sólo gana quien encuentra el bloqueo libre o vencido.
-      const { data, error } = await tabla()
-        .update({ ta_bloqueado_hasta: hasta.toISOString() })
-        .eq("ambiente", ambiente)
-        .or(`ta_bloqueado_hasta.is.null,ta_bloqueado_hasta.lt.${ahora.toISOString()}`)
-        .select("ambiente");
-      if (error) throw new Error(`No se pudo reservar el pedido de ticket: ${error.message}`);
-      if ((data ?? []).length === 1) return true;
-      // Cero filas: sólo es "otro pedido tiene el bloqueo" si el bloqueo está tomado y vigente.
-      // Si está libre, el update falló por otra causa (RLS, fila inexistente) y hay que decirlo.
-      const actual = await almacen.leer();
-      const bloqueado = actual.taBloqueadoHasta !== null && new Date(actual.taBloqueadoHasta) >= ahora;
-      if (!bloqueado) throw new Error("No se pudo reservar el pedido de ticket: no se actualizó ningún registro.");
-      return false;
-    },
-    async guardar(taCifrado, expira) {
-      const { data, error } = await tabla()
-        .update({ ta_cifrado: taCifrado, ta_expira: expira.toISOString(), ta_bloqueado_hasta: null })
-        .eq("ambiente", ambiente)
-        .select("ambiente");
-      if (error) throw new Error(`No se pudo guardar el ticket de acceso: ${error.message}`);
-      if ((data ?? []).length !== 1) {
-        throw new Error("No se pudo guardar el ticket de acceso: no se actualizó ningún registro.");
-      }
-    },
-    async liberarBloqueo(hasta) {
-      await tabla()
-        .update({ ta_bloqueado_hasta: null })
-        .eq("ambiente", ambiente)
-        .eq("ta_bloqueado_hasta", hasta.toISOString());
-    },
-  };
-  return almacen;
-}
-
 // ----- Probar conexión ---------------------------------------------------
 
-/** Acción de useActionState: no usa el estado anterior ni datos del formulario. */
-export async function probarConexion(): Promise<EstadoPruebaConexion> {
+/**
+ * Acción de useActionState. Consulta el último comprobante en el punto de
+ * venta elegido (`punto_venta`), que tiene que ser electrónico y activo; sin
+ * elección, el de número más bajo.
+ */
+export async function probarConexion(
+  _estado: EstadoPruebaConexion,
+  formData: FormData,
+): Promise<EstadoPruebaConexion> {
   const claveCifrado = leerClaveCifrado();
   if (!claveCifrado) return { error: MENSAJE_SIN_SECRETO };
 
   const supabase = await createClient();
-  const { data: emisor, error: errorEmisor } = await supabase
-    .from("arca_emisor")
-    .select("cuit, condicion_iva, punto_venta, ambiente")
-    .eq("id", true)
-    .single();
+  const [{ data: emisor, error: errorEmisor }, { data: puntos, error: errorPuntos }] = await Promise.all([
+    supabase.from("arca_emisor").select("cuit, condicion_iva, ambiente").eq("id", true).single(),
+    supabase
+      .from("punto_venta")
+      .select("numero")
+      .eq("electronico", true)
+      .eq("activo", true)
+      .order("numero"),
+  ]);
   if (errorEmisor || !emisor) {
     return { error: `No se pudieron leer los datos del emisor: ${errorEmisor?.message ?? "sin datos"}` };
   }
-  if (!emisor.cuit || !emisor.condicion_iva || !emisor.punto_venta) {
-    return { error: "Completá y guardá los datos del emisor (CUIT, condición frente al IVA y punto de venta)." };
+  if (errorPuntos) return { error: `No se pudieron leer los puntos de venta: ${errorPuntos.message}` };
+  if (!emisor.cuit || !emisor.condicion_iva) {
+    return { error: "Completá y guardá los datos del emisor (CUIT y condición frente al IVA)." };
   }
+  const habilitados = (puntos ?? []).map((p) => Number(p.numero));
+  if (habilitados.length === 0) {
+    return { error: "No hay ningún punto de venta electrónico activo. Agregá uno en «Puntos de venta»." };
+  }
+  const elegido = aNumero(formData.get("punto_venta"));
+  if (elegido !== null && !habilitados.includes(elegido)) {
+    return { error: `El punto de venta ${elegido} no es electrónico o está inactivo.` };
+  }
+  const puntoVenta = elegido ?? habilitados[0];
   const ambiente = emisor.ambiente as AmbienteArca;
 
   // La clave cifrada se lee sólo acá, en el servidor, y no sale de esta función.
@@ -261,10 +286,10 @@ export async function probarConexion(): Promise<EstadoPruebaConexion> {
       fetchArca,
       ambiente,
       { token: ticket.token, sign: ticket.sign, cuit: emisor.cuit },
-      emisor.punto_venta,
+      puntoVenta,
       tipoComprobante,
     );
-    resultado.ultimo = { puntoVenta: emisor.punto_venta, tipoComprobante, numero };
+    resultado.ultimo = { puntoVenta, tipoComprobante, numero };
     return { resultado };
   } catch (e) {
     return { resultado, error: mensaje(e) };

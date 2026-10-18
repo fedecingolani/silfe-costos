@@ -15,7 +15,8 @@ select has_table('public', 'arca_emisor', 'Existe arca_emisor');
 select has_table('public', 'arca_credencial', 'Existe arca_credencial');
 
 select columns_are('public', 'arca_emisor', array[
-  'id', 'cuit', 'razon_social', 'condicion_iva', 'punto_venta', 'ambiente', 'actualizado_en'
+  'id', 'cuit', 'razon_social', 'condicion_iva', 'ambiente', 'actualizado_en',
+  'domicilio_comercial', 'ingresos_brutos', 'inicio_actividades'
 ], 'arca_emisor tiene las columnas esperadas');
 
 select columns_are('public', 'arca_credencial', array[
@@ -50,13 +51,11 @@ select throws_ok(
   $$update arca_emisor set condicion_iva = 'Consumidor Final' where id$$,
   '23514', null, 'La condición frente al IVA es una de las previstas'
 );
-select throws_ok(
-  $$update arca_emisor set punto_venta = 0 where id$$,
-  '23514', null, 'El punto de venta empieza en 1'
-);
-select throws_ok(
-  $$update arca_emisor set punto_venta = 100000 where id$$,
-  '23514', null, 'El punto de venta tiene como mucho 5 dígitos'
+-- Los puntos de venta viven en su propia tabla (20261024000004).
+select hasnt_column('public', 'arca_emisor', 'punto_venta', 'El emisor ya no guarda el punto de venta');
+select ok(
+  exists (select 1 from punto_venta where electronico),
+  'Hay al menos un punto de venta electrónico'
 );
 select throws_ok(
   $$update arca_emisor set ambiente = 'testing' where id$$,
@@ -105,14 +104,15 @@ set local role authenticated;
 select lives_ok(
   $$update arca_emisor
     set cuit = '23334771229', razon_social = 'Silfe S.A.', condicion_iva = 'Responsable Inscripto',
-        punto_venta = 3, ambiente = 'homologacion'
+        ambiente = 'homologacion', domicilio_comercial = 'Ruta 22 km 1200, Allen',
+        ingresos_brutos = '901-123456-7', inicio_actividades = '1995-03-01'
     where id$$,
   'Un usuario autenticado edita los datos del emisor'
 );
 select is(
-  (select punto_venta from arca_emisor),
-  3,
-  'El emisor guarda el punto de venta'
+  (select domicilio_comercial from arca_emisor),
+  'Ruta 22 km 1200, Allen',
+  'El emisor guarda el domicilio comercial'
 );
 
 select throws_ok(
