@@ -354,7 +354,7 @@ corriente** de cada cliente y administrar la **cartera de cheques** recibidos.
 ### T6 — Cartera de cheques y rechazo con ND obligatoria (18/10/2026)
 
 - Commits: `56b5102` fix(cobranzas): CUIT del librador normalizado, contador de recibos protegido y mensaje de letra
-  (unidad A, ver "Revisión de T2+T3"); unidad B: feat(cobranzas): cartera de cheques con estados y nota de débito
+  (unidad A, ver "Revisión de T2+T3"); unidad B: `a634373` feat(cobranzas): cartera de cheques con estados y nota de débito
   obligatoria por rechazo. Migración `20261028000001_cobranzas_cartera.sql` (sólo local; falta `db push`). pgTAP en
   rojo primero (aborta en `rechazar_cheque` inexistente), después verde.
 - **Cartera:** vista `v_cheque_cartera` (security invoker): cheques de recibos **emitidos**, sin anulados, con cliente
