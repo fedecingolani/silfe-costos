@@ -170,12 +170,15 @@ export function EditorRecibo({
   recibo,
   contado,
   cuentaInicial,
+  clienteInicial = null,
   hoy,
   aviso = null,
 }: {
   recibo: ReciboEditable | null;
   contado: ContadoAPagar | null;
   cuentaInicial: CuentaCliente | null;
+  /** Cliente ya elegido al abrir una cobranza nueva (`?cliente=` desde su cuenta corriente). */
+  clienteInicial?: ClienteEncontrado | null;
   hoy: string;
   /** Mensaje que llega por la URL después de crear el borrador (`?aviso=guardado`). */
   aviso?: string | null;
@@ -188,7 +191,9 @@ export function EditorRecibo({
   const [intentado, setIntentado] = useState(false);
   const confirmacion = useRef<HTMLDialogElement>(null);
 
-  const [cliente, setCliente] = useState<ClienteEncontrado | null>(contado?.cliente ?? recibo?.cliente ?? null);
+  const [cliente, setCliente] = useState<ClienteEncontrado | null>(
+    contado?.cliente ?? recibo?.cliente ?? clienteInicial,
+  );
   const [fecha, setFecha] = useState(recibo?.fecha ?? hoy);
   const [observaciones, setObservaciones] = useState(recibo?.observaciones ?? "");
   const [filas, setFilas] = useState<FilaMedio[]>(() =>

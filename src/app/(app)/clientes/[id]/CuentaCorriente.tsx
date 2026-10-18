@@ -102,6 +102,11 @@ export async function CuentaCorriente({
       <Tarjeta
         titulo="Cuenta corriente"
         descripcion="Facturas, notas de débito y crédito y recibos de producción o no electrónicos. Sin homologación ni recibos anulados."
+        acciones={
+          <Link href={`/cobranzas/nueva?cliente=${clienteId}`} className="boton-primario text-xs">
+            Nueva cobranza
+          </Link>
+        }
       >
         <dl className="grid gap-4 p-4 sm:grid-cols-3">
           <div>

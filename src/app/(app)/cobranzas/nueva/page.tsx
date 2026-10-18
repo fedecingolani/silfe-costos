@@ -4,7 +4,7 @@ import { Encabezado, Migas } from "@/components/ui";
 import { hoyArgentina } from "@/lib/clientes/seguimiento";
 import { nombreComprobante } from "@/lib/comprobantes/listado";
 import type { ClienteEncontrado } from "../../comprobantes/acciones";
-import { cargarComprobanteContado, reciboDeContado } from "../datos";
+import { cargarComprobanteContado, cargarDebitos, reciboDeContado, type CuentaCliente } from "../datos";
 import { EditorRecibo, type ContadoAPagar } from "../EditorRecibo";
 
 export const dynamic = "force-dynamic";
@@ -23,6 +23,7 @@ export default async function NuevaCobranzaPage({
 }) {
   const parametros = await searchParams;
   const contadoId = typeof parametros.contado === "string" ? parametros.contado : null;
+  const clienteId = typeof parametros.cliente === "string" ? parametros.cliente : null;
   const supabase = await createClient();
 
   let contado: ContadoAPagar | null = null;
@@ -48,6 +49,25 @@ export default async function NuevaCobranzaPage({
     };
   }
 
+  // Desde la cuenta corriente del cliente: llega con el cliente ya elegido.
+  let clienteInicial: ClienteEncontrado | null = null;
+  let cuentaInicial: CuentaCliente | null = null;
+  if (!contado && clienteId !== null && UUID.test(clienteId)) {
+    const { data } = await supabase
+      .from("cliente")
+      .select("id, razon_social, cuit, condicion_iva, codigo_legado")
+      .eq("id", clienteId)
+      .eq("activo", true)
+      .maybeSingle();
+    if (data) {
+      const cuenta = await cargarDebitos(supabase, clienteId);
+      if (typeof cuenta !== "string") {
+        clienteInicial = data as ClienteEncontrado;
+        cuentaInicial = cuenta;
+      }
+    }
+  }
+
   return (
     <>
       <Migas items={[{ href: "/cobranzas", texto: "Cobranzas" }, { texto: contado ? "Pago de contado" : "Nueva" }]} />
@@ -59,7 +79,13 @@ export default async function NuevaCobranzaPage({
             : "Se guarda como borrador hasta emitir el recibo: al emitirlo toma número y no se modifica más."
         }
       />
-      <EditorRecibo recibo={null} contado={contado} cuentaInicial={null} hoy={hoyArgentina()} />
+      <EditorRecibo
+        recibo={null}
+        contado={contado}
+        clienteInicial={clienteInicial}
+        cuentaInicial={cuentaInicial}
+        hoy={hoyArgentina()}
+      />
     </>
   );
 }
