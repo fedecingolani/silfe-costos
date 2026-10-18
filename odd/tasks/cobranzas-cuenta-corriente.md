@@ -191,7 +191,7 @@ corriente** de cada cliente y administrar la **cartera de cheques** recibidos.
 | T6 | Cartera de cheques con estados, y rechazo con ND obligatoria | delegada (writer) | [x] |
 | T7 | Cuenta corriente: ficha del cliente y listado general | delegada (writer) | [x] |
 | T8 | PDF del recibo y anulación | delegada (writer) | [x] |
-| T9 | Recorrido completo en local (y con ARCA de homologación cuando vuelva) | orquestador | [ ] |
+| T9 | Recorrido completo en local (y con ARCA de homologación cuando vuelva) | orquestador | [x] (local) |
 
 ## Progreso
 
@@ -469,6 +469,8 @@ corriente** de cada cliente y administrar la **cartera de cheques** recibidos.
   las consultas de las pantallas nuevas responden 200. `next dev` con Supabase local: `/cuentas-corrientes`,
   `/clientes/[id]`, `/cobranzas/[id]` y `/cobranzas/[id]/pdf` responden 307 a /login, sin 500. PDFs de muestra
   generados desde los fixtures (normal y anulado) y revisados a ojo.
+
+- T9 (18/10, local, con dos facturas de producción simuladas por SQL con CAE de prueba, 60.000 y 70.000): cobranza de efectivo 50.000 + cheque 50.000 (CUIT del librador con guiones) imputando 60.000 + 40.000 → R-00001-00000001; la primera quedó cancelada, la segunda parcial con 30.000 y 0 a favor (criterio de aceptación); CUIT guardado como 20111111112; cheque en cartera. Rechazo con 100 de gastos → ND A en borrador por 50.121 (50.000 no gravado + 100 + 21 IVA) asociada a las dos facturas, cheque rechazado con historial, borrado de la ND bloqueado (CB020). Cobranza de 30.000 → R-00001-00000002, anulada con motivo → la factura volvió a 30.000 pendientes y el número no se reutiliza. Listado de cuentas corrientes: 30.000 adeudados, deuda más vieja 30 días. Pendiente: autorizar la ND y los comprobantes con ARCA real (WSFE homologación caído).
 
 ## Próximo paso
 
