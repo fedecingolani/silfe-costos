@@ -8,6 +8,7 @@ import { hoyArgentina } from "@/lib/clientes/seguimiento";
 import { nombreComprobante, numeroVisible } from "@/lib/comprobantes/listado";
 import { sumarPesos } from "@/lib/cobranzas/dinero";
 import { NOMBRES_ESTADO_RECIBO, TONO_ESTADO_RECIBO } from "@/lib/cobranzas/listado";
+import { TONO_ESTADO_CHEQUE } from "@/lib/cobranzas/cartera";
 import {
   NOMBRES_ESTADO_CHEQUE,
   NOMBRES_MEDIO_PAGO,
@@ -44,10 +45,13 @@ function DetalleMedio({ medio }: { medio: MedioLeido }) {
     const ch = medio.cheque;
     return (
       <span>
-        {ch.banco} N° {ch.numero} · pago {fecha(ch.fecha_pago)}
+        <Link href={`/cheques/${ch.id}`} className="text-marca-700 hover:underline">
+          {ch.banco} N° {ch.numero}
+        </Link>{" "}
+        · pago {fecha(ch.fecha_pago)}
         {ch.librador && ` · ${ch.librador}`}
         {ch.librador_cuit && ` (CUIT ${ch.librador_cuit})`}{" "}
-        <Pastilla>{NOMBRES_ESTADO_CHEQUE[ch.estado]}</Pastilla>
+        <Pastilla tono={TONO_ESTADO_CHEQUE[ch.estado]}>{NOMBRES_ESTADO_CHEQUE[ch.estado]}</Pastilla>
       </span>
     );
   }

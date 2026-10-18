@@ -409,7 +409,8 @@ const MENSAJES_GUARDADO: Record<string, string> = {
 /** Mensaje legible de un error de la base al guardar o borrar un borrador. */
 export function mensajeErrorGuardado(error: { code?: string; message: string }): string {
   // CM007 (asociado inválido): el mensaje de la base ya es legible y dice qué asociado.
-  if (error.code === "CM007") return error.message;
+  // CB020: es la ND de un cheque rechazado (no se borra ni cambia de cliente); el mensaje dice qué cheque.
+  if (error.code === "CM007" || error.code === "CB020") return error.message;
   return (error.code && MENSAJES_GUARDADO[error.code]) || `No se pudo guardar el comprobante: ${error.message}`;
 }
 

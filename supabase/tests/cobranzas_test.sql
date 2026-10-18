@@ -17,7 +17,7 @@
 begin;
 create extension if not exists pgtap with schema extensions;
 
-select plan(180);
+select plan(209);
 
 -- ---------------------------------------------------------------------
 -- Estructura
@@ -1132,6 +1132,219 @@ select results_eq(
   $$select 'emitido'::text, ultimo_numero + 1, ultimo_numero + 1, '11111111-1111-1111-1111-111111111111'::text
     from t_contador$$,
   'El recibo queda emitido con ese número y el contador avanzado'
+);
+
+-- ---------------------------------------------------------------------
+-- Cartera de cheques y rechazo con nota de débito obligatoria
+--   C7 (…0007, RI): factura F71 A 100 cancelada por R71 con el cheque
+--                   CH71 (100). Su rechazo → ND A asociada a F71.
+--   C8 (…0008, CF): R81 a cuenta (fecha 2026-10-10) con CH81 (50) y
+--                   CH82 (30). El rechazo de CH81 con gastos → ND B al
+--                   período 2026-10-01..2026-10-10, con un ítem al 21%.
+--   R83: borrador con CH83; R84: anulado con CH84. No son cartera.
+-- ---------------------------------------------------------------------
+
+reset role;
+-- La ND del rechazo de CH71 se crea en producción (se autoriza abajo).
+update arca_emisor set ambiente = 'produccion' where id;
+insert into cliente (id, razon_social, condicion_iva) values
+  ('cb000000-0000-0000-0000-000000000007', 'Cliente con cheque rechazado', 'Responsable Inscripto'),
+  ('cb000000-0000-0000-0000-000000000008', 'Consumidor con cheque a cuenta', 'Consumidor Final');
+insert into comprobante (id, punto_venta, ambiente, clase, letra, tipo_arca, cliente_id, condicion_pago, total, fecha)
+values
+  ('cb100000-0000-0000-0000-000000000071', 9199, null, 'factura', 'A', 1,
+   'cb000000-0000-0000-0000-000000000007', 'cuenta_corriente', 100, '2026-10-01');
+update comprobante set estado = 'autorizado', numero = 71 where id = 'cb100000-0000-0000-0000-000000000071';
+
+set local role authenticated;
+
+select has_function('public', 'rechazar_cheque', array['uuid', 'date', 'text', 'jsonb'], 'Existe rechazar_cheque');
+select ok(not has_function_privilege('anon', 'public.rechazar_cheque(uuid, date, text, jsonb)', 'execute'),
+  'anon no ejecuta rechazar_cheque');
+select ok(has_function_privilege('authenticated', 'public.rechazar_cheque(uuid, date, text, jsonb)', 'execute'),
+  'authenticated ejecuta rechazar_cheque');
+select has_view('public', 'v_cheque_cartera', 'Existe v_cheque_cartera');
+select ok(not has_table_privilege('anon', 'public.v_cheque_cartera', 'select'), 'anon no lee la cartera');
+
+insert into recibo (id, punto_venta, cliente_id, fecha, total) values
+  ('cb200000-0000-0000-0000-000000000071', 9, 'cb000000-0000-0000-0000-000000000007', '2026-10-05', 100),
+  ('cb200000-0000-0000-0000-000000000081', 9, 'cb000000-0000-0000-0000-000000000008', '2026-10-10', 80),
+  ('cb200000-0000-0000-0000-000000000083', 9, 'cb000000-0000-0000-0000-000000000008', '2026-10-11', 10),
+  ('cb200000-0000-0000-0000-000000000084', 9, 'cb000000-0000-0000-0000-000000000008', '2026-10-12', 15);
+insert into cheque (id, recibo_id, cliente_id, tipo, banco, numero, fecha_pago, importe) values
+  ('cb300000-0000-0000-0000-000000000071', 'cb200000-0000-0000-0000-000000000071',
+   'cb000000-0000-0000-0000-000000000007', 'fisico', 'Banco Nación', '71', '2026-11-01', 100),
+  ('cb300000-0000-0000-0000-000000000081', 'cb200000-0000-0000-0000-000000000081',
+   'cb000000-0000-0000-0000-000000000008', 'echeq', 'Banco Galicia', 'E-81', '2026-11-02', 50),
+  ('cb300000-0000-0000-0000-000000000082', 'cb200000-0000-0000-0000-000000000081',
+   'cb000000-0000-0000-0000-000000000008', 'fisico', 'Banco Macro', '82', '2026-11-03', 30),
+  ('cb300000-0000-0000-0000-000000000083', 'cb200000-0000-0000-0000-000000000083',
+   'cb000000-0000-0000-0000-000000000008', 'fisico', 'Banco Macro', '83', '2026-11-04', 10),
+  ('cb300000-0000-0000-0000-000000000084', 'cb200000-0000-0000-0000-000000000084',
+   'cb000000-0000-0000-0000-000000000008', 'fisico', 'Banco Macro', '84', '2026-11-05', 15);
+insert into recibo_medio (recibo_id, tipo, importe, cheque_id) values
+  ('cb200000-0000-0000-0000-000000000071', 'cheque', 100, 'cb300000-0000-0000-0000-000000000071'),
+  ('cb200000-0000-0000-0000-000000000081', 'echeq', 50, 'cb300000-0000-0000-0000-000000000081'),
+  ('cb200000-0000-0000-0000-000000000081', 'cheque', 30, 'cb300000-0000-0000-0000-000000000082'),
+  ('cb200000-0000-0000-0000-000000000083', 'cheque', 10, 'cb300000-0000-0000-0000-000000000083'),
+  ('cb200000-0000-0000-0000-000000000084', 'cheque', 15, 'cb300000-0000-0000-0000-000000000084');
+insert into imputacion (recibo_id, comprobante_id, importe) values
+  ('cb200000-0000-0000-0000-000000000071', 'cb100000-0000-0000-0000-000000000071', 100);
+select emitir_recibo('cb200000-0000-0000-0000-000000000071');
+select emitir_recibo('cb200000-0000-0000-0000-000000000081');
+select emitir_recibo('cb200000-0000-0000-0000-000000000084');
+select anular_recibo('cb200000-0000-0000-0000-000000000084', 'Cargado dos veces');
+
+select results_eq(
+  $$select id::text, recibo_numero_texto is not null, razon_social from v_cheque_cartera
+    where cliente_id in ('cb000000-0000-0000-0000-000000000007', 'cb000000-0000-0000-0000-000000000008')
+    order by id$$,
+  $$values ('cb300000-0000-0000-0000-000000000071', true, 'Cliente con cheque rechazado'),
+           ('cb300000-0000-0000-0000-000000000081', true, 'Consumidor con cheque a cuenta'),
+           ('cb300000-0000-0000-0000-000000000082', true, 'Consumidor con cheque a cuenta')$$,
+  'La cartera sólo tiene cheques de recibos emitidos (sin borradores ni anulados)'
+);
+
+-- Transiciones
+select throws_ok(
+  $$select rechazar_cheque('cb300000-0000-0000-0000-000000000083', null, null, null)$$,
+  'CB009', null, 'El cheque de un recibo en borrador no se rechaza'
+);
+select throws_ok(
+  $$select rechazar_cheque('cb300000-0000-0000-0000-000000000084', null, null, null)$$,
+  'CB009', null, 'Un cheque anulado no se rechaza'
+);
+select throws_ok(
+  $$select rechazar_cheque('cb300000-0000-0000-0000-000000000099', null, null, null)$$,
+  'CB021', null, 'Un cheque inexistente se informa'
+);
+select throws_ok(
+  $$update cheque set estado = 'rechazado' where id = 'cb300000-0000-0000-0000-000000000082'$$,
+  '23514', null, 'Un cheque no queda rechazado sin su nota de débito'
+);
+select lives_ok(
+  $$update cheque set estado = 'depositado', estado_fecha = '2026-11-01', estado_observacion = 'Banco propio'
+    where id = 'cb300000-0000-0000-0000-000000000071'$$,
+  'Un cheque en cartera se deposita'
+);
+select throws_ok(
+  $$update cheque set estado = 'entregado', entregado_a = 'Proveedor' where id = 'cb300000-0000-0000-0000-000000000071'$$,
+  'CB009', null, 'Un cheque depositado no se entrega'
+);
+
+-- Rechazo de un cheque que canceló facturas: ND asociada a ellas.
+create temporary table t_nd71 on commit drop as
+  select rechazar_cheque('cb300000-0000-0000-0000-000000000071', '2026-11-03', ' Sin fondos ', null) as id;
+
+select results_eq(
+  $$select estado, nd_comprobante_id = (select id from t_nd71), estado_fecha, estado_observacion
+    from cheque where id = 'cb300000-0000-0000-0000-000000000071'$$,
+  $$values ('rechazado'::text, true, '2026-11-03'::date, 'Sin fondos'::text)$$,
+  'El cheque queda rechazado con su nota de débito, fecha y observación'
+);
+select results_eq(
+  $$select estado, fecha, observacion from cheque_estado
+    where cheque_id = 'cb300000-0000-0000-0000-000000000071' order by id$$,
+  $$values ('en_cartera'::text, (now() at time zone 'America/Argentina/Buenos_Aires')::date, null::text),
+           ('depositado', '2026-11-01'::date, 'Banco propio'),
+           ('rechazado', '2026-11-03'::date, 'Sin fondos')$$,
+  'El historial registra el depósito y el rechazo'
+);
+select results_eq(
+  $$select c.clase, c.estado, c.letra, c.tipo_arca, c.condicion_pago, c.cliente_id::text, c.ambiente,
+           c.punto_venta = (select min(numero) from punto_venta where activo and electronico),
+           c.neto, c.no_gravado, c.iva, c.total, c.periodo_asoc_desde
+    from comprobante c where c.id = (select id from t_nd71)$$,
+  $$values ('nota_debito'::text, 'borrador'::text, 'A'::text, 2, 'cuenta_corriente'::text,
+            'cb000000-0000-0000-0000-000000000007'::text, 'produccion'::text, true,
+            0.00::numeric, 100.00::numeric, 0.00::numeric, 100.00::numeric, null::date)$$,
+  'La ND es un borrador de cuenta corriente, letra de la factura, en el electrónico activo más bajo'
+);
+select results_eq(
+  $$select descripcion, gravado, alicuota_iva, cantidad, precio_unitario, importe, iva
+    from comprobante_item where comprobante_id = (select id from t_nd71) order by orden$$,
+  $$values ('Cheque rechazado N° 71 – Banco Nación'::text, false, null::numeric, 1.0000::numeric, 100.0000::numeric,
+            100.00::numeric, 0.00::numeric)$$,
+  'Lleva el capital del cheque como único ítem, no gravado'
+);
+select results_eq(
+  $$select asociado_id::text from comprobante_asociado where comprobante_id = (select id from t_nd71)$$,
+  $$values ('cb100000-0000-0000-0000-000000000071')$$,
+  'Se asocia a la factura que canceló el recibo del cheque'
+);
+select results_eq(
+  $$select estado, nd_estado, nd_numero_texto from v_cheque_cartera where id = 'cb300000-0000-0000-0000-000000000071'$$,
+  $$values ('rechazado'::text, 'borrador'::text, null::text)$$,
+  'En la cartera figura rechazado con la ND pendiente'
+);
+select throws_ok(
+  $$select rechazar_cheque('cb300000-0000-0000-0000-000000000071', null, null, null)$$,
+  'CB009', null, 'Un cheque rechazado no se vuelve a rechazar'
+);
+
+-- La ND es obligatoria: su borrador no se borra ni cambia de cliente.
+select throws_ok(
+  $$delete from comprobante where id = (select id from t_nd71)$$,
+  'CB020', null, 'La ND de un cheque rechazado no se puede borrar'
+);
+select throws_ok(
+  $$update comprobante set cliente_id = 'cb000000-0000-0000-0000-000000000008' where id = (select id from t_nd71)$$,
+  'CB020', null, 'La ND de un cheque rechazado no cambia de cliente'
+);
+select lives_ok(
+  $$update comprobante set observaciones = 'Revisada' where id = (select id from t_nd71)$$,
+  'La ND se sigue editando como cualquier borrador'
+);
+
+-- Al autorizarla, vuelve a cargar la deuda.
+update comprobante set estado = 'verificando', intento_numero = 71 where id = (select id from t_nd71);
+update comprobante set estado = 'autorizado', numero = 71, cae = '12345678901234', cae_vencimiento = '2026-12-31'
+where id = (select id from t_nd71);
+select results_eq(
+  $$select saldo, estado_pago from v_comprobante_saldo where comprobante_id = (select id from t_nd71)$$,
+  $$values (100.00::numeric, 'pendiente'::text)$$,
+  'Autorizada, la ND es un débito más de la cuenta corriente'
+);
+select is(
+  (select nd_numero_texto from v_cheque_cartera where id = 'cb300000-0000-0000-0000-000000000071'),
+  'A-' || lpad((select punto_venta::text from comprobante where id = (select id from t_nd71)), 5, '0') || '-00000071',
+  'En la cartera figura el número de la ND autorizada'
+);
+
+-- Rechazo de un cheque a cuenta, con gastos bancarios.
+select throws_ok(
+  $$select rechazar_cheque('cb300000-0000-0000-0000-000000000081', null, null, '{"importe": 10}')$$,
+  'CB022', null, 'Los gastos bancarios llevan descripción'
+);
+select throws_ok(
+  $$select rechazar_cheque('cb300000-0000-0000-0000-000000000081', null, null, '{"importe": -1, "descripcion": "x"}')$$,
+  'CB022', null, 'Los gastos bancarios no son negativos'
+);
+
+create temporary table t_nd81 on commit drop as
+  select rechazar_cheque('cb300000-0000-0000-0000-000000000081', null, null,
+    '{"importe": 1000, "descripcion": " Gastos bancarios "}') as id;
+
+select results_eq(
+  $$select c.letra, c.tipo_arca, c.periodo_asoc_desde, c.periodo_asoc_hasta,
+           (select count(*) from comprobante_asociado a where a.comprobante_id = c.id),
+           c.neto, c.no_gravado, c.iva, c.total
+    from comprobante c where c.id = (select id from t_nd81)$$,
+  $$values ('B'::text, 7, '2026-10-01'::date, '2026-10-10'::date, 0::bigint,
+            1000.00::numeric, 50.00::numeric, 210.00::numeric, 1260.00::numeric)$$,
+  'Un cheque a cuenta: ND con la letra del cliente, asociada al período del mes del recibo'
+);
+select results_eq(
+  $$select descripcion, gravado, alicuota_iva, importe, iva
+    from comprobante_item where comprobante_id = (select id from t_nd81) order by orden$$,
+  $$values ('Cheque rechazado N° E-81 – Banco Galicia'::text, false, null::numeric, 50.00::numeric, 0.00::numeric),
+           ('Gastos bancarios', true, 21.00::numeric, 1000.00::numeric, 210.00::numeric)$$,
+  'Los gastos bancarios van en un segundo ítem gravado al 21%'
+);
+select is(
+  (select estado_fecha from cheque where id = 'cb300000-0000-0000-0000-000000000081'),
+  (now() at time zone 'America/Argentina/Buenos_Aires')::date,
+  'Sin fecha, el rechazo es de hoy'
 );
 
 reset role;

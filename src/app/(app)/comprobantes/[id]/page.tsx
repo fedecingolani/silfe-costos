@@ -131,6 +131,16 @@ export default async function ComprobantePage({ params }: { params: Promise<{ id
 
   const titulo = `${nombreComprobante(c.clase, c.letra)} ${c.numero !== null ? numeroVisible(c) : ""}`.trim();
   const migas = <Migas items={[{ href: "/comprobantes", texto: "Comprobantes" }, { texto: titulo }]} />;
+  // Nota de débito de un cheque rechazado (rechazar_cheque): enlaza al cheque.
+  const { data: chequeRechazado } =
+    c.clase === "nota_debito"
+      ? await supabase.from("cheque").select("id, numero, banco").eq("nd_comprobante_id", c.id).limit(1).maybeSingle()
+      : { data: null };
+  const enlaceCheque = chequeRechazado && (
+    <Link href={`/cheques/${chequeRechazado.id}`} className="font-medium underline">
+      cheque N° {chequeRechazado.numero} ({chequeRechazado.banco})
+    </Link>
+  );
   const homologacion = c.ambiente === "homologacion" && (
     <div role="status" className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
       Homologación: este comprobante no tiene validez fiscal.
@@ -166,6 +176,11 @@ export default async function ComprobantePage({ params }: { params: Promise<{ id
           acciones={<Pastilla tono={TONO_ESTADO[c.estado]}>{NOMBRES_ESTADO[c.estado]}</Pastilla>}
         />
         {homologacion}
+        {enlaceCheque && (
+          <div role="status" className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+            Nota de débito por cheque rechazado: revisala y autorizala. Es la del {enlaceCheque}; no se puede borrar.
+          </div>
+        )}
         {c.estado === "rechazado" && (
           <div className="mb-4 space-y-2">
             {errores.length > 0 && <Mensajes titulo="Errores de ARCA" mensajes={errores} tono="rojo" />}
@@ -290,6 +305,12 @@ export default async function ComprobantePage({ params }: { params: Promise<{ id
         acciones={<Pastilla tono={TONO_ESTADO[c.estado]}>{NOMBRES_ESTADO[c.estado]}</Pastilla>}
       />
       {homologacion}
+
+      {enlaceCheque && (
+        <div role="status" className="mb-4 rounded-lg border border-stone-200 bg-stone-50 px-3 py-2 text-sm text-stone-700">
+          Nota de débito por el {enlaceCheque}.
+        </div>
+      )}
 
       {verificando && (
         <div role="status" className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">

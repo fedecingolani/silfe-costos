@@ -90,6 +90,21 @@ describe("armarNotaDebitoRechazo", () => {
     });
   });
 
+  it("los gastos bancarios van en un segundo ítem gravado al 21% (como rechazar_cheque)", () => {
+    const nota = armarNotaDebitoRechazo(
+      { ...CHEQUE, importe: 50 },
+      { ...CONTEXTO, gastos: { importe: 1000, descripcion: "Gastos bancarios" } },
+    );
+    if ("error" in nota) throw new Error(nota.error);
+    expect(nota.items.map((i) => [i.descripcion, i.gravado, i.alicuota_iva, i.importe, i.iva])).toEqual([
+      ["Cheque rechazado N° 00012345 – Banco Galicia", false, null, 50, 0],
+      ["Gastos bancarios", true, 21, 1000, 210],
+    ]);
+    expect(nota.cabecera).toMatchObject({ neto: 1000, no_gravado: 50, iva: 210, total: 1260 });
+    const sinGastos = armarNotaDebitoRechazo(CHEQUE, { ...CONTEXTO, gastos: { importe: 0, descripcion: "" } });
+    expect("items" in sinGastos && sinGastos.items).toHaveLength(1);
+  });
+
   it("se asocia a las facturas que canceló el recibo del cheque", () => {
     const nota = armarNotaDebitoRechazo(CHEQUE, {
       ...CONTEXTO,

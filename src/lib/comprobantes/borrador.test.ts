@@ -277,6 +277,11 @@ describe("mensajeErrorGuardado", () => {
     expect(mensajeErrorGuardado({ code, message: "x" })).toBe(mensaje);
   });
 
+  it("muestra tal cual el bloqueo de la ND de un cheque rechazado", () => {
+    const message = "Es la nota de débito del cheque rechazado N° 71 (Banco Nación): no se puede borrar. Revisala y autorizala.";
+    expect(mensajeErrorGuardado({ code: "CB020", message })).toBe(message);
+  });
+
   it("deja el resto con el mensaje de la base", () => {
     expect(mensajeErrorGuardado({ code: "XX000", message: "algo" })).toBe("No se pudo guardar el comprobante: algo");
   });

@@ -18,6 +18,7 @@ const SECCIONES: { titulo: string; items: { href: string; texto: string }[] }[] 
       { href: "/seguimiento", texto: "Seguimiento" },
       { href: "/comprobantes", texto: "Comprobantes" },
       { href: "/cobranzas", texto: "Cobranzas" },
+      { href: "/cheques", texto: "Cartera de cheques" },
       { href: "/listas-precios", texto: "Listas de precios" },
       { href: "/transportes", texto: "Transportes" },
     ],

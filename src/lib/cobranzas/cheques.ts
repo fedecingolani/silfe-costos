@@ -6,7 +6,7 @@
 import type { ClaseComprobante, CondicionIva, EstadoCheque, LetraComprobante } from "@/lib/tipos";
 import { validarPeriodoAsociado } from "@/lib/comprobantes/asociados";
 import type { ItemGuardado } from "@/lib/comprobantes/borrador";
-import { NO_GRAVADO, calcularTotales } from "@/lib/comprobantes/calculo";
+import { NO_GRAVADO, calcularItem, calcularTotales, type ItemACalcular } from "@/lib/comprobantes/calculo";
 import { letraYTipo, tipoArcaDe } from "@/lib/comprobantes/letra";
 import type { NotaArmada } from "@/lib/comprobantes/notas";
 
@@ -48,11 +48,15 @@ export type ContextoRechazo = {
   /** Fecha del recibo del cheque, yyyy-mm-dd. */
   reciboFecha: string;
   imputados: readonly ComprobanteImputado[];
+  /** Gastos bancarios del rechazo: van en un ítem gravado al 21%. */
+  gastos?: { importe: number; descripcion: string } | null;
 };
 
 /**
  * Borrador de la nota de débito al cliente por el capital del cheque, como
- * ítem no gravado (los gastos bancarios, con IVA, los agrega el usuario).
+ * ítem no gravado, y los gastos bancarios (si hay) en un ítem al 21%. Es el
+ * mismo armado que hace la base en rechazar_cheque (la que crea la ND); la
+ * pantalla lo usa para mostrar antes del rechazo qué ND se va a crear.
  * Se asocia a las facturas que canceló el recibo del cheque (con su letra,
  * como exige ARCA); si fue a cuenta, al período del mes del recibo, del
  * primer día a la fecha del recibo (mismo mes, 10209; hasta ≤ nota, 10208).
@@ -102,9 +106,22 @@ export function armarNotaDebitoRechazo(cheque: ChequeRechazado, contexto: Contex
     importe: cheque.importe,
     iva: 0,
   };
-  const totales = calcularTotales([
-    { cantidad: 1, precioUnitario: cheque.importe, descuentoPct: 0, alicuotaIva: NO_GRAVADO },
-  ]);
+  const items: ItemGuardado[] = [item];
+  const aCalcular: ItemACalcular[] = [{ cantidad: 1, precioUnitario: cheque.importe, descuentoPct: 0, alicuotaIva: NO_GRAVADO }];
+  const gastos = contexto.gastos && contexto.gastos.importe > 0 ? contexto.gastos : null;
+  if (gastos) {
+    const gasto: ItemACalcular = { cantidad: 1, precioUnitario: gastos.importe, descuentoPct: 0, alicuotaIva: 21 };
+    items.push({
+      ...item,
+      descripcion: gastos.descripcion,
+      precio_unitario: gastos.importe,
+      gravado: true,
+      alicuota_iva: 21,
+      ...calcularItem(gasto),
+    });
+    aCalcular.push(gasto);
+  }
+  const totales = calcularTotales(aCalcular);
 
   return {
     cabecera: {
@@ -125,7 +142,7 @@ export function armarNotaDebitoRechazo(cheque: ChequeRechazado, contexto: Contex
       iva: totales.iva,
       total: totales.total,
     },
-    items: [item],
+    items,
     asociados: facturas.map((f) => ({ asociado_id: f.id })),
   };
 }

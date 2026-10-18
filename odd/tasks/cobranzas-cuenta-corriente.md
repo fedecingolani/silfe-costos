@@ -188,7 +188,7 @@ corriente** de cada cliente y administrar la **cartera de cheques** recibidos.
 | T3 | Lógica pura: validación de recibo, imputación, saldo a favor y transiciones de cheques (Vitest) | delegada (writer) | [x] |
 | T4 | Cobranza de cuenta corriente y pago de contado: pantallas y acciones, emisión con número | delegada (writer) | [x] |
 | T5 | Saldo a favor automático al autorizar, imputación de NC y estado de pago en comprobantes | delegada (writer) | [x] |
-| T6 | Cartera de cheques con estados, y rechazo con ND obligatoria | delegada (writer) | [ ] |
+| T6 | Cartera de cheques con estados, y rechazo con ND obligatoria | delegada (writer) | [x] |
 | T7 | Cuenta corriente: ficha del cliente y listado general | delegada (writer) | [ ] |
 | T8 | PDF del recibo y anulación | delegada (writer) | [ ] |
 | T9 | Recorrido completo en local (y con ARCA de homologación cuando vuelva) | orquestador | [ ] |
@@ -347,9 +347,56 @@ corriente** de cada cliente y administrar la **cartera de cheques** recibidos.
   pgTAP: update/insert/delete directos fallan con 42501; emitir como authenticated sigue numerando.
 - **Letra** (`cheques.ts`): facturas imputadas sin letra daban un mensaje mal armado; ahora un error legible (test).
 
+### Revisión de T4+T5
+
+- En curso (la registra el orquestador).
+
+### T6 — Cartera de cheques y rechazo con ND obligatoria (18/10/2026)
+
+- Commits: `56b5102` fix(cobranzas): CUIT del librador normalizado, contador de recibos protegido y mensaje de letra
+  (unidad A, ver "Revisión de T2+T3"); unidad B: feat(cobranzas): cartera de cheques con estados y nota de débito
+  obligatoria por rechazo. Migración `20261028000001_cobranzas_cartera.sql` (sólo local; falta `db push`). pgTAP en
+  rojo primero (aborta en `rechazar_cheque` inexistente), después verde.
+- **Cartera:** vista `v_cheque_cartera` (security invoker): cheques de recibos **emitidos**, sin anulados, con cliente
+  (razón social, CUIT, código: el filtro de clientes de siempre), número y fecha del recibo, y estado y número de la ND.
+  Ventas → Cartera de cheques (`/cheques`): totales por estado (cantidad e importe, de lo que filtran fecha de pago y
+  cliente; cada total filtra por su estado), filtros estado (por defecto en cartera, o todos), fecha de pago
+  desde/hasta y cliente. Columnas fecha de pago, banco, número (al detalle), tipo, librador, cliente, importe, estado
+  y, si está rechazado, "ND pendiente" o el número de la ND autorizada (enlazada), y el recibo.
+- **Detalle** `/cheques/[id]`: datos, recibo, cliente, ND, historial (`cheque_estado`) y las acciones que admite el
+  estado (`accionesDisponibles`, de `TRANSICIONES_CHEQUE`): depositar (fecha, observación), entregar (a quién,
+  fecha, observación), rechazar (fecha, observación, gastos bancarios opcionales con descripción). Formularios con
+  onSubmit + startTransition. Depositar/entregar actualizan el cheque (el trigger controla la transición y escribe el
+  historial), con `estado` actual en el filtro para no pisar un cambio concurrente.
+- **Rechazo atómico:** RPC `rechazar_cheque(p_cheque_id, p_fecha, p_observacion, p_gastos)` (security invoker, sólo
+  authenticated). La ND se arma **en la base** (no llega armada desde la pantalla) y se guarda con
+  `guardar_borrador_comprobante` en la misma transacción que el cambio de estado: ítem no gravado "Cheque rechazado
+  N° … – Banco …"; gastos > 0 → ítem gravado al 21% (IVA redondeado a centavos); asociada a las facturas que canceló el
+  recibo (misma letra; mezcla o sin letra → CB018) o, si fue a cuenta, al período del 1° del mes del recibo a su fecha
+  (letra del cliente); cuenta corriente, fecha de hoy, electrónico activo más bajo y el ambiente que pone el guardado.
+  Devuelve la ND y la pantalla abre su editor. `armarNotaDebitoRechazo` (TS, ahora con gastos) arma lo mismo y el
+  detalle lo usa para mostrar antes qué ND se crea (o por qué no se puede).
+- **"Obliga":** además de `cheque_rechazado_check`, el trigger `trg_comprobante_nd_cheque` impide borrar la ND de un
+  cheque rechazado o cambiarle cliente o clase (CB020, mensaje legible en el editor de comprobantes). En el editor de la
+  ND: "Nota de débito por cheque rechazado: revisala y autorizala" con enlace al cheque; en el detalle autorizado,
+  "Nota de débito por el cheque N° … (Banco …)". Autorizada, es un débito más (pgTAP). Errores nuevos CB020 (ND de un
+  rechazo), CB021 (cheque inexistente), CB022 (gastos inválidos).
+- **Recibo:** en sus medios, cada cheque enlaza a su detalle con su estado actual.
+- Lógica pura `src/lib/cobranzas/cartera.ts` (filtros, totales por estado en centavos, acciones, estado visible,
+  validación del cambio) con Vitest.
+- Tamaño: ~1100 líneas en la unidad B (SQL ~300, pgTAP ~230, pantallas ~550, lógica y tests ~350), por encima de las 400
+  orientativas: listado, detalle con acciones y el RPC del rechazo van juntos para que el rechazo no quede sin pantalla.
+- Checks: `npm test` 547 ok; `npm run typecheck` ok; `npm run lint` ok; `npm run build` ok (`/cheques`, `/cheques/[id]`);
+  `supabase migration up --local` + `supabase test db` 608, falla sólo `arca_configuracion_test` 26 (conocida);
+  `supabase db reset --local` + `supabase test db` 608 ok; datos locales restaurados. Recorrido por PostgREST local con
+  JWT firmado: recibo a cuenta con cheque (CUIT con guiones guardada con dígitos), emitir, rechazar con gastos → ND A
+  borrador de 621 (500 no gravado + 100 + 21) al período 2026-10-01..2026-10-18, cartera "rechazado / ND borrador",
+  borrar la ND → CB020; UPDATE del contador → 42501. `next dev` con Supabase local: `/cheques` y `/cheques/[id]`
+  responden 307 a /login, sin 500.
+
 ## Próximo paso
 
-- T6: cartera de cheques (filtrar por recibo emitido) y rechazo con ND obligatoria.
+- T7: cuenta corriente (ficha del cliente y listado general).
 
 ## Criterios de aceptación
 
