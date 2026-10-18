@@ -79,7 +79,7 @@ const COLUMNAS: Columna[] = [
 ];
 
 /** Arma el texto que la fuente estándar (WinAnsi) puede dibujar: lo que no soporta se cambia por "?". */
-function crearSaneador(fuente: PDFFont) {
+export function crearSaneador(fuente: PDFFont) {
   const soportados = new Set(fuente.getCharacterSet());
   return (texto: string) =>
     Array.from(texto.replace(/[\t\r\n]+/g, " "))
@@ -88,7 +88,7 @@ function crearSaneador(fuente: PDFFont) {
 }
 
 /** Corta un texto en líneas que entran en el ancho: por palabras y, si una no entra, por caracteres. */
-function partirEnLineas(texto: string, fuente: PDFFont, tamano: number, ancho: number): string[] {
+export function partirEnLineas(texto: string, fuente: PDFFont, tamano: number, ancho: number): string[] {
   const lineas: string[] = [];
   let actual = "";
   const entra = (t: string) => fuente.widthOfTextAtSize(t, tamano) <= ancho;
@@ -114,7 +114,7 @@ function partirEnLineas(texto: string, fuente: PDFFont, tamano: number, ancho: n
 }
 
 /** Recorta a la cantidad de líneas dada, marcando con "…" que sigue. */
-function recortar(lineas: string[], maximo: number): string[] {
+export function recortar(lineas: string[], maximo: number): string[] {
   if (lineas.length <= maximo) return lineas;
   const resto = lineas.slice(0, maximo);
   resto[maximo - 1] = `${resto[maximo - 1].replace(/.$/, "")}…`;
@@ -256,11 +256,12 @@ export async function generarPdfComprobante(datos: DatosPdfComprobante, logoPng?
       Y_RECEPTOR,
     );
     etiquetaValor(pagina, "Cond. IVA:", datos.receptor.condicionIva, X_RECEPTOR_DERECHA, Y_RECEPTOR - 12);
-    if (datos.asociados.length > 0) {
-      // Notas de crédito y débito: el comprobante asociado, achicado si no entra en la columna.
-      const etiqueta = "Comprobante asociado:";
+    if (datos.asociados.length > 0 || datos.periodoAsociado) {
+      // Notas de crédito y débito: el comprobante (o el período) asociado, achicado si no entra en la columna.
+      const etiqueta = datos.periodoAsociado ? "Período asociado:" : "Comprobante asociado:";
       const valor =
-        datos.asociados.length > 1 ? `${datos.asociados[0]} y ${datos.asociados.length - 1} más` : datos.asociados[0];
+        datos.periodoAsociado ??
+        (datos.asociados.length > 1 ? `${datos.asociados[0]} y ${datos.asociados.length - 1} más` : datos.asociados[0]);
       let tamano = 8;
       const ancho = (t: number) =>
         negrita.widthOfTextAtSize(sanear(etiqueta), t) + 3 + normal.widthOfTextAtSize(sanear(valor), t);
@@ -344,7 +345,8 @@ export async function generarPdfComprobante(datos: DatosPdfComprobante, logoPng?
     pagina.drawRectangle({ x: MARGEN, y: Y_BANDA, width: DERECHA - MARGEN, height: ALTO_BANDA, color: FONDO });
     const yBanda = Y_BANDA + 6;
     etiquetaValor(pagina, "Bruto:", datos.bruto, MARGEN + 6, yBanda, 9);
-    etiquetaValor(pagina, "Impuestos:", datos.impuestos, MARGEN + 180, yBanda, 9);
+    etiquetaValor(pagina, "No gravado:", datos.noGravado, MARGEN + 130, yBanda, 9);
+    etiquetaValor(pagina, "Impuestos:", datos.impuestos, MARGEN + 265, yBanda, 9);
     const total = `Total: ${datos.total}`;
     escribir(pagina, total, DERECHA - 6, yBanda - 0.5, negrita, 10.5, "derecha");
 

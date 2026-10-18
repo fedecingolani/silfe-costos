@@ -8,15 +8,19 @@ import {
   ALICUOTAS_IVA,
   CLASES_COMPROBANTE,
   CONDICIONES_PAGO,
+  NO_GRAVADO,
   type AlicuotaIva,
   type ClaseComprobante,
   type CondicionIva,
   type CondicionPago,
   type LetraComprobante,
+  type TasaIva,
   type TipoComprobanteArca,
 } from "@/lib/tipos";
 import {
+  MENSAJE_ASOCIADOS_Y_PERIODO,
   leerAsociadoManual,
+  leerPeriodoAsociado,
   letraDeTipoArca,
   validarAsociadosNota,
   type AsociadoGuardado,
@@ -28,7 +32,11 @@ import { esFechaValida } from "./validacion";
 
 // ----- Lo que manda la pantalla ---------------------------------------------
 
-/** Un renglón tal como está en la pantalla. productoId vacío = ítem libre. */
+/**
+ * Un renglón tal como está en la pantalla. productoId vacío = ítem libre.
+ * alicuotaIva: la alícuota ("21") o "no_gravado". En un renglón de producto
+ * sólo cuenta "no_gravado": si no, vale la alícuota del catálogo.
+ */
 export type FilaItemEnviada = {
   productoId: string | null;
   descripcion: string;
@@ -55,6 +63,12 @@ export type BorradorEnviado = {
    * sistema anterior). Se ignora si la nota ya tiene un asociado de la base.
    */
   asociadoManual?: AsociadoManualEnviado | null;
+  /**
+   * Período asociado (PeriodoAsoc), en lugar de un comprobante: una nota sin
+   * asociado de la base se asocia a uno cargado a mano o a un período, no a
+   * los dos. yyyy-mm-dd.
+   */
+  periodoAsociado?: { desde: string; hasta: string } | null;
 };
 
 /** Producto del catálogo, con los datos que se copian al renglón. */
@@ -80,7 +94,11 @@ export type CabeceraGuardada = {
   lista_precio_id: string | null;
   condicion_pago: CondicionPago;
   observaciones: string | null;
+  /** Período asociado de una nota (los dos o ninguno). */
+  periodo_asoc_desde: string | null;
+  periodo_asoc_hasta: string | null;
   neto: number;
+  no_gravado: number;
   iva: number;
   total: number;
 };
@@ -94,7 +112,9 @@ export type ItemGuardado = {
   cantidad: number;
   precio_unitario: number;
   descuento_pct: number;
-  alicuota_iva: AlicuotaIva;
+  /** false: no gravado (sin alícuota ni IVA). */
+  gravado: boolean;
+  alicuota_iva: AlicuotaIva | null;
   importe: number;
   iva: number;
 };
@@ -157,12 +177,18 @@ export function alicuotaArca(valor: number | string | null | undefined): Alicuot
   return (ALICUOTAS_IVA as readonly number[]).includes(n as number) ? (n as AlicuotaIva) : null;
 }
 
+/** La tasa elegida en la pantalla: "no_gravado" o una alícuota de ARCA; si no, null. */
+export function tasaEnviada(valor: unknown): TasaIva | null {
+  if (valor === NO_GRAVADO) return NO_GRAVADO;
+  return typeof valor === "string" || typeof valor === "number" ? alicuotaArca(valor) : null;
+}
+
 /** Renglón para el cálculo en vivo, o null mientras falte algo. */
 export function itemParaCalcular(fila: FilaItemEnviada): ItemACalcular | null {
   const cantidad = aDecimal(fila.cantidad);
   const precio = aDecimal(fila.precioUnitario);
   const descuento = aDecimal(fila.descuentoPct) ?? 0;
-  const alicuota = alicuotaArca(fila.alicuotaIva);
+  const alicuota = tasaEnviada(fila.alicuotaIva);
   if (cantidad === null || cantidad <= 0 || precio === null || precio < 0 || alicuota === null) return null;
   if (descuento < 0 || descuento > 100) return null;
   return { cantidad, precioUnitario: precio, descuentoPct: descuento, alicuotaIva: alicuota };
@@ -182,7 +208,8 @@ function esObjeto(valor: unknown): valor is Record<string, unknown> {
 /**
  * Valida lo enviado por la pantalla y arma la cabecera y los ítems para
  * guardar. Un renglón con producto toma del catálogo código, nombre, unidad
- * y alícuota; uno libre, lo cargado. Importes y totales se calculan acá.
+ * y alícuota (salvo que se lo pase a no gravado); uno libre, lo cargado.
+ * Importes y totales se calculan acá.
  *
  * Una nota lleva la letra de su asociado (de la base, o el tipo del cargado
  * a mano); sin asociado, la de la condición IVA del cliente.
@@ -243,13 +270,13 @@ export function armarBorrador(
     const erroresAntes = errores.length;
 
     let datosProducto: Pick<ItemGuardado, "producto_id" | "codigo" | "descripcion" | "unidad"> | null = null;
-    let alicuota: AlicuotaIva | null = null;
+    let alicuota: TasaIva | null = null;
     if (typeof valor.productoId === "string" && valor.productoId !== "") {
       const producto = contexto.productos.get(valor.productoId);
       if (!producto) {
         errores.push(`${n}: el producto ya no existe.`);
       } else {
-        alicuota = alicuotaArca(producto.alicuota_iva);
+        alicuota = valor.alicuotaIva === NO_GRAVADO ? NO_GRAVADO : alicuotaArca(producto.alicuota_iva);
         if (alicuota === null) {
           errores.push(
             `${n}: el producto ${producto.codigo} tiene una alícuota de IVA (${producto.alicuota_iva}%) que ARCA no acepta. ` +
@@ -261,7 +288,7 @@ export function armarBorrador(
     } else {
       const descripcion = texto(valor.descripcion);
       if (!descripcion) errores.push(`${n}: completá la descripción.`);
-      alicuota = alicuotaArca(valor.alicuotaIva as string);
+      alicuota = tasaEnviada(valor.alicuotaIva);
       if (alicuota === null) errores.push(`${n}: elegí la alícuota de IVA.`);
       datosProducto = { producto_id: null, codigo: null, descripcion: descripcion ?? "", unidad: null };
     }
@@ -288,15 +315,18 @@ export function armarBorrador(
       cantidad: calculable.cantidad,
       precio_unitario: calculable.precioUnitario,
       descuento_pct: calculable.descuentoPct,
-      alicuota_iva: alicuota,
+      gravado: alicuota !== NO_GRAVADO,
+      alicuota_iva: alicuota === NO_GRAVADO ? null : alicuota,
       importe,
       iva,
     });
   });
 
-  // Asociados: el de la base no se toca; el cargado a mano se reemplaza.
+  // Asociados: el de la base no se toca; el cargado a mano o el período se
+  // reemplazan. Una factura y una nota con asociado de la base no llevan período.
   let asociados: AsociadoGuardado[] | null = [];
   let letraAsociado: LetraComprobante | null = null;
+  let periodo: { desde: string; hasta: string } | null = null;
   if (clase && contexto.asociadoInterno) {
     const validos = validarAsociadosNota(clase, [contexto.asociadoInterno.tipoArca]);
     if ("error" in validos) errores.push(validos.error);
@@ -304,10 +334,20 @@ export function armarBorrador(
     asociados = null;
   } else if (clase && clase !== "factura") {
     const manual = leerAsociadoManual(enviado.asociadoManual, clase, fecha, contexto.cuitEmisor ?? null);
-    if ("errores" in manual) errores.push(...manual.errores);
-    else if (manual.asociado) {
+    const leido = leerPeriodoAsociado(enviado.periodoAsociado, fecha);
+    const hayManual = !("asociado" in manual) || manual.asociado !== null;
+    const hayPeriodo = !("periodo" in leido) || leido.periodo !== null;
+    if (hayManual && hayPeriodo) {
+      errores.push(MENSAJE_ASOCIADOS_Y_PERIODO);
+    } else if ("errores" in manual) {
+      errores.push(...manual.errores);
+    } else if ("errores" in leido) {
+      errores.push(...leido.errores);
+    } else if (manual.asociado) {
       asociados = [manual.asociado];
       letraAsociado = letraDeTipoArca((manual.asociado as { tipo_arca: number }).tipo_arca);
+    } else {
+      periodo = leido.periodo;
     }
   }
 
@@ -324,7 +364,7 @@ export function armarBorrador(
       cantidad: i.cantidad,
       precioUnitario: i.precio_unitario,
       descuentoPct: i.descuento_pct,
-      alicuotaIva: i.alicuota_iva,
+      alicuotaIva: i.gravado ? i.alicuota_iva! : NO_GRAVADO,
     })),
   );
 
@@ -341,7 +381,10 @@ export function armarBorrador(
         lista_precio_id: listaPrecioId,
         condicion_pago: condicionPago!,
         observaciones: texto(enviado.observaciones),
+        periodo_asoc_desde: periodo?.desde ?? null,
+        periodo_asoc_hasta: periodo?.hasta ?? null,
         neto: totales.neto,
+        no_gravado: totales.noGravado,
         iva: totales.iva,
         total: totales.total,
       },
@@ -366,7 +409,8 @@ const MENSAJES_GUARDADO: Record<string, string> = {
 /** Mensaje legible de un error de la base al guardar o borrar un borrador. */
 export function mensajeErrorGuardado(error: { code?: string; message: string }): string {
   // CM007 (asociado inválido): el mensaje de la base ya es legible y dice qué asociado.
-  if (error.code === "CM007") return error.message;
+  // CB020: es la ND de un cheque rechazado (no se borra ni cambia de cliente); el mensaje dice qué cheque.
+  if (error.code === "CM007" || error.code === "CB020") return error.message;
   return (error.code && MENSAJES_GUARDADO[error.code]) || `No se pudo guardar el comprobante: ${error.message}`;
 }
 

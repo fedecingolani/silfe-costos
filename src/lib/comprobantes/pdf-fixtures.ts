@@ -32,11 +32,14 @@ export const COMPROBANTE_EJEMPLO: FilaComprobantePdf = {
   receptor_domicilio: "Av. Roca 1234, Cipolletti",
   receptor_provincia: "Río Negro",
   neto: 1400000,
+  no_gravado: 0,
   iva: 294000,
   total: 1694000,
   cae: "76123456789012",
   cae_vencimiento: "2026-10-26",
   iva_detalle: [{ id: 5, alicuota: 21, base: 1400000, importe: 294000 }],
+  periodo_asoc_desde: null,
+  periodo_asoc_hasta: null,
 };
 
 export const ITEM_EJEMPLO: FilaItemPdf = {
@@ -47,6 +50,7 @@ export const ITEM_EJEMPLO: FilaItemPdf = {
   cantidad: 100,
   precio_unitario: 14000,
   descuento_pct: 0,
+  gravado: true,
   alicuota_iva: 21,
   importe: 1400000,
   iva: 294000,

@@ -139,7 +139,10 @@ describe("armarBorrador", () => {
           lista_precio_id: LISTA,
           condicion_pago: "cuenta_corriente",
           observaciones: "Entrega en planta",
+          periodo_asoc_desde: null,
+          periodo_asoc_hasta: null,
           neto: 2300.9,
+          no_gravado: 0,
           iva: 430.69,
           total: 2731.59,
         },
@@ -153,6 +156,7 @@ describe("armarBorrador", () => {
             cantidad: 2,
             precio_unitario: 1000.5,
             descuento_pct: 10,
+            gravado: true,
             alicuota_iva: 21,
             importe: 1800.9,
             iva: 378.19,
@@ -166,6 +170,7 @@ describe("armarBorrador", () => {
             cantidad: 1,
             precio_unitario: 500,
             descuento_pct: 0,
+            gravado: true,
             alicuota_iva: 10.5,
             importe: 500,
             iva: 52.5,
@@ -228,6 +233,40 @@ describe("armarBorrador", () => {
   });
 });
 
+describe("armarBorrador: ítems no gravados", () => {
+  const conNoGravado = () =>
+    enviado({
+      items: [
+        { ...enviado().items[0], alicuotaIva: "no_gravado" },
+        { ...enviado().items[1], alicuotaIva: "no_gravado" },
+      ],
+    });
+
+  it("un ítem libre o de producto pasa a no gravado: sin alícuota ni IVA, y suma en no_gravado", () => {
+    const resultado = armarBorrador(conNoGravado(), contexto);
+    if (!("borrador" in resultado)) throw new Error(JSON.stringify(resultado));
+    expect(resultado.borrador.items.map((i) => [i.gravado, i.alicuota_iva, i.importe, i.iva])).toEqual([
+      [false, null, 1800.9, 0],
+      [false, null, 500, 0],
+    ]);
+    expect(resultado.borrador.cabecera).toMatchObject({ neto: 0, no_gravado: 2300.9, iva: 0, total: 2300.9 });
+  });
+
+  it("un producto con otra alícuota enviada conserva la del catálogo", () => {
+    const resultado = armarBorrador(enviado(), contexto);
+    expect("borrador" in resultado && resultado.borrador.items[0]).toMatchObject({ gravado: true, alicuota_iva: 21 });
+  });
+
+  it("calcula en vivo un renglón no gravado", () => {
+    expect(itemParaCalcular({ ...enviado().items[1], alicuotaIva: "no_gravado" })).toEqual({
+      cantidad: 1,
+      precioUnitario: 500,
+      descuentoPct: 0,
+      alicuotaIva: "no_gravado",
+    });
+  });
+});
+
 describe("mensajeErrorGuardado", () => {
   it.each([
     ["CM004", "El comprobante ya no es un borrador: no se puede modificar. Recargá la página."],
@@ -236,6 +275,11 @@ describe("mensajeErrorGuardado", () => {
     ["23503", "El cliente, la lista de precios o el punto de venta ya no existen. Recargá la página."],
   ])("traduce %s", (code, mensaje) => {
     expect(mensajeErrorGuardado({ code, message: "x" })).toBe(mensaje);
+  });
+
+  it("muestra tal cual el bloqueo de la ND de un cheque rechazado", () => {
+    const message = "Es la nota de débito del cheque rechazado N° 71 (Banco Nación): no se puede borrar. Revisala y autorizala.";
+    expect(mensajeErrorGuardado({ code: "CB020", message })).toBe(message);
   });
 
   it("deja el resto con el mensaje de la base", () => {
@@ -263,6 +307,46 @@ describe("buscarProductos", () => {
   it("sin texto no devuelve nada y respeta el límite", () => {
     expect(buscarProductos(catalogo, "  ")).toEqual([]);
     expect(buscarProductos(catalogo, "o", 2)).toHaveLength(2);
+  });
+});
+
+describe("armarBorrador: notas asociadas a un período", () => {
+  const periodo = { desde: "2026-10-01", hasta: "2026-10-15" };
+  const armar = (cambios: Partial<BorradorEnviado>, extra: Partial<Parameters<typeof armarBorrador>[1]> = {}) =>
+    armarBorrador(enviado(cambios), { ...contexto, cuitEmisor: "23334771229", ...extra });
+
+  it("guarda el período, sin comprobantes asociados, y la letra sale del cliente", () => {
+    const r = armar({ clase: "nota_debito", periodoAsociado: periodo }, { condicionIvaCliente: "Consumidor Final" });
+    if ("errores" in r) throw new Error(r.errores.join(" "));
+    expect(r.borrador.cabecera).toMatchObject({
+      letra: "B",
+      tipo_arca: 7,
+      periodo_asoc_desde: "2026-10-01",
+      periodo_asoc_hasta: "2026-10-15",
+    });
+    expect(r.borrador.asociados).toEqual([]);
+  });
+
+  it("no acepta a la vez un comprobante cargado a mano y un período", () => {
+    const manual = { tipoArca: "6", puntoVenta: "7", numero: "150", fecha: "2026-01-10" };
+    expect(armar({ clase: "nota_debito", asociadoManual: manual, periodoAsociado: periodo })).toEqual({
+      errores: ["Una nota se asocia a comprobantes o a un período, no a los dos."],
+    });
+  });
+
+  it("informa un período inválido", () => {
+    const r = armar({ clase: "nota_debito", periodoAsociado: { desde: "2026-10-15", hasta: "2026-10-01" } });
+    expect(r).toEqual({ errores: ["Período asociado: el desde no puede ser posterior al hasta."] });
+  });
+
+  it("una factura y una nota con asociado de la base descartan el período", () => {
+    const factura = armar({ clase: "factura", periodoAsociado: periodo });
+    expect("borrador" in factura && factura.borrador.cabecera).toMatchObject({
+      periodo_asoc_desde: null,
+      periodo_asoc_hasta: null,
+    });
+    const nota = armar({ clase: "nota_credito", periodoAsociado: periodo }, { asociadoInterno: { tipoArca: 1 } });
+    expect("borrador" in nota && nota.borrador.cabecera).toMatchObject({ periodo_asoc_desde: null });
   });
 });
 

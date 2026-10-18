@@ -23,7 +23,8 @@ import {
   type RepositorioComprobantes,
   type ServiciosArca,
 } from "./autorizar";
-import { asociadoInterno, asociadoManual } from "./asociados";
+import { asociadoInterno, asociadoManual, periodoDeFila } from "./asociados";
+import { tasaDeFila } from "./calculo";
 import { leerAsociados, leerNotasSobre, saldoDe, type AsociadoLeido } from "./asociados-carga";
 
 type Supabase = Awaited<ReturnType<typeof createClient>>;
@@ -91,7 +92,7 @@ export function repositorioComprobantes(supabase: Supabase): RepositorioComproba
       const { data: c, error } = await supabase
         .from("comprobante")
         .select(
-          "id, estado, punto_venta, ambiente, clase, letra, tipo_arca, fecha, total, receptor_doc_nro, intento_numero, cliente_id",
+          "id, estado, punto_venta, ambiente, clase, letra, tipo_arca, fecha, total, receptor_doc_nro, intento_numero, cliente_id, periodo_asoc_desde, periodo_asoc_hasta",
         )
         .eq("id", id)
         .maybeSingle();
@@ -101,7 +102,7 @@ export function repositorioComprobantes(supabase: Supabase): RepositorioComproba
       const [items, cliente, puntoVenta, emisor] = await Promise.all([
         supabase
           .from("comprobante_item")
-          .select("id, cantidad, precio_unitario, descuento_pct, alicuota_iva, importe, iva")
+          .select("id, cantidad, precio_unitario, descuento_pct, gravado, alicuota_iva, importe, iva")
           .eq("comprobante_id", id)
           .order("orden"),
         supabase
@@ -149,11 +150,12 @@ export function repositorioComprobantes(supabase: Supabase): RepositorioComproba
           cantidad: Number(i.cantidad),
           precioUnitario: Number(i.precio_unitario),
           descuentoPct: Number(i.descuento_pct),
-          alicuotaIva: Number(i.alicuota_iva),
+          alicuotaIva: tasaDeFila(i),
           importe: Number(i.importe),
           iva: Number(i.iva),
         })),
         ...(await asociados(id, c.clase, cuitEmisor)),
+        periodo: periodoDeFila(c),
         cliente: {
           razonSocial: cliente.data.razon_social,
           cuit: cliente.data.cuit,
@@ -189,6 +191,7 @@ export function repositorioComprobantes(supabase: Supabase): RepositorioComproba
         receptor_domicilio: d.receptor.domicilio,
         receptor_provincia: d.receptor.provincia,
         neto: d.neto,
+        no_gravado: d.noGravado,
         iva: d.iva,
         total: d.total,
       });
@@ -210,6 +213,10 @@ export function repositorioComprobantes(supabase: Supabase): RepositorioComproba
     },
 
     async marcarAutorizado(id, d) {
+      // En la misma transacción, el trigger trg_comprobante_aplicar_creditos
+      // (20261027000001) aplica el saldo a favor del cliente a una factura o
+      // ND de cuenta corriente de producción, o imputa una nota de crédito a
+      // sus asociados. Si eso falla no deshace la autorización.
       await actualizar(id, ["verificando"], {
         estado: "autorizado",
         numero: d.numero,

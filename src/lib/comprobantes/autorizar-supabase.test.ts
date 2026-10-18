@@ -77,6 +77,8 @@ function base(opciones: {
   filasAsociado?: unknown[];
   notasSobre?: { comprobante_id: string }[];
   errorAsociados?: string;
+  cabecera?: Record<string, unknown>;
+  items?: unknown[];
 }) {
   return (c: Consulta): Respuesta => {
     switch (c.tabla) {
@@ -95,6 +97,9 @@ function base(opciones: {
             receptor_doc_nro: null,
             intento_numero: null,
             cliente_id: "c1",
+            periodo_asoc_desde: null,
+            periodo_asoc_hasta: null,
+            ...opciones.cabecera,
           });
         }
         const ids = (paso(c, "in")?.[2] ?? []) as string[];
@@ -105,7 +110,7 @@ function base(opciones: {
         if (paso(c, "eq")) return ok(opciones.filasAsociado ?? []);
         return ok(opciones.notasSobre ?? []);
       case "comprobante_item":
-        return ok([]);
+        return ok(opciones.items ?? []);
       case "cliente":
         return ok({
           razon_social: "Frutícola S.A.",
@@ -135,6 +140,29 @@ const NOTAS_SOBRE = [
   { comprobante_id: NC_VERIFICANDO },
   { comprobante_id: NC_BORRADOR },
 ];
+
+describe("repositorioComprobantes: no gravados y período al cargar", () => {
+  it("lee los ítems no gravados y el período asociado de la nota", async () => {
+    const { repositorio } = supabaseFalso(
+      base({
+        clase: "nota_debito",
+        cabecera: { periodo_asoc_desde: "2026-10-01", periodo_asoc_hasta: "2026-10-15" },
+        items: [
+          { id: "i1", cantidad: 1, precio_unitario: 1000, descuento_pct: 0, gravado: false, alicuota_iva: null, importe: 1000, iva: 0 },
+          { id: "i2", cantidad: 1, precio_unitario: 100, descuento_pct: 0, gravado: true, alicuota_iva: 21, importe: 100, iva: 21 },
+        ],
+      }),
+    );
+    const datos = await repositorio.cargar(ID);
+    expect(datos?.periodo).toEqual({ desde: "2026-10-01", hasta: "2026-10-15" });
+    expect(datos?.items.map((i) => i.alicuotaIva)).toEqual(["no_gravado", 21]);
+  });
+
+  it("sin período, periodo es null", async () => {
+    const { repositorio } = supabaseFalso(base({ clase: "factura" }));
+    expect((await repositorio.cargar(ID))?.periodo).toBeNull();
+  });
+});
 
 describe("repositorioComprobantes: asociados al cargar", () => {
   it("arma los CbtesAsoc de la base y los cargados a mano, y el saldo sin contar la nota que se autoriza", async () => {

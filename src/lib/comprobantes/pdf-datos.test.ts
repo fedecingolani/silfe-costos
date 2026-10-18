@@ -224,6 +224,57 @@ describe("armarDatosPdf", () => {
     expect(mixto.total).toBe("$ 1.320,50");
   });
 
+  it("muestra lo no gravado en el pie y \"No grav.\" en la alícuota del renglón", () => {
+    const conNoGravado = armarDatosPdf({
+      comprobante: {
+        ...COMPROBANTE_EJEMPLO,
+        clase: "nota_debito",
+        tipo_arca: 2,
+        neto: 1000,
+        no_gravado: 150000,
+        iva: 210,
+        total: 151210,
+        iva_detalle: [{ id: 5, alicuota: 21, base: 1000, importe: 210 }],
+      },
+      items: [
+        {
+          ...ITEM_EJEMPLO,
+          descripcion: "Cheque rechazado N° 123 – Banco Nación",
+          cantidad: 1,
+          precio_unitario: 150000,
+          gravado: false,
+          alicuota_iva: null,
+          importe: 150000,
+          iva: 0,
+        },
+        { ...ITEM_EJEMPLO, cantidad: 1, precio_unitario: 1000, importe: 1000, iva: 210 },
+      ],
+      emisor: EMISOR_EJEMPLO,
+    });
+    expect(conNoGravado.items.map((i) => [i.alicuota, i.importeConIva])).toEqual([
+      ["No grav.", "150.000,00"],
+      ["21%", "1.210,00"],
+    ]);
+    expect(conNoGravado.bruto).toBe("1.000,00");
+    expect(conNoGravado.noGravado).toBe("150.000,00");
+    expect(conNoGravado.impuestos).toBe("210,00");
+    expect(conNoGravado.total).toBe("$ 151.210,00");
+    expect(conNoGravado.inconsistencias).toEqual([]);
+  });
+
+  it("recalcula el IVA de un comprobante viejo sin contar los ítems no gravados", () => {
+    const viejo = armarDatosPdf({
+      comprobante: { ...COMPROBANTE_EJEMPLO, neto: 1000, no_gravado: 500, iva: 210, total: 1710, iva_detalle: null },
+      items: [
+        { ...ITEM_EJEMPLO, cantidad: 1, precio_unitario: 1000, importe: 1000, iva: 210 },
+        { ...ITEM_EJEMPLO, cantidad: 1, precio_unitario: 500, gravado: false, alicuota_iva: null, importe: 500, iva: 0 },
+      ],
+      emisor: EMISOR_EJEMPLO,
+    });
+    expect(viejo.ivaPorAlicuota.find((a) => a.etiqueta === "IVA 21")?.importe).toBe("210,00");
+    expect(viejo.inconsistencias).toEqual([]);
+  });
+
   it("arma el pie con el CAE, su vencimiento y el QR de ARCA", () => {
     expect(datos.cae).toBe("76123456789012");
     expect(datos.caeVencimiento).toBe("26/10/2026");
@@ -306,6 +357,23 @@ describe("notas de crédito y débito en el PDF", () => {
       asociados: [ASOCIADO, { tipo_arca: 1, punto_venta: 7, numero: "150", fecha: "2026-01-09" }],
     });
     expect(datos.asociados).toEqual(["A-00007-00000361 del 10/10/2026", "A-00007-00000150 del 09/01/2026"]);
+  });
+
+  it("muestra el período asociado de una nota", () => {
+    const datos = armarDatosPdf({
+      comprobante: {
+        ...COMPROBANTE_EJEMPLO,
+        clase: "nota_debito",
+        tipo_arca: 2,
+        periodo_asoc_desde: "2026-10-01",
+        periodo_asoc_hasta: "2026-10-15",
+      },
+      items: [ITEM_EJEMPLO],
+      emisor: EMISOR_EJEMPLO,
+    });
+    expect(datos.periodoAsociado).toBe("01/10/2026 – 15/10/2026");
+    expect(datos.asociados).toEqual([]);
+    expect(armarDatosPdf({ comprobante: COMPROBANTE_EJEMPLO, items: [ITEM_EJEMPLO], emisor: EMISOR_EJEMPLO }).periodoAsociado).toBeNull();
   });
 
   it("una factura no lleva asociados", () => {

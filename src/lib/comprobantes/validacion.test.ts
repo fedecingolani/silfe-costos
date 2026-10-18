@@ -55,6 +55,11 @@ describe("validarParaAutorizar", () => {
     expect(validarParaAutorizar({ ...valido, items }, HOY)).toEqual(["El total tiene que ser mayor a cero."]);
   });
 
+  it("acepta un comprobante con sólo ítems no gravados", () => {
+    const items = [{ cantidad: 1, precioUnitario: 150000, descuentoPct: 0, alicuotaIva: "no_gravado" as const }];
+    expect(validarParaAutorizar({ ...valido, clase: "nota_debito", items }, HOY)).toEqual([]);
+  });
+
   it("acepta fechas hasta 5 días antes o después de hoy", () => {
     expect(validarParaAutorizar({ ...valido, fecha: "2026-10-11" }, HOY)).toEqual([]);
     expect(validarParaAutorizar({ ...valido, fecha: "2026-10-21" }, HOY)).toEqual([]);

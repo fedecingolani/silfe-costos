@@ -15,7 +15,8 @@ import {
   type Zona,
 } from "@/lib/tipos";
 import { fecha, fechaHora } from "@/lib/formato";
-import { fechaLocalArgentina } from "@/lib/clientes/seguimiento";
+import { fechaLocalArgentina, hoyArgentina } from "@/lib/clientes/seguimiento";
+import { rangoMovimientos } from "@/lib/cobranzas/cuenta-corriente";
 import { validarCbu, validarCuit, validarCvu } from "@/lib/clientes/validaciones";
 import {
   actualizarCliente,
@@ -36,6 +37,7 @@ import { FormularioCliente } from "../FormularioCliente";
 import { FormularioInteraccion } from "../FormularioInteraccion";
 import { PastillaSeguimiento, UltimoContacto } from "../componentes";
 import { FormularioContacto, FormularioSucursal } from "./formularios";
+import { CuentaCorriente } from "./CuentaCorriente";
 
 export const dynamic = "force-dynamic";
 
@@ -83,6 +85,8 @@ export default async function ClientePage({
     contacto?: string;
     interaccion?: string;
     aviso?: string;
+    cc_desde?: string;
+    cc_hasta?: string;
   }>;
 }) {
   const { id } = await params;
@@ -92,6 +96,8 @@ export default async function ClientePage({
     contacto: contactoEnEdicionId,
     interaccion: interaccionEnEdicionId,
     aviso,
+    cc_desde,
+    cc_hasta,
   } = await searchParams;
   const mensajeAviso = aviso && Object.hasOwn(AVISOS, aviso) ? AVISOS[aviso as AvisoCliente] : undefined;
   const supabase = await createClient();
@@ -140,6 +146,8 @@ export default async function ClientePage({
   const claveAlta = `${interacciones.length}-${interacciones.reduce((max, i) => (i.creado_en > max ? i.creado_en : max), "")}`;
   const ahora = fechaLocalArgentina(new Date());
   const href = `/clientes/${cliente.id}`;
+  const hoy = hoyArgentina();
+  const rangoCuenta = rangoMovimientos({ desde: cc_desde, hasta: cc_hasta }, hoy);
 
   return (
     <>
@@ -278,6 +286,8 @@ export default async function ClientePage({
           </div>
         </dl>
       </Tarjeta>
+
+      <CuentaCorriente clienteId={cliente.id} desde={rangoCuenta.desde} hasta={rangoCuenta.hasta} hoy={hoy} />
 
       <Tarjeta
         titulo="Sucursales y direcciones de entrega"

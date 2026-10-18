@@ -6,7 +6,13 @@ import { Encabezado, Migas, Pastilla, Tarjeta } from "@/components/ui";
 import { fecha, fechaHora, numero, pesos } from "@/lib/formato";
 import { hoyArgentina } from "@/lib/clientes/seguimiento";
 import { ivaDelComprobante, puedeImprimir } from "@/lib/comprobantes/pdf-datos";
-import { nombreTipoArca, notasPermitidas, textoAsociado } from "@/lib/comprobantes/asociados";
+import {
+  nombreTipoArca,
+  notasPermitidas,
+  periodoDeFila,
+  textoAsociado,
+  textoPeriodo,
+} from "@/lib/comprobantes/asociados";
 import {
   datosAsociado,
   leerAsociados,
@@ -21,12 +27,15 @@ import {
   NOMBRES_CONDICION_PAGO,
   type Comprobante,
   type ComprobanteItem,
+  type EstadoPago,
   type MensajeArca,
   type TipoComprobanteArca,
 } from "@/lib/tipos";
 import type { ClienteEncontrado } from "../acciones";
 import { cargarContextoEditor, cargarPrecios } from "../datos";
 import { EditorComprobante } from "../EditorComprobante";
+import { imputacionesRecibidas, reciboDeContado, type ImputacionRecibida } from "../../cobranzas/datos";
+import { NOMBRES_ESTADO_PAGO, TONO_ESTADO_PAGO } from "@/lib/cobranzas/estado-pago";
 import { AccionesDetalle } from "./AccionesDetalle";
 
 export const dynamic = "force-dynamic";
@@ -37,11 +46,12 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const COLUMNAS_COMPROBANTE =
   "id, punto_venta, ambiente, estado, clase, letra, tipo_arca, numero, fecha, fecha_vencimiento_pago, cliente_id, " +
   "lista_precio_id, condicion_pago, observaciones, receptor_razon_social, receptor_doc_tipo, receptor_doc_nro, " +
-  "receptor_condicion_iva, receptor_domicilio, receptor_provincia, neto, iva, total, iva_detalle, cae, cae_vencimiento, " +
+  "receptor_condicion_iva, receptor_domicilio, receptor_provincia, neto, no_gravado, iva, total, iva_detalle, cae, " +
+  "cae_vencimiento, periodo_asoc_desde, periodo_asoc_hasta, " +
   "arca_resultado, arca_observaciones, arca_errores, intento_numero, autorizado_en";
 const COLUMNAS_ITEM =
   "id, orden, producto_id, codigo, descripcion, observaciones, unidad, cantidad, precio_unitario, descuento_pct, " +
-  "alicuota_iva, importe, iva";
+  "gravado, alicuota_iva, importe, iva";
 
 type ComprobanteLeido = Omit<Comprobante, "creado_por" | "creado_en" | "actualizado_en" | "moneda">;
 type ItemLeido = Omit<ComprobanteItem, "comprobante_id">;
@@ -110,6 +120,7 @@ export default async function ComprobantePage({ params }: { params: Promise<{ id
   const asociados = c.clase === "factura" ? [] : await leerAsociados(supabase, c.id);
   if (typeof asociados === "string") return <p className="text-sm text-red-700">{asociados}</p>;
   const asociadosBase = asociados.map((a) => a.asociado_id).filter((v): v is string => Boolean(v));
+  const periodo = c.clase === "factura" ? null : periodoDeFila(c);
 
   const { data: clienteData } = await supabase
     .from("cliente")
@@ -120,6 +131,16 @@ export default async function ComprobantePage({ params }: { params: Promise<{ id
 
   const titulo = `${nombreComprobante(c.clase, c.letra)} ${c.numero !== null ? numeroVisible(c) : ""}`.trim();
   const migas = <Migas items={[{ href: "/comprobantes", texto: "Comprobantes" }, { texto: titulo }]} />;
+  // Nota de débito de un cheque rechazado (rechazar_cheque): enlaza al cheque.
+  const { data: chequeRechazado } =
+    c.clase === "nota_debito"
+      ? await supabase.from("cheque").select("id, numero, banco").eq("nd_comprobante_id", c.id).limit(1).maybeSingle()
+      : { data: null };
+  const enlaceCheque = chequeRechazado && (
+    <Link href={`/cheques/${chequeRechazado.id}`} className="font-medium underline">
+      cheque N° {chequeRechazado.numero} ({chequeRechazado.banco})
+    </Link>
+  );
   const homologacion = c.ambiente === "homologacion" && (
     <div role="status" className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
       Homologación: este comprobante no tiene validez fiscal.
@@ -155,6 +176,11 @@ export default async function ComprobantePage({ params }: { params: Promise<{ id
           acciones={<Pastilla tono={TONO_ESTADO[c.estado]}>{NOMBRES_ESTADO[c.estado]}</Pastilla>}
         />
         {homologacion}
+        {enlaceCheque && (
+          <div role="status" className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+            Nota de débito por cheque rechazado: revisala y autorizala. Es la del {enlaceCheque}; no se puede borrar.
+          </div>
+        )}
         {c.estado === "rechazado" && (
           <div className="mb-4 space-y-2">
             {errores.length > 0 && <Mensajes titulo="Errores de ARCA" mensajes={errores} tono="rojo" />}
@@ -173,6 +199,7 @@ export default async function ComprobantePage({ params }: { params: Promise<{ id
             observaciones: c.observaciones,
             ambiente: c.ambiente,
             cliente,
+            periodo: interno ? null : periodo,
             asociado: {
               interno:
                 interno && interno.tipo_arca && interno.letra
@@ -202,7 +229,8 @@ export default async function ComprobantePage({ params }: { params: Promise<{ id
               cantidad: Number(i.cantidad),
               precio_unitario: Number(i.precio_unitario),
               descuento_pct: Number(i.descuento_pct),
-              alicuota_iva: Number(i.alicuota_iva),
+              gravado: i.gravado,
+              alicuota_iva: i.alicuota_iva === null ? null : Number(i.alicuota_iva),
             })),
           }}
           contexto={contexto}
@@ -243,6 +271,27 @@ export default async function ComprobantePage({ params }: { params: Promise<{ id
   };
   const saldo = c.estado === "autorizado" && c.clase !== "nota_credito" ? saldoDe([esteComoAsociado], notas) : null;
 
+  // Cuenta corriente: sólo los débitos (factura o ND autorizada, de
+  // producción o no electrónica) tienen saldo, estado de pago e imputaciones.
+  let pago: { saldo: number; estadoPago: EstadoPago; imputaciones: ImputacionRecibida[] } | null = null;
+  let pagoContado: { recibo: { id: string; numero_texto: string | null } | null } | null = null;
+  if (c.estado === "autorizado" && c.clase !== "nota_credito") {
+    const [{ data: debito, error: errorDebito }, recibidas] = await Promise.all([
+      supabase.from("v_comprobante_saldo").select("saldo, estado_pago").eq("comprobante_id", c.id).maybeSingle(),
+      imputacionesRecibidas(supabase, c.id),
+    ]);
+    if (errorDebito) return <p className="text-sm text-red-700">{errorDebito.message}</p>;
+    if (typeof recibidas === "string") return <p className="text-sm text-red-700">{recibidas}</p>;
+    if (debito) {
+      pago = { saldo: Number(debito.saldo), estadoPago: debito.estado_pago as EstadoPago, imputaciones: recibidas };
+      if (c.condicion_pago === "contado") {
+        const recibos = await reciboDeContado(supabase, c.id);
+        if (typeof recibos === "string") return <p className="text-sm text-red-700">{recibos}</p>;
+        pagoContado = { recibo: recibos.find((r) => r.estado === "emitido") ?? null };
+      }
+    }
+  }
+
   return (
     <>
       {migas}
@@ -256,6 +305,12 @@ export default async function ComprobantePage({ params }: { params: Promise<{ id
         acciones={<Pastilla tono={TONO_ESTADO[c.estado]}>{NOMBRES_ESTADO[c.estado]}</Pastilla>}
       />
       {homologacion}
+
+      {enlaceCheque && (
+        <div role="status" className="mb-4 rounded-lg border border-stone-200 bg-stone-50 px-3 py-2 text-sm text-stone-700">
+          Nota de débito por el {enlaceCheque}.
+        </div>
+      )}
 
       {verificando && (
         <div role="status" className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
@@ -273,6 +328,31 @@ export default async function ComprobantePage({ params }: { params: Promise<{ id
           notas={notasPermitidas(c)}
         />
       </div>
+
+      {pagoContado && (
+        <div
+          role="status"
+          className={`mb-4 flex flex-wrap items-center justify-between gap-2 rounded-lg border px-3 py-2 text-sm ${
+            pagoContado.recibo ? "border-marca-200 bg-marca-50 text-marca-800" : "border-amber-200 bg-amber-50 text-amber-800"
+          }`}
+        >
+          {pagoContado.recibo ? (
+            <span>
+              Pagado – Recibo{" "}
+              <Link href={`/cobranzas/${pagoContado.recibo.id}`} className="font-medium underline">
+                {pagoContado.recibo.numero_texto}
+              </Link>
+            </span>
+          ) : (
+            <>
+              <span>Contado – pago pendiente</span>
+              <Link href={`/cobranzas/nueva?contado=${c.id}`} className="boton-primario">
+                Registrar pago
+              </Link>
+            </>
+          )}
+        </div>
+      )}
 
       {observaciones.length > 0 && (
         <div className="mb-4">
@@ -300,6 +380,11 @@ export default async function ComprobantePage({ params }: { params: Promise<{ id
                     ))}
                   </span>
                 </Dato>
+              </div>
+            )}
+            {periodo && (
+              <div className="col-span-2">
+                <Dato etiqueta="Período asociado">{textoPeriodo(periodo)}</Dato>
               </div>
             )}
             {c.observaciones && (
@@ -350,6 +435,36 @@ export default async function ComprobantePage({ params }: { params: Promise<{ id
         </Tarjeta>
       )}
 
+      {pago && (
+        <Tarjeta
+          titulo="Cobranza"
+          descripcion={`Saldo pendiente: ${pesos(pago.saldo)}`}
+          acciones={<Pastilla tono={TONO_ESTADO_PAGO[pago.estadoPago]}>{NOMBRES_ESTADO_PAGO[pago.estadoPago]}</Pastilla>}
+          className="mt-4"
+        >
+          {pago.imputaciones.length === 0 ? (
+            <p className="p-4 text-sm text-stone-500">Todavía no recibió pagos ni notas de crédito.</p>
+          ) : (
+            <ul className="divide-y divide-stone-100 text-sm">
+              {pago.imputaciones.map((i) => (
+                <li key={i.id} className="flex items-center justify-between gap-2 px-4 py-2">
+                  <span>
+                    <Link href={i.href} className="text-marca-700 hover:underline">
+                      {i.texto}
+                    </Link>
+                    <span className="ml-2 text-xs text-stone-500">
+                      {fecha(i.fecha)}
+                      {i.automatica && " · automática"}
+                    </span>
+                  </span>
+                  <span className="tabular-nums">{pesos(i.importe)}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Tarjeta>
+      )}
+
       <Tarjeta titulo="Ítems" className="mt-4">
         <div className="overflow-x-auto">
           <table className="tabla">
@@ -379,7 +494,9 @@ export default async function ComprobantePage({ params }: { params: Promise<{ id
                   <td className="text-right tabular-nums">{numero(Number(i.precio_unitario), 4)}</td>
                   <td className="text-right tabular-nums">{numero(Number(i.descuento_pct), 2)}</td>
                   <td className="text-right tabular-nums">{pesos(Number(i.importe))}</td>
-                  <td className="text-right tabular-nums">{numero(Number(i.alicuota_iva), 1)}%</td>
+                  <td className="text-right tabular-nums">
+                    {i.gravado ? `${numero(Number(i.alicuota_iva), 1)}%` : "No grav."}
+                  </td>
                   <td className="text-right tabular-nums">{pesos(Number(i.importe) + Number(i.iva))}</td>
                 </tr>
               ))}
@@ -390,6 +507,10 @@ export default async function ComprobantePage({ params }: { params: Promise<{ id
           <div className="flex justify-between">
             <dt className="text-stone-500">Neto gravado</dt>
             <dd className="tabular-nums">{pesos(Number(c.neto))}</dd>
+          </div>
+          <div className="flex justify-between">
+            <dt className="text-stone-500">No gravado</dt>
+            <dd className="tabular-nums">{pesos(Number(c.no_gravado))}</dd>
           </div>
           {ivaPorAlicuota.map((a) => (
             <div key={a.id} className="flex justify-between">

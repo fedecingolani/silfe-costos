@@ -114,6 +114,9 @@ export type AsociadoSolicitud = {
   fecha?: string;
 };
 
+/** Período asociado de una nota (PeriodoAsoc), en lugar de CbtesAsoc. Fechas yyyy-mm-dd. */
+export type PeriodoSolicitud = { desde: string; hasta: string };
+
 export type SolicitudCae = {
   puntoVenta: number;
   tipoComprobante: number;
@@ -123,11 +126,21 @@ export type SolicitudCae = {
   docTipo: number;
   docNro: string;
   condicionIvaReceptorId: number;
+  /** Neto gravado (ImpNeto). */
   neto: number;
+  /** Importe no gravado (ImpTotConc). */
+  noGravado: number;
   iva: number;
   total: number;
+  /**
+   * Array Iva, sólo alícuotas gravadas. Vacío (sin ítems gravados) se omite:
+   * con ImpIVA 0 ARCA sólo acepta el array con la alícuota 0% (10018), y lo
+   * exige sólo si ImpNeto es mayor a cero (10070).
+   */
   alicuotas: readonly AlicuotaSolicitud[];
   asociados?: readonly AsociadoSolicitud[];
+  /** Período asociado de una nota. Excluyente con asociados. */
+  periodo?: PeriodoSolicitud;
 };
 
 export type MensajeWsfe = { code: number; msg: string };
@@ -195,9 +208,18 @@ function armarAsociados(asociados: readonly AsociadoSolicitud[] | undefined): st
   return `<CbtesAsoc>${filas.join("")}</CbtesAsoc>`;
 }
 
+function armarPeriodo(periodo: PeriodoSolicitud | undefined): string {
+  if (!periodo) return "";
+  return (
+    `<PeriodoAsoc><FchDesde>${fechaWsfe(periodo.desde)}</FchDesde>` +
+    `<FchHasta>${fechaWsfe(periodo.hasta)}</FchHasta></PeriodoAsoc>`
+  );
+}
+
 /**
  * Pide el CAE de un comprobante. El orden de los elementos sigue el WSDL de
- * FECAEDetRequest. Un rechazo de ARCA (Resultado R, Observaciones o Errors)
+ * FECAEDetRequest (… CbtesAsoc, Tributos, Iva, Opcionales, Compradores,
+ * PeriodoAsoc, Actividades). Un rechazo de ARCA (Resultado R, Observaciones o Errors)
  * no se lanza: se devuelve para guardarlo tal cual en el comprobante.
  */
 export async function feCAESolicitar(
@@ -207,17 +229,22 @@ export async function feCAESolicitar(
   solicitud: SolicitudCae,
 ): Promise<RespuestaCae> {
   const s = solicitud;
+  // ARCA admite los dos (10197), pero la app asocia una nota a una cosa o a la otra.
+  if (s.periodo && s.asociados && s.asociados.length > 0) {
+    throw new Error("Una nota se asocia a comprobantes o a un período, no a los dos.");
+  }
   const iva = s.alicuotas
     .map((a) => `<AlicIva><Id>${a.id}</Id><BaseImp>${importe(a.base)}</BaseImp><Importe>${importe(a.importe)}</Importe></AlicIva>`)
     .join("");
   const detalle =
     `<Concepto>1</Concepto><DocTipo>${s.docTipo}</DocTipo><DocNro>${escaparXml(s.docNro)}</DocNro>` +
     `<CbteDesde>${s.numero}</CbteDesde><CbteHasta>${s.numero}</CbteHasta><CbteFch>${fechaWsfe(s.fecha)}</CbteFch>` +
-    `<ImpTotal>${importe(s.total)}</ImpTotal><ImpTotConc>0.00</ImpTotConc><ImpNeto>${importe(s.neto)}</ImpNeto>` +
+    `<ImpTotal>${importe(s.total)}</ImpTotal><ImpTotConc>${importe(s.noGravado)}</ImpTotConc><ImpNeto>${importe(s.neto)}</ImpNeto>` +
     `<ImpOpEx>0.00</ImpOpEx><ImpTrib>0.00</ImpTrib><ImpIVA>${importe(s.iva)}</ImpIVA>` +
     `<MonId>PES</MonId><MonCotiz>1</MonCotiz><CondicionIVAReceptorId>${s.condicionIvaReceptorId}</CondicionIVAReceptorId>` +
     armarAsociados(s.asociados) +
-    (iva ? `<Iva>${iva}</Iva>` : "");
+    (iva ? `<Iva>${iva}</Iva>` : "") +
+    armarPeriodo(s.periodo);
 
   const resultado = await llamar(
     fetchArca,

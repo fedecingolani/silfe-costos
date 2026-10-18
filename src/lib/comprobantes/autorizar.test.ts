@@ -33,6 +33,7 @@ const datosBase = (): DatosAutorizacion => ({
     { id: "i2", cantidad: 1, precioUnitario: 100, descuentoPct: 0, alicuotaIva: 10.5, importe: 100, iva: 10.5 },
   ],
   asociados: [],
+  periodo: null,
   cliente: {
     razonSocial: "Frutícola S.A.",
     cuit: "20-11111111-2",
@@ -262,6 +263,7 @@ describe("autorizar: camino feliz", () => {
       docNro: "20111111112",
       condicionIvaReceptorId: 1,
       neto: 1100,
+      noGravado: 0,
       iva: 220.5,
       total: 1320.5,
       alicuotas: [
@@ -287,6 +289,7 @@ describe("autorizar: camino feliz", () => {
         provincia: "Río Negro",
       },
       neto: 1100,
+      noGravado: 0,
       iva: 220.5,
       total: 1320.5,
       items: [{ id: "i1", importe: 1000, iva: 210 }],
@@ -309,6 +312,19 @@ describe("autorizar: camino feliz", () => {
     const { deps, solicitudes } = escenario({ datos });
     await autorizar(ID, deps);
     expect(solicitudes[0]).toMatchObject({ tipoComprobante: 3, asociados: datos.asociados });
+  });
+
+  it("manda lo no gravado en ImpTotConc, fuera del neto y del IVA por alícuota, y lo guarda", async () => {
+    const datos = datosBase();
+    datos.items = [
+      ...datos.items,
+      { id: "i3", cantidad: 1, precioUnitario: 500, descuentoPct: 0, alicuotaIva: "no_gravado", importe: 500, iva: 0 },
+    ];
+    const { deps, solicitudes, estado } = escenario({ datos });
+    expect((await autorizar(ID, deps)).estado).toBe("autorizado");
+    expect(solicitudes[0]).toMatchObject({ neto: 1100, noGravado: 500, iva: 220.5, total: 1820.5 });
+    expect(solicitudes[0].alicuotas.map((a) => a.id)).toEqual([4, 5]);
+    expect(estado.recalculado).toMatchObject({ neto: 1100, noGravado: 500, iva: 220.5, total: 1820.5 });
   });
 
   it("un rechazado vuelve a intentarse desde borrador", async () => {
@@ -585,7 +601,7 @@ describe("autorizar: notas de crédito y débito", () => {
   it("pide el comprobante asociado antes de tocar ARCA", async () => {
     const { deps, eventos } = escenario({ datos: nota({ asociados: [] }) });
     expect(await autorizar(ID, deps)).toEqual({
-      error: "Una nota de crédito necesita el comprobante asociado (la factura que corrige).",
+      error: "Una nota de crédito necesita el comprobante asociado (la factura que corrige) o el período asociado.",
     });
     expect(eventos).toEqual(["cargar"]);
   });
@@ -657,6 +673,39 @@ describe("autorizar: notas de crédito y débito", () => {
     expect(eventos).toEqual(["cargar", "guardar", "bloqueo", "saldo", "liberar"]);
     expect(estado.bloqueoTomado).toBe(false);
     expect(estado.verificando).toBeUndefined();
+  });
+
+  it("autoriza una nota de débito asociada a un período: manda PeriodoAsoc y toma la letra del cliente", async () => {
+    const datos = nota({ asociados: [], periodo: { desde: "2026-10-01", hasta: "2026-10-15" } }, "nota_debito");
+    datos.cliente.condicionIva = "Consumidor Final";
+    const { deps, solicitudes, estado } = escenario({ datos });
+    expect((await autorizar(ID, deps)).estado).toBe("autorizado");
+    expect(estado.recalculado).toMatchObject({ letra: "B", tipoArca: 7 });
+    expect(solicitudes[0]).toMatchObject({
+      tipoComprobante: 7,
+      asociados: undefined,
+      periodo: { desde: "2026-10-01", hasta: "2026-10-15" },
+    });
+  });
+
+  it("no autoriza una nota con comprobante asociado y período a la vez", async () => {
+    const { deps, eventos } = escenario({
+      datos: nota({ periodo: { desde: "2026-10-01", hasta: "2026-10-15" } }, "nota_debito"),
+    });
+    expect(await autorizar(ID, deps)).toEqual({
+      error: "Una nota se asocia a comprobantes o a un período, no a los dos.",
+    });
+    expect(eventos).toEqual(["cargar"]);
+  });
+
+  it("no autoriza un período que ARCA rechazaría (hasta posterior a la nota)", async () => {
+    const { deps, eventos } = escenario({
+      datos: nota({ asociados: [], periodo: { desde: "2026-10-01", hasta: "2026-10-20" } }, "nota_debito"),
+    });
+    expect((await autorizar(ID, deps)).error).toBe(
+      "Período asociado: el hasta no puede ser posterior a la fecha de la nota.",
+    );
+    expect(eventos).toEqual(["cargar"]);
   });
 
   it("la nota de débito y la factura no releen el saldo", async () => {

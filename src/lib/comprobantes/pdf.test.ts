@@ -114,3 +114,29 @@ describe("generarPdfComprobante", () => {
     expect((await PDFDocument.load(bytes)).getPageCount()).toBe(1);
   });
 });
+
+describe("generarPdfComprobante: no gravado y período asociado", () => {
+  it("imprime la línea No gravado, \"No grav.\" en el renglón y el período asociado", async () => {
+    const { comprobante, items, emisor } = ejemploConItems(1);
+    const datos = armarDatosPdf({
+      comprobante: {
+        ...comprobante,
+        clase: "nota_debito",
+        tipo_arca: 2,
+        no_gravado: 150000,
+        total: comprobante.total + 150000,
+        periodo_asoc_desde: "2026-10-01",
+        periodo_asoc_hasta: "2026-10-15",
+      },
+      items: [...items, { ...items[0], gravado: false, alicuota_iva: null, importe: 150000, iva: 0 }],
+      emisor,
+    });
+    const doc = await PDFDocument.load(await generarPdfComprobante(datos));
+    const texto = doc.getPages().map(textoDePagina).join("\n");
+    expect(texto).toContain("No gravado:");
+    expect(texto).toContain("150.000,00");
+    expect(texto).toContain("No grav.");
+    expect(texto).toContain("Período asociado:");
+    expect(texto).toContain("01/10/2026 – 15/10/2026");
+  });
+});

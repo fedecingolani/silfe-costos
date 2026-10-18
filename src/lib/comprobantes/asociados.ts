@@ -8,14 +8,20 @@
  *   de armar el CbteAsoc para no mandar a ARCA un NaN o una fecha vacía, y
  *   para decir qué falta.
  *
+ * - Un período (PeriodoAsoc, desde/hasta) en lugar de comprobantes: por
+ *   ejemplo, la nota de débito de un cheque rechazado que se había tomado a
+ *   cuenta. Sin asociado del que heredar, la letra sale de la condición IVA
+ *   del cliente. ARCA admite informar comprobantes y período a la vez
+ *   (10197 pide uno u otro); la app usa una cosa o la otra, por simpleza.
+ *
  * Reglas (ARCA rechaza lo demás):
- * - una nota de crédito o débito lleva al menos un asociado, y la misma
- *   letra que sus asociados;
+ * - una nota de crédito o débito lleva al menos un asociado o un período,
+ *   y la misma letra que sus asociados;
  * - nota de crédito: sobre una factura o una nota de débito (la anula);
  * - nota de débito: sólo sobre una factura;
  * - nunca una nota de crédito sobre otra nota de crédito.
  */
-import type { AsociadoSolicitud } from "@/lib/arca/wsfe";
+import type { AsociadoSolicitud, PeriodoSolicitud } from "@/lib/arca/wsfe";
 import {
   NOMBRES_CLASE_COMPROBANTE,
   type ClaseComprobante,
@@ -105,23 +111,33 @@ export const TIPOS_ASOCIADO_MANUAL: Record<"nota_credito" | "nota_debito", TipoC
   nota_debito: [1, 6],
 };
 
+/** Período asociado de una nota (PeriodoAsoc). Fechas yyyy-mm-dd. */
+export type PeriodoAsociado = PeriodoSolicitud;
+
+export const MENSAJE_ASOCIADOS_Y_PERIODO = "Una nota se asocia a comprobantes o a un período, no a los dos.";
+
 /**
- * Valida los asociados de un comprobante por sus códigos de ARCA. Devuelve
- * la letra que tiene que llevar la nota (null en una factura) o el error.
+ * Valida los asociados de un comprobante por sus códigos de ARCA, o su
+ * período asociado. Devuelve la letra que tiene que llevar la nota (null en
+ * una factura o en una nota asociada a un período: va la del cliente) o el
+ * error.
  */
 export function validarAsociadosNota(
   clase: ClaseComprobante,
   tipos: readonly (number | string)[],
+  periodo: PeriodoAsociado | null = null,
 ): { letra: LetraComprobante | null } | { error: string } {
   if (clase === "factura") {
+    if (periodo) return { error: "Una factura no lleva período asociado." };
     return tipos.length === 0 ? { letra: null } : { error: "Una factura no lleva comprobante asociado." };
   }
+  if (periodo) return tipos.length === 0 ? { letra: null } : { error: MENSAJE_ASOCIADOS_Y_PERIODO };
   if (tipos.length === 0) {
     return {
       error:
         clase === "nota_credito"
-          ? "Una nota de crédito necesita el comprobante asociado (la factura que corrige)."
-          : "Una nota de débito necesita el comprobante asociado (la factura que ajusta).",
+          ? "Una nota de crédito necesita el comprobante asociado (la factura que corrige) o el período asociado."
+          : "Una nota de débito necesita el comprobante asociado (la factura que ajusta) o el período asociado.",
     };
   }
   const letras = new Set<LetraComprobante>();
@@ -139,6 +155,56 @@ export function validarAsociadosNota(
   }
   if (letras.size > 1) return { error: "Los comprobantes asociados tienen letras distintas: la nota lleva una sola letra." };
   return { letra: [...letras][0] };
+}
+
+/**
+ * Reglas de ARCA para PeriodoAsoc: fechas válidas, desde ≤ hasta (10207),
+ * del mismo mes (10209) y hasta no posterior a la fecha de la nota (10208).
+ */
+export function validarPeriodoAsociado(periodo: PeriodoAsociado, fechaNota: string | null): string[] {
+  if (!esFechaValida(periodo.desde) || !esFechaValida(periodo.hasta)) {
+    return ["Período asociado: completá el desde y el hasta."];
+  }
+  const errores: string[] = [];
+  if (periodo.desde > periodo.hasta) errores.push("Período asociado: el desde no puede ser posterior al hasta.");
+  else if (periodo.desde.slice(0, 7) !== periodo.hasta.slice(0, 7)) {
+    errores.push("Período asociado: el desde y el hasta tienen que ser del mismo mes.");
+  }
+  if (fechaNota && periodo.hasta > fechaNota) {
+    errores.push("Período asociado: el hasta no puede ser posterior a la fecha de la nota.");
+  }
+  return errores;
+}
+
+/** El período de las columnas de comprobante, o null si no tiene. */
+export function periodoDeFila(fila: {
+  periodo_asoc_desde?: string | null;
+  periodo_asoc_hasta?: string | null;
+}): PeriodoAsociado | null {
+  return fila.periodo_asoc_desde && fila.periodo_asoc_hasta
+    ? { desde: fila.periodo_asoc_desde, hasta: fila.periodo_asoc_hasta }
+    : null;
+}
+
+/** "01/10/2026 – 15/10/2026". */
+export function textoPeriodo(periodo: PeriodoAsociado): string {
+  const corta = (f: string) => f.slice(0, 10).split("-").reverse().join("/");
+  return `${corta(periodo.desde)} – ${corta(periodo.hasta)}`;
+}
+
+/**
+ * Lee el período cargado en la pantalla. Sin ningún dato no hay período;
+ * con datos, valida las reglas de ARCA.
+ */
+export function leerPeriodoAsociado(
+  enviado: unknown,
+  fechaNota: string | null,
+): { periodo: PeriodoAsociado | null } | { errores: string[] } {
+  const datos = typeof enviado === "object" && enviado !== null ? (enviado as Record<string, unknown>) : {};
+  const periodo = { desde: campo(datos.desde), hasta: campo(datos.hasta) };
+  if (!periodo.desde && !periodo.hasta) return { periodo: null };
+  const errores = validarPeriodoAsociado(periodo, fechaNota);
+  return errores.length > 0 ? { errores } : { periodo };
 }
 
 // ----- Asociado de la base ---------------------------------------------------
