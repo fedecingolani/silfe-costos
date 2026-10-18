@@ -17,7 +17,7 @@
 begin;
 create extension if not exists pgtap with schema extensions;
 
-select plan(148);
+select plan(159);
 
 -- ---------------------------------------------------------------------
 -- Estructura
@@ -820,6 +820,107 @@ select is(
     'cb100000-0000-0000-0000-000000000003', 'cb100000-0000-0000-0000-000000000007')),
   0::bigint,
   'Los comprobantes de homologación no están en la cuenta corriente'
+);
+
+-- ---------------------------------------------------------------------
+-- guardar_borrador_recibo: guardado atómico de un borrador (C4)
+-- ---------------------------------------------------------------------
+
+reset role;
+insert into cliente (id, razon_social, condicion_iva) values
+  ('cb000000-0000-0000-0000-000000000004', 'Cliente del editor de cobranzas', 'Responsable Inscripto');
+insert into comprobante (id, punto_venta, ambiente, clase, letra, tipo_arca, cliente_id, condicion_pago, total, fecha)
+values
+  ('cb100000-0000-0000-0000-000000000041', 9199, null, 'factura', 'A', 1,
+   'cb000000-0000-0000-0000-000000000004', 'cuenta_corriente', 50, '2026-10-01');
+update comprobante set estado = 'autorizado', numero = 41 where id = 'cb100000-0000-0000-0000-000000000041';
+set local role authenticated;
+
+select ok(not has_function_privilege('anon', 'public.guardar_borrador_recibo(uuid, jsonb, jsonb, jsonb)', 'execute'),
+  'anon no ejecuta guardar_borrador_recibo');
+select ok(has_function_privilege('authenticated', 'public.guardar_borrador_recibo(uuid, jsonb, jsonb, jsonb)', 'execute'),
+  'authenticated ejecuta guardar_borrador_recibo');
+
+create temporary table t_borrador (id uuid) on commit drop;
+insert into t_borrador
+select guardar_borrador_recibo(
+  null,
+  '{"cliente_id": "cb000000-0000-0000-0000-000000000004", "fecha": "2026-10-18", "observaciones": " Primera "}',
+  '[{"tipo": "cheque", "importe": 40, "cheque": {"banco": "Galicia", "numero": "123", "fecha_pago": "2026-11-01", "librador_cuit": "20-12345678-9"}},
+    {"tipo": "retencion", "importe": 10, "retencion_tipo": "iibb", "retencion_jurisdiccion": "Río Negro", "certificado": "C-1", "fecha_retencion": "2026-10-18"}]',
+  '[{"comprobante_id": "cb100000-0000-0000-0000-000000000041", "importe": 30}, {"comprobante_id": "cb100000-0000-0000-0000-000000000041", "importe": 0}]'
+);
+
+select results_eq(
+  $$select r.estado, r.total, r.observaciones, (select count(*) from recibo_medio m where m.recibo_id = r.id),
+           (select count(*) from cheque ch where ch.recibo_id = r.id and ch.estado = 'en_cartera'),
+           (select sum(importe) from imputacion i where i.recibo_id = r.id)
+    from recibo r where r.id = (select id from t_borrador)$$,
+  $$values ('borrador', 50.00::numeric, 'Primera', 2::bigint, 1::bigint, 30.00::numeric)$$,
+  'Guarda el borrador con sus medios, su cheque y su imputación en una transacción'
+);
+select is(
+  (select librador_cuit from cheque where recibo_id = (select id from t_borrador)),
+  '20123456789',
+  'La CUIT del librador se guarda sólo con dígitos'
+);
+
+select lives_ok(
+  $$select guardar_borrador_recibo(
+      (select id from t_borrador),
+      '{"cliente_id": "cb000000-0000-0000-0000-000000000004", "fecha": "2026-10-19"}',
+      '[{"tipo": "efectivo", "importe": 20}]',
+      '[]')$$,
+  'Un borrador se reemplaza entero'
+);
+select results_eq(
+  $$select r.fecha, r.total, (select count(*) from recibo_medio m where m.recibo_id = r.id),
+           (select count(*) from cheque ch where ch.recibo_id = r.id),
+           (select count(*) from imputacion i where i.recibo_id = r.id)
+    from recibo r where r.id = (select id from t_borrador)$$,
+  $$values ('2026-10-19'::date, 20.00::numeric, 1::bigint, 0::bigint, 0::bigint)$$,
+  'Al reemplazarlo se van los medios, los cheques y las imputaciones anteriores'
+);
+
+select throws_ok(
+  $$select guardar_borrador_recibo(
+      (select id from t_borrador),
+      '{"cliente_id": "cb000000-0000-0000-0000-000000000004", "fecha": "2026-10-19"}',
+      '[{"tipo": "efectivo", "importe": 20}]',
+      '[{"comprobante_id": "cb100000-0000-0000-0000-000000000041", "importe": 25}]')$$,
+  'CB005', null, 'Guardar no imputa más que el total del recibo'
+);
+select throws_ok(
+  $$select guardar_borrador_recibo(null, '{"cliente_id": "cb000000-0000-0000-0000-000000000004", "fecha": "2026-10-19"}',
+      '{}', '[]')$$,
+  'CB012', null, 'Los medios tienen que ser una lista'
+);
+
+-- Un borrador con cheque se borra con su cheque y su historial.
+select guardar_borrador_recibo(
+  (select id from t_borrador),
+  '{"cliente_id": "cb000000-0000-0000-0000-000000000004", "fecha": "2026-10-19"}',
+  '[{"tipo": "echeq", "importe": 20, "cheque": {"banco": "Macro", "numero": "E-9", "fecha_pago": "2026-11-01"}}]',
+  '[]'
+);
+create temporary table t_cheque_borrador on commit drop as
+  select id from cheque where recibo_id = (select id from t_borrador);
+select lives_ok(
+  $$delete from recibo where id = (select id from t_borrador)$$,
+  'Un borrador con cheques se borra'
+);
+select is(
+  (select count(*) from cheque where id in (select id from t_cheque_borrador))
+    + (select count(*) from cheque_estado where cheque_id in (select id from t_cheque_borrador)),
+  0::bigint,
+  'Sus cheques y su historial se van con el borrador'
+);
+
+select throws_ok(
+  $$select guardar_borrador_recibo('cb200000-0000-0000-0000-000000000003',
+      '{"cliente_id": "cb000000-0000-0000-0000-000000000003", "fecha": "2026-10-19"}',
+      '[{"tipo": "efectivo", "importe": 20}]', '[]')$$,
+  'CB001', null, 'Un recibo emitido no se guarda como borrador'
 );
 
 reset role;

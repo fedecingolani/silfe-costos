@@ -33,6 +33,7 @@ import {
 import type { ClienteEncontrado } from "../acciones";
 import { cargarContextoEditor, cargarPrecios } from "../datos";
 import { EditorComprobante } from "../EditorComprobante";
+import { reciboDeContado } from "../../cobranzas/datos";
 import { AccionesDetalle } from "./AccionesDetalle";
 
 export const dynamic = "force-dynamic";
@@ -253,6 +254,18 @@ export default async function ComprobantePage({ params }: { params: Promise<{ id
   };
   const saldo = c.estado === "autorizado" && c.clase !== "nota_credito" ? saldoDe([esteComoAsociado], notas) : null;
 
+  // Pago de contado: débito de cuenta corriente (autorizado, producción o no electrónico) de contado.
+  let pagoContado: { recibo: { id: string; numero_texto: string | null } | null } | null = null;
+  if (c.estado === "autorizado" && c.condicion_pago === "contado") {
+    const [{ data: debito, error: errorDebito }, recibos] = await Promise.all([
+      supabase.from("v_comprobante_saldo").select("comprobante_id").eq("comprobante_id", c.id).maybeSingle(),
+      reciboDeContado(supabase, c.id),
+    ]);
+    if (errorDebito) return <p className="text-sm text-red-700">{errorDebito.message}</p>;
+    if (typeof recibos === "string") return <p className="text-sm text-red-700">{recibos}</p>;
+    if (debito) pagoContado = { recibo: recibos.find((r) => r.estado === "emitido") ?? null };
+  }
+
   return (
     <>
       {migas}
@@ -283,6 +296,31 @@ export default async function ComprobantePage({ params }: { params: Promise<{ id
           notas={notasPermitidas(c)}
         />
       </div>
+
+      {pagoContado && (
+        <div
+          role="status"
+          className={`mb-4 flex flex-wrap items-center justify-between gap-2 rounded-lg border px-3 py-2 text-sm ${
+            pagoContado.recibo ? "border-marca-200 bg-marca-50 text-marca-800" : "border-amber-200 bg-amber-50 text-amber-800"
+          }`}
+        >
+          {pagoContado.recibo ? (
+            <span>
+              Pagado – Recibo{" "}
+              <Link href={`/cobranzas/${pagoContado.recibo.id}`} className="font-medium underline">
+                {pagoContado.recibo.numero_texto}
+              </Link>
+            </span>
+          ) : (
+            <>
+              <span>Contado – pago pendiente</span>
+              <Link href={`/cobranzas/nueva?contado=${c.id}`} className="boton-primario">
+                Registrar pago
+              </Link>
+            </>
+          )}
+        </div>
+      )}
 
       {observaciones.length > 0 && (
         <div className="mb-4">
