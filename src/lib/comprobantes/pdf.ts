@@ -79,7 +79,7 @@ const COLUMNAS: Columna[] = [
 ];
 
 /** Arma el texto que la fuente estándar (WinAnsi) puede dibujar: lo que no soporta se cambia por "?". */
-function crearSaneador(fuente: PDFFont) {
+export function crearSaneador(fuente: PDFFont) {
   const soportados = new Set(fuente.getCharacterSet());
   return (texto: string) =>
     Array.from(texto.replace(/[\t\r\n]+/g, " "))
@@ -88,7 +88,7 @@ function crearSaneador(fuente: PDFFont) {
 }
 
 /** Corta un texto en líneas que entran en el ancho: por palabras y, si una no entra, por caracteres. */
-function partirEnLineas(texto: string, fuente: PDFFont, tamano: number, ancho: number): string[] {
+export function partirEnLineas(texto: string, fuente: PDFFont, tamano: number, ancho: number): string[] {
   const lineas: string[] = [];
   let actual = "";
   const entra = (t: string) => fuente.widthOfTextAtSize(t, tamano) <= ancho;
@@ -114,7 +114,7 @@ function partirEnLineas(texto: string, fuente: PDFFont, tamano: number, ancho: n
 }
 
 /** Recorta a la cantidad de líneas dada, marcando con "…" que sigue. */
-function recortar(lineas: string[], maximo: number): string[] {
+export function recortar(lineas: string[], maximo: number): string[] {
   if (lineas.length <= maximo) return lineas;
   const resto = lineas.slice(0, maximo);
   resto[maximo - 1] = `${resto[maximo - 1].replace(/.$/, "")}…`;

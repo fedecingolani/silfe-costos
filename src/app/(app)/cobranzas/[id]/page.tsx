@@ -26,6 +26,7 @@ import {
   type MedioLeido,
 } from "../datos";
 import { EditorRecibo, type ContadoAPagar } from "../EditorRecibo";
+import { AnularRecibo } from "./AnularRecibo";
 
 export const dynamic = "force-dynamic";
 
@@ -164,14 +165,18 @@ export default async function ReciboPage({
       )}
 
       <div className="mb-4 flex flex-wrap items-center gap-2">
-        {/* T8: PDF del recibo y anulación. */}
-        <button type="button" disabled title="Próximamente" className="boton-secundario opacity-50">
+        <a href={`/cobranzas/${recibo.id}/pdf`} target="_blank" rel="noopener" className="boton-secundario">
           PDF
-        </button>
+        </a>
         {recibo.estado === "emitido" && (
-          <button type="button" disabled title="Próximamente" className="boton-secundario opacity-50">
-            Anular
-          </button>
+          <AnularRecibo
+            id={recibo.id}
+            numero={recibo.numero_texto ?? ""}
+            contado={Boolean(recibo.comprobante_contado_id)}
+            cheques={medios.flatMap((m) =>
+              m.cheque ? [{ banco: m.cheque.banco, numero: m.cheque.numero, estado: m.cheque.estado }] : [],
+            )}
+          />
         )}
       </div>
 

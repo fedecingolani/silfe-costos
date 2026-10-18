@@ -17,7 +17,7 @@
 begin;
 create extension if not exists pgtap with schema extensions;
 
-select plan(220);
+select plan(224);
 
 -- ---------------------------------------------------------------------
 -- Estructura
@@ -1448,6 +1448,58 @@ select is(
      and r.pendientes <> (select count(*) from v_comprobante_saldo s where s.cliente_id = r.cliente_id and s.saldo > 0)),
   0::bigint,
   'La cantidad de pendientes coincide con los débitos con saldo de cada cliente'
+);
+
+reset role;
+
+-- ---------------------------------------------------------------------
+-- Anular el pago de una factura de contado: la factura vuelve a quedar
+-- con el pago pendiente y se puede volver a pagar (C11)
+-- ---------------------------------------------------------------------
+
+insert into cliente (id, razon_social, condicion_iva) values
+  ('cb000000-0000-0000-0000-000000000011', 'Cliente de contado', 'Responsable Inscripto');
+insert into comprobante (id, punto_venta, ambiente, clase, letra, tipo_arca, cliente_id, condicion_pago, total, fecha)
+values ('cb100000-0000-0000-0000-000000000111', 9199, null, 'factura', 'A', 1,
+        'cb000000-0000-0000-0000-000000000011', 'contado', 45, '2026-10-10');
+update comprobante set estado = 'autorizado', numero = 111 where id = 'cb100000-0000-0000-0000-000000000111';
+insert into recibo (id, punto_venta, cliente_id, fecha, total, comprobante_contado_id) values
+  ('cb200000-0000-0000-0000-000000000111', 9, 'cb000000-0000-0000-0000-000000000011', '2026-10-10', 45,
+   'cb100000-0000-0000-0000-000000000111');
+insert into recibo_medio (recibo_id, tipo, importe) values ('cb200000-0000-0000-0000-000000000111', 'efectivo', 45);
+insert into imputacion (recibo_id, comprobante_id, importe)
+values ('cb200000-0000-0000-0000-000000000111', 'cb100000-0000-0000-0000-000000000111', 45);
+
+set local role authenticated;
+select emitir_recibo('cb200000-0000-0000-0000-000000000111');
+select is(
+  (select estado_pago from v_comprobante_saldo where comprobante_id = 'cb100000-0000-0000-0000-000000000111'),
+  'cancelado',
+  'El pago de contado emitido cancela la factura'
+);
+select anular_recibo('cb200000-0000-0000-0000-000000000111', 'Se cobró dos veces');
+select results_eq(
+  $$select saldo, estado_pago from v_comprobante_saldo where comprobante_id = 'cb100000-0000-0000-0000-000000000111'$$,
+  $$values (45.00::numeric, 'pendiente'::text)$$,
+  'Anular el pago de contado deja la factura otra vez con el pago pendiente'
+);
+select results_eq(
+  $$select estado, motivo_anulacion from recibo where id = 'cb200000-0000-0000-0000-000000000111'$$,
+  $$values ('anulado'::text, 'Se cobró dos veces'::text)$$,
+  'El recibo anulado queda visible con su motivo'
+);
+
+reset role;
+insert into recibo (id, punto_venta, cliente_id, fecha, total, comprobante_contado_id) values
+  ('cb200000-0000-0000-0000-000000000112', 9, 'cb000000-0000-0000-0000-000000000011', '2026-10-11', 45,
+   'cb100000-0000-0000-0000-000000000111');
+insert into recibo_medio (recibo_id, tipo, importe) values ('cb200000-0000-0000-0000-000000000112', 'efectivo', 45);
+insert into imputacion (recibo_id, comprobante_id, importe)
+values ('cb200000-0000-0000-0000-000000000112', 'cb100000-0000-0000-0000-000000000111', 45);
+set local role authenticated;
+select lives_ok(
+  $$select emitir_recibo('cb200000-0000-0000-0000-000000000112')$$,
+  'Después de anular el pago, la factura de contado se puede volver a pagar'
 );
 
 reset role;

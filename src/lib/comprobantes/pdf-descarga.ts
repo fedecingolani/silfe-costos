@@ -50,7 +50,7 @@ function respuestaError(mensaje: string, status: number): ResultadoPdf {
  * Logo de public/, el mismo que usan las listas de precios. Nunca falla: si
  * no llega a tiempo o no se puede leer, el comprobante sale sin logo.
  */
-async function cargarLogo(url: string, fetchLogo: Fetch, ms: number): Promise<Uint8Array | null> {
+export async function cargarLogo(url: string, fetchLogo: Fetch, ms: number): Promise<Uint8Array | null> {
   try {
     const respuesta = await fetchLogo(new URL("/logo-silfe.png", url), { signal: AbortSignal.timeout(ms) });
     if (!respuesta.ok) {

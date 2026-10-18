@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { armarRecibo, leerReciboEnviado } from "@/lib/cobranzas/guardado";
 import { mensajeErrorCobranza } from "@/lib/cobranzas/errores";
+import { mensajeErrorAnulacion, validarMotivoAnulacion, type ChequeDelRecibo } from "@/lib/cobranzas/anulacion";
 import { resumenEmision } from "@/lib/cobranzas/listado";
 import { pesos } from "@/lib/formato";
 import { cargarComprobanteContado, cargarDebitos, type CuentaCliente } from "./datos";
@@ -117,4 +118,46 @@ export async function borrarRecibo(id: string): Promise<ResultadoRecibo> {
   if ((data ?? []).length !== 1) return { error: "Sólo se pueden borrar recibos en borrador." };
   revalidatePath(RUTA);
   redirect(RUTA);
+}
+
+/**
+ * Anula un recibo emitido con un motivo (anular_recibo): se deshacen sus
+ * imputaciones y sus cheques salen de la cartera. Si algún cheque ya no está
+ * en cartera (CB010), el mensaje dice cuáles y en qué estado.
+ */
+export async function anularRecibo(id: string, motivo: string): Promise<ResultadoRecibo> {
+  if (!UUID.test(id)) return { error: "Recibo inválido." };
+  const errorMotivo = validarMotivoAnulacion(motivo);
+  if (errorMotivo) return { error: errorMotivo };
+  const supabase = await createClient();
+
+  // Los comprobantes que vuelven a quedar pendientes, para refrescar sus pantallas.
+  const [{ data: imputados }, { data: recibo }] = await Promise.all([
+    supabase.from("imputacion").select("comprobante_id").eq("recibo_id", id),
+    supabase.from("recibo").select("cliente_id, comprobante_contado_id").eq("id", id).maybeSingle(),
+  ]);
+
+  const { error } = await supabase.rpc("anular_recibo", { p_id: id, p_motivo: motivo.trim() });
+  if (error) {
+    let cheques: ChequeDelRecibo[] = [];
+    if (error.code === "CB010") {
+      const { data } = await supabase.from("cheque").select("banco, numero, estado").eq("recibo_id", id).order("numero");
+      cheques = (data ?? []) as ChequeDelRecibo[];
+    }
+    return { error: mensajeErrorAnulacion(error, cheques) };
+  }
+
+  revalidatePath(RUTA);
+  revalidatePath(`${RUTA}/${id}`);
+  revalidatePath("/cheques");
+  revalidatePath("/cuentas-corrientes");
+  revalidatePath("/comprobantes");
+  for (const comprobanteId of new Set([
+    ...(imputados ?? []).map((i) => i.comprobante_id as string),
+    ...(recibo?.comprobante_contado_id ? [recibo.comprobante_contado_id as string] : []),
+  ])) {
+    revalidatePath(`/comprobantes/${comprobanteId}`);
+  }
+  if (recibo?.cliente_id) revalidatePath(`/clientes/${recibo.cliente_id}`);
+  return { ok: "Recibo anulado.", id };
 }
