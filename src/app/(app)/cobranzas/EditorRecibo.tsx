@@ -10,6 +10,7 @@ import { nombreComprobante } from "@/lib/comprobantes/listado";
 import { aCentavos, sumarPesos } from "@/lib/cobranzas/dinero";
 import { completarEnOrden, pagoContado, saldoAFavor, validarImputaciones } from "@/lib/cobranzas/imputacion";
 import { totalRecibo, validarRecibo, type MedioBorrador } from "@/lib/cobranzas/recibo";
+import { erroresImporteImputado, leerImputacionesEditor } from "@/lib/cobranzas/editor";
 import type { ReciboEnviado } from "@/lib/cobranzas/guardado";
 import {
   NOMBRES_MEDIO_PAGO,
@@ -170,16 +171,19 @@ export function EditorRecibo({
   contado,
   cuentaInicial,
   hoy,
+  aviso = null,
 }: {
   recibo: ReciboEditable | null;
   contado: ContadoAPagar | null;
   cuentaInicial: CuentaCliente | null;
   hoy: string;
+  /** Mensaje que llega por la URL después de crear el borrador (`?aviso=guardado`). */
+  aviso?: string | null;
 }) {
   const router = useRouter();
   const [pendiente, iniciar] = useTransition();
   const [id, setId] = useState<string | null>(recibo?.id ?? null);
-  const [mensaje, setMensaje] = useState<{ error?: string; ok?: string } | null>(null);
+  const [mensaje, setMensaje] = useState<{ error?: string; ok?: string } | null>(aviso ? { ok: aviso } : null);
   const [resumen, setResumen] = useState<string | null>(null);
   const [intentado, setIntentado] = useState(false);
   const confirmacion = useRef<HTMLDialogElement>(null);
@@ -194,6 +198,9 @@ export function EditorRecibo({
   );
   const [cuenta, setCuenta] = useState<CuentaCliente | null>(cuentaInicial);
   const [cargandoCuenta, setCargandoCuenta] = useState(false);
+  const [errorCuenta, setErrorCuenta] = useState<string | null>(null);
+  // Cada elección de cliente tiene su número: sólo la respuesta del último pedido cambia la pantalla.
+  const pedidoCuenta = useRef(0);
   const [aImputar, setAImputar] = useState<Record<string, string>>(() =>
     Object.fromEntries((recibo?.imputaciones ?? []).map((i) => [i.comprobanteId, String(i.importe)])),
   );
@@ -201,17 +208,11 @@ export function EditorRecibo({
   const medios = useMemo(() => filas.map(medioDeFila), [filas]);
   const total = totalRecibo(medios.map((m) => ({ importe: Number.isFinite(m.importe) ? m.importe : 0 })));
   const debitos = useMemo(() => cuenta?.debitos ?? [], [cuenta]);
-  const elegidas = useMemo(
-    () =>
-      contado
-        ? []
-        : Object.entries(aImputar)
-            .map(([comprobanteId, valor]) => ({ comprobanteId, importe: aDecimal(valor) ?? 0 }))
-            .filter((i) => i.importe !== 0),
-    [aImputar, contado],
-  );
-  const imputado = sumarPesos(elegidas.map((e) => Math.max(e.importe, 0)));
-  const aFavor = saldoAFavor(total, elegidas);
+  const elegidas = useMemo(() => (contado ? [] : leerImputacionesEditor(aImputar)), [aImputar, contado]);
+  // Los importes ilegibles bloquean el guardado (ver errores); los totales en vivo usan sólo los legibles.
+  const legibles = elegidas.filter((e) => Number.isFinite(e.importe));
+  const imputado = sumarPesos(legibles.map((e) => Math.max(e.importe, 0)));
+  const aFavor = saldoAFavor(total, legibles);
 
   const errores = useMemo(() => {
     const lista = validarRecibo({ clienteId: cliente?.id ?? null, fecha, medios });
@@ -219,7 +220,9 @@ export function EditorRecibo({
       const pago = pagoContado({ id: contado.id, total: contado.total, condicionPago: "contado" }, medios);
       if ("error" in pago) lista.push(pago.error);
     } else {
-      lista.push(...validarImputaciones(debitos, elegidas, total));
+      const nombres = new Map(debitos.map((d) => [d.comprobanteId, `${nombreComprobante(d.clase, null)} ${d.numeroTexto}`]));
+      lista.push(...erroresImporteImputado(elegidas, nombres));
+      lista.push(...validarImputaciones(debitos, elegidas.filter((e) => Number.isFinite(e.importe)), total));
     }
     return lista;
   }, [cliente, fecha, medios, contado, debitos, elegidas, total]);
@@ -228,17 +231,29 @@ export function EditorRecibo({
     setFilas((actuales) => actuales.map((f) => (f.clave === clave ? { ...f, ...cambios } : f)));
   }
 
-  function elegirCliente(nuevo: ClienteEncontrado | null) {
+  async function elegirCliente(nuevo: ClienteEncontrado | null) {
+    const pedido = ++pedidoCuenta.current;
     setCliente(nuevo);
     setAImputar({});
     setCuenta(null);
-    if (!nuevo) return;
-    setCargandoCuenta(true);
-    cuentaDelCliente(nuevo.id).then((r) => {
+    setErrorCuenta(null);
+    if (!nuevo) {
       setCargandoCuenta(false);
-      if ("error" in r) setMensaje({ error: r.error });
+      return;
+    }
+    setCargandoCuenta(true);
+    try {
+      const r = await cuentaDelCliente(nuevo.id);
+      if (pedido !== pedidoCuenta.current) return;
+      if ("error" in r) setErrorCuenta(r.error);
       else setCuenta(r);
-    });
+    } catch {
+      if (pedido === pedidoCuenta.current) {
+        setErrorCuenta("No se pudieron cargar los comprobantes pendientes del cliente. Volvé a elegirlo.");
+      }
+    } finally {
+      if (pedido === pedidoCuenta.current) setCargandoCuenta(false);
+    }
   }
 
   function completar() {
@@ -279,9 +294,13 @@ export function EditorRecibo({
         confirmacion.current?.showModal();
         return;
       }
+      // Un borrador nuevo pasa a su página: el aviso viaja en la URL porque el editor se vuelve a montar.
+      if (esNuevo) {
+        router.replace(`/cobranzas/${resultado.id}?aviso=guardado`);
+        return;
+      }
       setMensaje({ ok: resultado.ok });
-      if (esNuevo) router.replace(`/cobranzas/${resultado.id}`);
-      else router.refresh();
+      router.refresh();
     });
   }
 
@@ -292,7 +311,7 @@ export function EditorRecibo({
 
   function cerrarConfirmacion() {
     confirmacion.current?.close();
-    if (id && !recibo) router.replace(`/cobranzas/${id}`);
+    if (id && !recibo) router.replace(`/cobranzas/${id}?aviso=guardado`);
     else router.refresh();
   }
 
@@ -302,12 +321,11 @@ export function EditorRecibo({
     iniciar(async () => {
       const resultado = await emitirRecibo(id);
       if (resultado.error) {
+        // Se queda en la pantalla (con el id ya guardado) para que el error no se pierda al navegar.
         setMensaje({ error: resultado.error });
-        if (!recibo) router.replace(`/cobranzas/${id}`);
         return;
       }
-      if (!recibo) router.replace(`/cobranzas/${id}`);
-      else router.refresh();
+      router.replace(`/cobranzas/${id}?aviso=emitido`);
     });
   }
 
@@ -563,7 +581,14 @@ export function EditorRecibo({
               <tbody>
                 {!cliente && <Vacio mensaje="Elegí el cliente para ver sus comprobantes pendientes." colSpan={5} />}
                 {cliente && cargandoCuenta && <Vacio mensaje="Cargando comprobantes pendientes…" colSpan={5} />}
-                {cliente && !cargandoCuenta && debitos.length === 0 && (
+                {cliente && !cargandoCuenta && errorCuenta && (
+                  <tr>
+                    <td colSpan={5} role="alert" className="px-4 py-3 text-sm text-red-700">
+                      {errorCuenta}
+                    </td>
+                  </tr>
+                )}
+                {cliente && !cargandoCuenta && !errorCuenta && debitos.length === 0 && (
                   <Vacio mensaje="El cliente no tiene comprobantes pendientes: todo queda a favor." colSpan={5} />
                 )}
                 {debitos.map((d) => (

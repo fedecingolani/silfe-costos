@@ -17,7 +17,7 @@
 begin;
 create extension if not exists pgtap with schema extensions;
 
-select plan(209);
+select plan(212);
 
 -- ---------------------------------------------------------------------
 -- Estructura
@@ -1086,6 +1086,58 @@ select is(
 );
 
 reset role;
+
+-- C9: si la aplicación del saldo a favor falla a mitad de camino, la
+-- autorización igual se guarda y no queda ninguna imputación parcial (el
+-- bloque con exception de fn_comprobante_aplicar_creditos deshace su
+-- subtransacción entera). La falla se fuerza con un trigger de prueba que
+-- rechaza la segunda imputación automática a la factura (se deshace con el
+-- resto del test).
+insert into cliente (id, razon_social, condicion_iva) values
+  ('cb000000-0000-0000-0000-000000000009', 'Cliente con falla al aplicar', 'Responsable Inscripto');
+insert into recibo (id, punto_venta, cliente_id, fecha, total) values
+  ('cb200000-0000-0000-0000-000000000075', 9, 'cb000000-0000-0000-0000-000000000009', '2026-10-01', 40),
+  ('cb200000-0000-0000-0000-000000000076', 9, 'cb000000-0000-0000-0000-000000000009', '2026-10-02', 40);
+insert into recibo_medio (recibo_id, tipo, importe) values
+  ('cb200000-0000-0000-0000-000000000075', 'efectivo', 40),
+  ('cb200000-0000-0000-0000-000000000076', 'efectivo', 40);
+select emitir_recibo('cb200000-0000-0000-0000-000000000075');
+select emitir_recibo('cb200000-0000-0000-0000-000000000076');
+insert into comprobante (id, punto_venta, ambiente, clase, letra, tipo_arca, cliente_id, condicion_pago, total, fecha)
+values ('cb100000-0000-0000-0000-000000000075', 9199, null, 'factura', 'A', 1,
+        'cb000000-0000-0000-0000-000000000009', 'cuenta_corriente', 70, '2026-10-03');
+
+create function public.test_fallar_segunda_imputacion() returns trigger language plpgsql as $$
+begin
+  if exists (select 1 from public.imputacion i where i.comprobante_id = new.comprobante_id) then
+    raise exception 'Falla forzada por el test';
+  end if;
+  return new;
+end;
+$$;
+create trigger test_fallar_segunda_imputacion before insert on imputacion
+  for each row when (new.comprobante_id = 'cb100000-0000-0000-0000-000000000075')
+  execute function public.test_fallar_segunda_imputacion();
+
+update comprobante set estado = 'autorizado', numero = 75 where id = 'cb100000-0000-0000-0000-000000000075';
+select is(
+  (select estado from comprobante where id = 'cb100000-0000-0000-0000-000000000075'),
+  'autorizado',
+  'Si falla la aplicación del saldo a favor, la autorización igual queda guardada'
+);
+select is(
+  (select count(*) from imputacion where comprobante_id = 'cb100000-0000-0000-0000-000000000075'),
+  0::bigint,
+  'Una falla a mitad de la aplicación no deja imputaciones parciales'
+);
+select results_eq(
+  $$select saldo, saldo_a_favor from v_cliente_saldo where cliente_id = 'cb000000-0000-0000-0000-000000000009'$$,
+  $$values (-10.00::numeric, 80.00::numeric)$$,
+  'El saldo a favor queda entero y disponible después de la falla'
+);
+
+drop trigger test_fallar_segunda_imputacion on imputacion;
+drop function public.test_fallar_segunda_imputacion();
 
 -- ---------------------------------------------------------------------
 -- Contador de recibos protegido: authenticated no lo escribe; sólo

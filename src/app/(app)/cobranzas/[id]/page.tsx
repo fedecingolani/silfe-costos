@@ -9,6 +9,7 @@ import { nombreComprobante, numeroVisible } from "@/lib/comprobantes/listado";
 import { sumarPesos } from "@/lib/cobranzas/dinero";
 import { NOMBRES_ESTADO_RECIBO, TONO_ESTADO_RECIBO } from "@/lib/cobranzas/listado";
 import { TONO_ESTADO_CHEQUE } from "@/lib/cobranzas/cartera";
+import { avisoDeParametro } from "@/lib/cobranzas/editor";
 import {
   NOMBRES_ESTADO_CHEQUE,
   NOMBRES_MEDIO_PAGO,
@@ -71,8 +72,15 @@ function DetalleMedio({ medio }: { medio: MedioLeido }) {
   return <span>—</span>;
 }
 
-export default async function ReciboPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function ReciboPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const { id } = await params;
+  const aviso = avisoDeParametro((await searchParams).aviso);
   if (!UUID.test(id)) notFound();
   const supabase = await createClient();
 
@@ -125,6 +133,7 @@ export default async function ReciboPage({ params }: { params: Promise<{ id: str
           contado={contado}
           cuentaInicial={cuenta}
           hoy={hoyArgentina()}
+          aviso={aviso}
         />
       </>
     );
@@ -147,6 +156,12 @@ export default async function ReciboPage({ params }: { params: Promise<{ id: str
         }
         acciones={estado}
       />
+
+      {aviso && (
+        <div role="status" className="mb-4 rounded-lg border border-marca-200 bg-marca-50 px-3 py-2 text-sm text-marca-800">
+          {aviso}
+        </div>
+      )}
 
       <div className="mb-4 flex flex-wrap items-center gap-2">
         {/* T8: PDF del recibo y anulación. */}
