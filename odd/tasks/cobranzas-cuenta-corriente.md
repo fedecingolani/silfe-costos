@@ -189,8 +189,8 @@ corriente** de cada cliente y administrar la **cartera de cheques** recibidos.
 | T4 | Cobranza de cuenta corriente y pago de contado: pantallas y acciones, emisión con número | delegada (writer) | [x] |
 | T5 | Saldo a favor automático al autorizar, imputación de NC y estado de pago en comprobantes | delegada (writer) | [x] |
 | T6 | Cartera de cheques con estados, y rechazo con ND obligatoria | delegada (writer) | [x] |
-| T7 | Cuenta corriente: ficha del cliente y listado general | delegada (writer) | [ ] |
-| T8 | PDF del recibo y anulación | delegada (writer) | [ ] |
+| T7 | Cuenta corriente: ficha del cliente y listado general | delegada (writer) | [x] |
+| T8 | PDF del recibo y anulación | delegada (writer) | [x] |
 | T9 | Recorrido completo en local (y con ARCA de homologación cuando vuelva) | orquestador | [ ] |
 
 ## Progreso
@@ -347,9 +347,28 @@ corriente** de cada cliente y administrar la **cartera de cheques** recibidos.
   pgTAP: update/insert/delete directos fallan con 42501; emitir como authenticated sigue numerando.
 - **Letra** (`cheques.ts`): facturas imputadas sin letra daban un mensaje mal armado; ahora un error legible (test).
 
-### Revisión de T4+T5
+### Revisión de T4+T5 (18/10/2026)
 
-- En curso (la registra el orquestador).
+- Resultado: **aprobada**, con 3 advertencias y 1 sugerencia, corregidas en la unidad A de T7
+  (`d46aec9` fix(cobranzas): mensajes de error que no se pierden, carga de cuenta sin carreras e importes inválidos
+  visibles).
+- **Mensajes que se perdían** (`EditorRecibo.tsx`): si fallaba la emisión de un recibo creado en `/cobranzas/nueva`, el
+  editor navegaba a `/cobranzas/[id]` y se volvía a montar. Ahora un error deja la pantalla quieta (con el id ya en el
+  estado, los siguientes guardados van a ese borrador) y sólo se navega con éxito; el aviso viaja en la URL
+  (`?aviso=guardado|emitido|anulado`, lista cerrada en `avisoDeParametro`, nunca texto arbitrario).
+- **Carga de la cuenta del cliente**: `elegirCliente` con try/catch/finally y un número de pedido (`useRef`): sólo la
+  respuesta del último cliente elegido cambia la pantalla; un rechazo muestra un error legible en la tabla.
+- **Importes ilegibles**: `leerImputacionesEditor` (`src/lib/cobranzas/editor.ts`, Vitest) los deja como NaN y la
+  validación bloquea con "El importe a imputar de {comprobante} no es un número válido." (antes se tomaban como 0 y el
+  dinero pasaba a "a favor" sin aviso).
+- **Sugerencia (pgTAP)**: se fuerza una falla a mitad de `fn_comprobante_aplicar_creditos` con un trigger de prueba que
+  rechaza la segunda imputación automática (dentro de la transacción del test, sin tocar el código de producción): la
+  factura queda autorizada, sin imputaciones parciales y con el saldo a favor entero. No hizo falta un gancho de test en
+  la migración. El test pasó de entrada (caracteriza un comportamiento que ya era correcto).
+
+### Revisión de T6
+
+- **Declinada por el usuario**: valen las verificaciones del writer registradas en T6.
 
 ### T6 — Cartera de cheques y rechazo con ND obligatoria (18/10/2026)
 
@@ -394,9 +413,67 @@ corriente** de cada cliente y administrar la **cartera de cheques** recibidos.
   borrar la ND → CB020; UPDATE del contador → 42501. `next dev` con Supabase local: `/cheques` y `/cheques/[id]`
   responden 307 a /login, sin 500.
 
+### T7 — Cuenta corriente del cliente y listado de saldos (18/10/2026)
+
+- Commit: `9d2591c` feat(cobranzas): cuenta corriente del cliente y listado de saldos. Migración
+  `20261029000001_cobranzas_cuenta_corriente.sql` (sólo local; falta `db push`). pgTAP en rojo primero (vista
+  inexistente), después verde. Vitest de los ayudantes en rojo primero.
+- **Vista** `v_cliente_cuenta_resumen` (security invoker; anon sin acceso): una fila por cliente con saldo ≠ 0, débitos
+  pendientes o saldo a favor, con razón social, CUIT, `cuit_digitos` y código (el filtro de clientes de siempre), saldo,
+  deuda pendiente, a favor, deuda más vieja y cantidad de pendientes. Un cliente con deuda y a favor a la vez aparece
+  aunque su saldo neto sea cero (tiene algo que imputar). pgTAP: coincide con `v_cliente_saldo` y con los débitos con
+  saldo; `saldo = pendientes − a favor` para cada cliente; un cliente sin nada no aparece.
+- **Ficha del cliente** (sección "Cuenta corriente", `#cuenta-corriente`, componente `clientes/[id]/CuentaCorriente.tsx`):
+  saldo actual (rojo deudor, azul a favor) con pendiente de cobro y a favor; pendientes (fecha, comprobante enlazado,
+  total, saldo, días; del más viejo al más nuevo; "Contado – pago pendiente" si corresponde); movimientos de
+  `v_cuenta_corriente` del más nuevo al más viejo con debe, haber y saldo acumulado (de toda la historia), filtro
+  `cc_desde`/`cc_hasta` por GET (por defecto los últimos 12 meses), tope 500.
+- **Ventas → Cuentas corrientes** (`/cuentas-corrientes`): cliente (a la sección de su ficha), saldo, a favor, deuda
+  más vieja (fecha y días), pendientes; orden por saldo (por defecto) o antigüedad; filtro de texto; totales adeudado
+  (suma de pendientes) y a favor de lo que se muestra.
+- Lógica pura `src/lib/cobranzas/cuenta-corriente.ts` (antigüedad en días UTC, rango por defecto, filtros de la URL,
+  orden, totales en centavos, estado del saldo) con Vitest.
+
+### T8 — PDF del recibo y anulación (18/10/2026)
+
+- Commit: `e18dfcf` feat(cobranzas): PDF del recibo con importe en letras y anulación. Vitest en rojo primero para
+  `numeroEnLetras`; el resto con sus tests en el mismo commit.
+- **Importe en letras** `numeroEnLetras` (`numero-letras.ts`): mayúsculas con tildes, "CON nn/100", apócope delante de
+  MIL y MILLONES (VEINTIÚN MIL, UN MILLÓN, TREINTA Y UN MILLONES), CIEN/CIENTO, hasta 999.999.999.999,99; negativos, no
+  finitos y un billón o más → RangeError. 40 casos.
+- **PDF** (`pdf-recibo-datos.ts` puro + `pdf-recibo.ts` con pdf-lib): mismo encabezado que el comprobante (logo,
+  emisor, recuadro "X" con "No válido como factura"), "RECIBO" con número y fecha, cliente (razón social, CUIT,
+  domicilio, condición de IVA), "Recibimos de … la suma de pesos … ($ …)", observaciones, detalle de medios (efectivo;
+  transferencia con banco y referencia; cheque/e-cheq con banco, número, fecha de pago y librador con CUIT; retención
+  con tipo, jurisdicción, certificado y fecha), comprobantes cancelados (número, fecha, importe; "(saldo a favor)" en
+  las automáticas) y pie con imputado, queda a favor (si > 0), total y firma. Anulado: marca "ANULADO" en cada página,
+  fecha y motivo al principio, sin "queda a favor". Pagina con `paginar` (encabezado y cliente en todas, pie en la
+  última). Se exportaron `crearSaneador`, `partirEnLineas`, `recortar` (`comprobantes/pdf.ts`) y `cargarLogo`
+  (`comprobantes/pdf-descarga.ts`) para reusarlos.
+- **Ruta** `/cobranzas/[id]/pdf`: columnas explícitas, 404 si no existe, 409 en borrador, `inline` con nombre
+  `Recibo R-00001-00000001.pdf` (`pdf-recibo-descarga.ts`, Vitest con cliente simulado).
+- **Anular recibo** (detalle emitido, `AnularRecibo.tsx`): modal con motivo obligatorio (≤ 500), los efectos (los
+  comprobantes vuelven a pendiente —o la factura de contado a "Contado – pago pendiente"—, sus cheques salen de la
+  cartera, el número no se reutiliza) y, si algún cheque ya no está en cartera, la lista con su estado y el botón
+  deshabilitado. La acción `anularRecibo` llama a `anular_recibo`; CB010 → los cheques fuera de cartera con su estado
+  (leídos después del error), CB019 → "Escribí el motivo…", CB002 → recargar. Al terminar, `?aviso=anulado`.
+  Lógica pura en `anulacion.ts` con Vitest. pgTAP: anular un pago de contado deja la factura pendiente y se puede volver
+  a pagar.
+- Tamaño: unidad A ~260 líneas; T7 ~745; T8 ~1700 (la mitad son tests y fixtures). T7 y T8 superan las 400 orientativas:
+  la vista, la sección de la ficha y el listado van juntos; el PDF, su ruta y la anulación cierran el recibo y partirlos
+  dejaría el detalle con botones a medias.
+- Checks (A, T7 y T8): `npm test` 641 ok; `npm run typecheck` ok; `npm run lint` ok; `npm run build` ok
+  (`/cuentas-corrientes`, `/cobranzas/[id]/pdf`); `npx opennextjs-cloudflare build` ok (sin deploy);
+  `supabase migration up --local` + `supabase test db` 623, falla sólo `arca_configuracion_test` 26 (conocida);
+  `supabase db reset --local` + `supabase test db` 623 ok; datos locales restaurados. PostgREST local con JWT firmado:
+  las consultas de las pantallas nuevas responden 200. `next dev` con Supabase local: `/cuentas-corrientes`,
+  `/clientes/[id]`, `/cobranzas/[id]` y `/cobranzas/[id]/pdf` responden 307 a /login, sin 500. PDFs de muestra
+  generados desde los fixtures (normal y anulado) y revisados a ojo.
+
 ## Próximo paso
 
-- T7: cuenta corriente (ficha del cliente y listado general).
+- T9: recorrido completo en local (y con ARCA de homologación cuando vuelva). `db push` de las migraciones de
+  cobranzas cuando se decida.
 
 ## Criterios de aceptación
 
