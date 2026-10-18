@@ -17,7 +17,7 @@
 begin;
 create extension if not exists pgtap with schema extensions;
 
-select plan(212);
+select plan(220);
 
 -- ---------------------------------------------------------------------
 -- Estructura
@@ -1397,6 +1397,57 @@ select is(
   (select estado_fecha from cheque where id = 'cb300000-0000-0000-0000-000000000081'),
   (now() at time zone 'America/Argentina/Buenos_Aires')::date,
   'Sin fecha, el rechazo es de hoy'
+);
+
+reset role;
+
+-- ---------------------------------------------------------------------
+-- Resumen de cuenta corriente por cliente (listado general)
+-- ---------------------------------------------------------------------
+
+select has_view('public', 'v_cliente_cuenta_resumen', 'Existe v_cliente_cuenta_resumen');
+select ok(not has_table_privilege('anon', 'public.v_cliente_cuenta_resumen', 'select'), 'anon no lee el resumen de cuentas');
+select ok(has_table_privilege('authenticated', 'public.v_cliente_cuenta_resumen', 'select'),
+  'authenticated lee el resumen de cuentas');
+
+insert into cliente (id, razon_social, condicion_iva) values
+  ('cb000000-0000-0000-0000-000000000010', 'Cliente sin movimientos', 'Responsable Inscripto');
+
+set local role authenticated;
+
+select results_eq(
+  $$select razon_social, saldo, deuda_pendiente, saldo_a_favor, pendientes, pendiente_mas_viejo
+    from v_cliente_cuenta_resumen where cliente_id = 'cb000000-0000-0000-0000-000000000009'$$,
+  $$values ('Cliente con falla al aplicar'::text, -10.00::numeric, 70.00::numeric, 80.00::numeric, 1::bigint,
+            '2026-10-03'::date)$$,
+  'El resumen trae saldo, deuda, a favor, cantidad de pendientes y la deuda más vieja'
+);
+select results_eq(
+  $$select saldo, pendientes, pendiente_mas_viejo from v_cliente_cuenta_resumen
+    where cliente_id = 'cb000000-0000-0000-0000-000000000001'$$,
+  $$select saldo, (select count(*) from v_comprobante_saldo
+                   where cliente_id = 'cb000000-0000-0000-0000-000000000001' and saldo > 0),
+           pendiente_mas_viejo
+    from v_cliente_saldo where cliente_id = 'cb000000-0000-0000-0000-000000000001'$$,
+  'El resumen coincide con v_cliente_saldo y con los débitos pendientes'
+);
+select is(
+  (select count(*) from v_cliente_cuenta_resumen where cliente_id = 'cb000000-0000-0000-0000-000000000010'),
+  0::bigint,
+  'Un cliente sin saldo, sin pendientes y sin nada a favor no aparece'
+);
+select is(
+  (select count(*) from v_cliente_cuenta_resumen
+   where cliente_id::text like 'cb000000-%' and saldo <> deuda_pendiente - saldo_a_favor),
+  0::bigint,
+  'En el resumen, saldo = pendientes − a favor para cada cliente'
+);
+select is(
+  (select count(*) from v_cliente_cuenta_resumen r
+   where r.cliente_id::text like 'cb000000-%'
+     and r.pendientes <> (select count(*) from v_comprobante_saldo s where s.cliente_id = r.cliente_id and s.saldo > 0)),
+  0::bigint,
+  'La cantidad de pendientes coincide con los débitos con saldo de cada cliente'
 );
 
 reset role;
