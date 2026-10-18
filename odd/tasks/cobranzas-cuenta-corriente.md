@@ -332,6 +332,21 @@ corriente** de cada cliente y administrar la **cartera de cheques** recibidos.
   local con JWT firmado (guardar, emitir, re-emitir → CB002, autorizar otra factura → saldo a favor aplicado) y
   filas temporales borradas. `next dev` con Supabase local: las rutas nuevas responden 307 a /login, sin 500.
 
+### Revisión de T2+T3 (18/10/2026)
+
+- Resultado: **aprobada**, con 2 advertencias y 1 sugerencia, corregidas en la unidad A de T6
+  (`fix(cobranzas): CUIT del librador normalizado, contador de recibos protegido y mensaje de letra`).
+- **CUIT del librador** (`recibo.ts`): `validarRecibo` acepta separadores y la base exige 11 dígitos. Ya lo
+  normalizaban `armarRecibo` (`guardado.ts`) y `guardar_borrador_recibo` (T4, `75a0bb5`); se agregó la prueba de
+  ida y vuelta desde el JSON de la pantalla ("20-11111111-2" → "20111111112"). El pgTAP equivalente ya estaba.
+- **Contador de recibos** (`rls_cobranzas.sql`): authenticated podía hacer UPDATE de
+  `recibo_punto_venta.ultimo_numero`. Migración `20261028000001_cobranzas_cartera.sql`: se borran las políticas de
+  insert/update/delete y se revocan esos permisos (queda select); `emitir_recibo` pasa a **security definer**
+  (search_path vacío, sin parámetros de número ni punto de venta) y es la única vía para avanzar el contador. No se
+  usó un ayudante definer aparte: tendría que ser ejecutable por authenticated y podría quemar números sin emitir.
+  pgTAP: update/insert/delete directos fallan con 42501; emitir como authenticated sigue numerando.
+- **Letra** (`cheques.ts`): facturas imputadas sin letra daban un mensaje mal armado; ahora un error legible (test).
+
 ## Próximo paso
 
 - T6: cartera de cheques (filtrar por recibo emitido) y rechazo con ND obligatoria.

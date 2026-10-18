@@ -17,7 +17,7 @@
 begin;
 create extension if not exists pgtap with schema extensions;
 
-select plan(173);
+select plan(180);
 
 -- ---------------------------------------------------------------------
 -- Estructura
@@ -117,9 +117,11 @@ select set_config(
   '{"sub": "11111111-1111-1111-1111-111111111111", "role": "authenticated"}',
   true
 );
-set local role authenticated;
-
+-- El punto de venta de recibos lo crea el administrador: authenticated no
+-- escribe en recibo_punto_venta (ver 20261028000001_cobranzas_cartera.sql).
 insert into recibo_punto_venta (numero, nombre) values (9, 'Recibos de prueba');
+
+set local role authenticated;
 
 -- ---------------------------------------------------------------------
 -- Alta de recibos y medios
@@ -1081,6 +1083,55 @@ select is(
    where cliente_id::text like 'cb000000-%' and saldo <> deuda_pendiente - saldo_a_favor),
   0::bigint,
   'Después de las aplicaciones automáticas, saldo = pendientes − a favor'
+);
+
+reset role;
+
+-- ---------------------------------------------------------------------
+-- Contador de recibos protegido: authenticated no lo escribe; sólo
+-- emitir_recibo (security definer) lo avanza.
+-- ---------------------------------------------------------------------
+
+set local role authenticated;
+
+select throws_ok(
+  $$update recibo_punto_venta set ultimo_numero = 0 where numero = 9$$,
+  '42501', null, 'authenticated no cambia el contador de recibos directamente'
+);
+select throws_ok(
+  $$insert into recibo_punto_venta (numero, nombre) values (8, 'Otro')$$,
+  '42501', null, 'authenticated no crea puntos de venta de recibos'
+);
+select throws_ok(
+  $$delete from recibo_punto_venta where numero = 9$$,
+  '42501', null, 'authenticated no borra puntos de venta de recibos'
+);
+select ok(
+  has_table_privilege('authenticated', 'public.recibo_punto_venta', 'select'),
+  'authenticated sigue leyendo los puntos de venta de recibos'
+);
+select ok(
+  (select prosecdef from pg_proc where oid = 'public.emitir_recibo(uuid)'::regprocedure)
+    and (select proconfig from pg_proc where oid = 'public.emitir_recibo(uuid)'::regprocedure) = array['search_path=""'],
+  'emitir_recibo es security definer con search_path fijo'
+);
+
+create temporary table t_contador on commit drop as
+  select ultimo_numero from recibo_punto_venta where numero = 9;
+insert into recibo (id, punto_venta, cliente_id, fecha, total) values
+  ('cb200000-0000-0000-0000-000000000091', 9, 'cb000000-0000-0000-0000-000000000004', '2026-10-18', 5);
+insert into recibo_medio (recibo_id, tipo, importe) values ('cb200000-0000-0000-0000-000000000091', 'efectivo', 5);
+select is(
+  emitir_recibo('cb200000-0000-0000-0000-000000000091'),
+  (select ultimo_numero + 1 from t_contador),
+  'Como authenticated, emitir_recibo sigue tomando el número siguiente'
+);
+select results_eq(
+  $$select r.estado, r.numero, (select ultimo_numero from recibo_punto_venta where numero = 9), r.creado_por::text
+    from recibo r where r.id = 'cb200000-0000-0000-0000-000000000091'$$,
+  $$select 'emitido'::text, ultimo_numero + 1, ultimo_numero + 1, '11111111-1111-1111-1111-111111111111'::text
+    from t_contador$$,
+  'El recibo queda emitido con ese número y el contador avanzado'
 );
 
 reset role;

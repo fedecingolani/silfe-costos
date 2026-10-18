@@ -143,6 +143,20 @@ describe("armarNotaDebitoRechazo", () => {
     });
   });
 
+  it("informa facturas asociadas sin letra con un mensaje legible", () => {
+    expect(
+      armarNotaDebitoRechazo(CHEQUE, {
+        ...CONTEXTO,
+        imputados: [
+          { id: "f1", clase: "factura", letra: null },
+          { id: "f2", clase: "factura", letra: null },
+        ],
+      }),
+    ).toEqual({
+      error: "Las facturas que canceló el recibo del cheque no tienen letra: no se puede armar la nota de débito.",
+    });
+  });
+
   it("informa si falta la condición frente al IVA del cliente", () => {
     expect(armarNotaDebitoRechazo(CHEQUE, { ...CONTEXTO, condicionIva: null })).toEqual({
       error: "Completá la condición frente al IVA del cliente.",

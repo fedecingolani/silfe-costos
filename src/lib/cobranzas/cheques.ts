@@ -63,7 +63,12 @@ export function armarNotaDebitoRechazo(cheque: ChequeRechazado, contexto: Contex
   let letra: LetraComprobante;
   if (facturas.length > 0) {
     const letras = [...new Set(facturas.map((f) => f.letra).filter((l): l is LetraComprobante => l !== null))].sort();
-    if (letras.length !== 1) {
+    if (letras.length === 0) {
+      return {
+        error: "Las facturas que canceló el recibo del cheque no tienen letra: no se puede armar la nota de débito.",
+      };
+    }
+    if (letras.length > 1) {
       return {
         error: `El recibo del cheque canceló facturas ${letras.join(" y ")}: la nota de débito lleva una sola letra.`,
       };

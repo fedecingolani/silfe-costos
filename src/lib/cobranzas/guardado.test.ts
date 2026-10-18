@@ -145,6 +145,34 @@ describe("armarRecibo", () => {
   });
 });
 
+describe("CUIT del librador (la base exige 11 dígitos)", () => {
+  it("de la pantalla a guardar_borrador_recibo, con separadores, queda sólo con dígitos", () => {
+    const enviado = leerReciboEnviado(
+      JSON.parse(
+        JSON.stringify({
+          clienteId: "c0000000-0000-0000-0000-000000000001",
+          fecha: "2026-10-18",
+          observaciones: null,
+          contadoId: null,
+          medios: [
+            {
+              tipo: "echeq",
+              importe: 50,
+              cheque: { banco: "Galicia", numero: "E-7", fechaPago: "2026-11-01", libradorCuit: " 20-11111111-2 " },
+            },
+          ],
+          imputaciones: [],
+        }),
+      ),
+    );
+    expect(enviado).not.toBeNull();
+    const r = armarRecibo(enviado!, { debitos: [], contado: null });
+    if (!("guardar" in r)) throw new Error(r.errores.join(" "));
+    expect(r.guardar.medios[0].cheque?.librador_cuit).toBe("20111111112");
+    expect(r.guardar.medios[0].cheque?.librador_cuit).toMatch(/^\d{11}$/);
+  });
+});
+
 describe("listado de cobranzas", () => {
   it("lee los filtros e ignora valores desconocidos", () => {
     expect(leerFiltrosCobranzas({ desde: "2026-10-01", hasta: "x", cliente: [" acme "], estado: "emitido" })).toEqual({
