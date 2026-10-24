@@ -82,7 +82,7 @@ conversión parcial, moneda extranjera.
   (reutilizando `calculo.ts`), número visible, vencido, datos de conversión. Con tests.
 - [x] **T3 — Extraer componentes del editor de comprobantes.** Tabla de ítems y campos
   comerciales de cabecera a componentes reutilizables, sin cambio de comportamiento.
-- [ ] **T4 — Pantallas.** Listado, nuevo, detalle/edición, acciones (guardar, borrar,
+- [x] **T4 — Pantallas.** Listado, nuevo, detalle/edición, acciones (guardar, borrar,
   duplicar), entrada en el menú Ventas.
 - [ ] **T5 — Convertir en factura.** Acción, botón en el detalle, vínculo visible en la
   factura.
@@ -123,6 +123,7 @@ main ← feat/presupuestos (tracker, draft)
 | T1 | delegada (writer: 3 archivos nuevos, SQL no trivial) | pgTAP presupuestos 78/78 (RED antes de migrar), comprobantes 165/165, suite 701 PASS; re-corrido presupuestos por el padre: PASS | be4f703 |
 | T2 | delegada (writer: lib nueva + extracción `armarItems`/`totalesDeItems` en comprobantes) | vitest presupuestos RED (módulos inexistentes) → 33/33; `npm test` 678 PASS (re-corrido por el padre), tsc y lint limpios | 116e35d |
 | T3 | delegada (writer: 3 archivos nuevos + editor de 998 → ~530 líneas) | refactor sin RED de UI; `filas.test.ts` 10 tests; `npm test` 688 PASS (re-corrido por el padre), tsc y lint limpios; `next build` no corrido (dev server activo); prueba manual en /comprobantes/nuevo: producto fuera de lista avisa, 2×1000 = $2.000 + IVA $420, contado bloquea vencimiento = fecha, agregar/quitar ítem, consola sin errores | ver git log |
+| T4 | delegada (writer: 9 archivos nuevos en `presupuestos/` + nav) | `editor.test.ts` RED → 9/9; `npm test` 697 PASS (re-corrido por el padre), tsc y lint limpios; prueba manual en /presupuestos: validez +15 días, error sin cliente, guardar redirige a P-00000049 ($1.500 + IVA $315 = $1.815), duplicar → P-00000050, borrar vuelve al listado, consola sin errores | ver git log |
 
 ## Revisión
 
@@ -133,4 +134,4 @@ main ← feat/presupuestos (tracker, draft)
 
 ## Próximo paso
 
-T4 — Pantallas, en `feat/presupuestos-04-pantallas`.
+T5 + T6 — Convertir en factura y PDF, en `feat/presupuestos-05-conversion-pdf`.
