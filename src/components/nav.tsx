@@ -16,6 +16,7 @@ const SECCIONES: { titulo: string; items: { href: string; texto: string }[] }[] 
     titulo: "Ventas",
     items: [
       { href: "/seguimiento", texto: "Seguimiento" },
+      { href: "/presupuestos", texto: "Presupuestos" },
       { href: "/comprobantes", texto: "Comprobantes" },
       { href: "/cobranzas", texto: "Cobranzas" },
       { href: "/cheques", texto: "Cartera de cheques" },
