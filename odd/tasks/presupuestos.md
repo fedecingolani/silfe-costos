@@ -80,7 +80,7 @@ conversión parcial, moneda extranjera.
   `guardar_presupuesto` y `convertir_presupuesto`, migración RLS, tests pgTAP.
 - [x] **T2 — Lógica pura.** `src/lib/presupuestos/`: armado y validación del borrador
   (reutilizando `calculo.ts`), número visible, vencido, datos de conversión. Con tests.
-- [ ] **T3 — Extraer componentes del editor de comprobantes.** Tabla de ítems y campos
+- [x] **T3 — Extraer componentes del editor de comprobantes.** Tabla de ítems y campos
   comerciales de cabecera a componentes reutilizables, sin cambio de comportamiento.
 - [ ] **T4 — Pantallas.** Listado, nuevo, detalle/edición, acciones (guardar, borrar,
   duplicar), entrada en el menú Ventas.
@@ -122,6 +122,7 @@ main ← feat/presupuestos (tracker, draft)
 | --- | --- | --- | --- |
 | T1 | delegada (writer: 3 archivos nuevos, SQL no trivial) | pgTAP presupuestos 78/78 (RED antes de migrar), comprobantes 165/165, suite 701 PASS; re-corrido presupuestos por el padre: PASS | be4f703 |
 | T2 | delegada (writer: lib nueva + extracción `armarItems`/`totalesDeItems` en comprobantes) | vitest presupuestos RED (módulos inexistentes) → 33/33; `npm test` 678 PASS (re-corrido por el padre), tsc y lint limpios | 116e35d |
+| T3 | delegada (writer: 3 archivos nuevos + editor de 998 → ~530 líneas) | refactor sin RED de UI; `filas.test.ts` 10 tests; `npm test` 688 PASS (re-corrido por el padre), tsc y lint limpios; `next build` no corrido (dev server activo); prueba manual en /comprobantes/nuevo: producto fuera de lista avisa, 2×1000 = $2.000 + IVA $420, contado bloquea vencimiento = fecha, agregar/quitar ítem, consola sin errores | ver git log |
 
 ## Revisión
 
@@ -132,4 +133,4 @@ main ← feat/presupuestos (tracker, draft)
 
 ## Próximo paso
 
-T3 — Extraer componentes del editor, en `feat/presupuestos-03-editor`.
+T4 — Pantallas, en `feat/presupuestos-04-pantallas`.
