@@ -26,7 +26,7 @@ import {
   type AsociadoGuardado,
   type AsociadoManualEnviado,
 } from "./asociados";
-import { calcularItem, calcularTotales, type ItemACalcular } from "./calculo";
+import { calcularItem, calcularTotales, type ItemACalcular, type Totales } from "./calculo";
 import { letraYTipoNota } from "./letra";
 import { esFechaValida } from "./validacion";
 
@@ -196,72 +196,46 @@ export function itemParaCalcular(fila: FilaItemEnviada): ItemACalcular | null {
 
 // ----- Armar lo que se guarda -----------------------------------------------
 
-function texto(valor: unknown): string | null {
+/** true si es un uuid (clientes, listas, productos). */
+export function esUuid(valor: unknown): valor is string {
+  return typeof valor === "string" && UUID.test(valor);
+}
+
+/** Texto sin espacios de más, o null si está vacío o no es texto. */
+export function texto(valor: unknown): string | null {
   const t = typeof valor === "string" ? valor.trim() : "";
   return t === "" ? null : t;
 }
 
-function esObjeto(valor: unknown): valor is Record<string, unknown> {
+export function esObjeto(valor: unknown): valor is Record<string, unknown> {
   return typeof valor === "object" && valor !== null && !Array.isArray(valor);
 }
 
 /**
- * Valida lo enviado por la pantalla y arma la cabecera y los ítems para
- * guardar. Un renglón con producto toma del catálogo código, nombre, unidad
- * y alícuota (salvo que se lo pase a no gravado); uno libre, lo cargado.
- * Importes y totales se calculan acá.
- *
- * Una nota lleva la letra de su asociado (de la base, o el tipo del cargado
- * a mano); sin asociado, la de la condición IVA del cliente.
+ * Errores del vencimiento del cobro: con cuenta corriente tiene que ser una
+ * fecha válida y no anterior a la del documento. Con contado no se mira (se
+ * guarda la fecha).
  */
-export function armarBorrador(
-  enviado: unknown,
-  contexto: {
-    productos: ReadonlyMap<string, ProductoCatalogo>;
-    condicionIvaCliente: CondicionIva | null;
-    /** Asociado de la base que ya tiene la nota (lo puso "Generar nota"). */
-    asociadoInterno?: { tipoArca: number } | null;
-    /** CUIT del emisor: va en el asociado cargado a mano. */
-    cuitEmisor?: string | null;
-  },
-): { borrador: BorradorArmado } | { errores: string[] } {
-  if (!esObjeto(enviado) || !Array.isArray(enviado.items)) {
-    return { errores: ["Los datos del comprobante no son válidos."] };
-  }
+export function erroresVencimiento(condicion: CondicionPago, fecha: string, vencimiento: string): string[] {
+  if (condicion !== "cuenta_corriente") return [];
+  if (!esFechaValida(vencimiento)) return ["El vencimiento del cobro no es válido."];
+  if (vencimiento < fecha) return ["El vencimiento del cobro no puede ser anterior a la fecha."];
+  return [];
+}
+
+/**
+ * Valida los renglones enviados por la pantalla y los arma para guardar.
+ * Un renglón con producto toma del catálogo código, nombre, unidad y
+ * alícuota (salvo que se lo pase a no gravado); uno libre, lo cargado.
+ * Importes calculados acá. Lo comparten comprobantes y presupuestos.
+ */
+export function armarItems(
+  valores: readonly unknown[],
+  productos: ReadonlyMap<string, ProductoCatalogo>,
+): { items: ItemGuardado[]; errores: string[] } {
   const errores: string[] = [];
-
-  const clienteId = typeof enviado.clienteId === "string" && UUID.test(enviado.clienteId) ? enviado.clienteId : null;
-  if (!clienteId) errores.push("Elegí el cliente.");
-
-  const clase = (CLASES_COMPROBANTE as readonly unknown[]).includes(enviado.clase)
-    ? (enviado.clase as ClaseComprobante)
-    : null;
-  if (!clase) errores.push("Elegí el tipo de comprobante.");
-
-  const fecha = typeof enviado.fecha === "string" && esFechaValida(enviado.fecha) ? enviado.fecha : null;
-  if (!fecha) errores.push("La fecha del comprobante no es válida.");
-
-  const condicionPago = (CONDICIONES_PAGO as readonly unknown[]).includes(enviado.condicionPago)
-    ? (enviado.condicionPago as CondicionPago)
-    : null;
-  if (!condicionPago) errores.push("Elegí la condición de pago.");
-
-  const vencimientoEnviado = typeof enviado.fechaVencimientoPago === "string" ? enviado.fechaVencimientoPago : "";
-  if (fecha && condicionPago === "cuenta_corriente") {
-    if (!esFechaValida(vencimientoEnviado)) errores.push("El vencimiento del cobro no es válido.");
-    else if (vencimientoEnviado < fecha) errores.push("El vencimiento del cobro no puede ser anterior a la fecha.");
-  }
-
-  const listaPrecioId =
-    typeof enviado.listaPrecioId === "string" && UUID.test(enviado.listaPrecioId) ? enviado.listaPrecioId : null;
-
-  const puntoVenta = aDecimal(enviado.puntoVenta as string | number | null);
-  if (puntoVenta === null || !Number.isInteger(puntoVenta) || puntoVenta < 1 || puntoVenta > 99999) {
-    errores.push("Elegí el punto de venta.");
-  }
-
   const items: ItemGuardado[] = [];
-  enviado.items.forEach((valor: unknown, i: number) => {
+  valores.forEach((valor: unknown, i: number) => {
     const n = `Ítem ${i + 1}`;
     if (!esObjeto(valor)) {
       errores.push(`${n}: los datos no son válidos.`);
@@ -272,7 +246,7 @@ export function armarBorrador(
     let datosProducto: Pick<ItemGuardado, "producto_id" | "codigo" | "descripcion" | "unidad"> | null = null;
     let alicuota: TasaIva | null = null;
     if (typeof valor.productoId === "string" && valor.productoId !== "") {
-      const producto = contexto.productos.get(valor.productoId);
+      const producto = productos.get(valor.productoId);
       if (!producto) {
         errores.push(`${n}: el producto ya no existe.`);
       } else {
@@ -321,6 +295,75 @@ export function armarBorrador(
       iva,
     });
   });
+  return { items, errores };
+}
+
+/** Totales de los renglones ya armados. */
+export function totalesDeItems(items: readonly ItemGuardado[]): Totales {
+  return calcularTotales(
+    items.map((i) => ({
+      cantidad: i.cantidad,
+      precioUnitario: i.precio_unitario,
+      descuentoPct: i.descuento_pct,
+      alicuotaIva: i.gravado ? i.alicuota_iva! : NO_GRAVADO,
+    })),
+  );
+}
+
+/**
+ * Valida lo enviado por la pantalla y arma la cabecera y los ítems para
+ * guardar. Un renglón con producto toma del catálogo código, nombre, unidad
+ * y alícuota (salvo que se lo pase a no gravado); uno libre, lo cargado.
+ * Importes y totales se calculan acá.
+ *
+ * Una nota lleva la letra de su asociado (de la base, o el tipo del cargado
+ * a mano); sin asociado, la de la condición IVA del cliente.
+ */
+export function armarBorrador(
+  enviado: unknown,
+  contexto: {
+    productos: ReadonlyMap<string, ProductoCatalogo>;
+    condicionIvaCliente: CondicionIva | null;
+    /** Asociado de la base que ya tiene la nota (lo puso "Generar nota"). */
+    asociadoInterno?: { tipoArca: number } | null;
+    /** CUIT del emisor: va en el asociado cargado a mano. */
+    cuitEmisor?: string | null;
+  },
+): { borrador: BorradorArmado } | { errores: string[] } {
+  if (!esObjeto(enviado) || !Array.isArray(enviado.items)) {
+    return { errores: ["Los datos del comprobante no son válidos."] };
+  }
+  const errores: string[] = [];
+
+  const clienteId = esUuid(enviado.clienteId) ? enviado.clienteId : null;
+  if (!clienteId) errores.push("Elegí el cliente.");
+
+  const clase = (CLASES_COMPROBANTE as readonly unknown[]).includes(enviado.clase)
+    ? (enviado.clase as ClaseComprobante)
+    : null;
+  if (!clase) errores.push("Elegí el tipo de comprobante.");
+
+  const fecha = typeof enviado.fecha === "string" && esFechaValida(enviado.fecha) ? enviado.fecha : null;
+  if (!fecha) errores.push("La fecha del comprobante no es válida.");
+
+  const condicionPago = (CONDICIONES_PAGO as readonly unknown[]).includes(enviado.condicionPago)
+    ? (enviado.condicionPago as CondicionPago)
+    : null;
+  if (!condicionPago) errores.push("Elegí la condición de pago.");
+
+  const vencimientoEnviado = typeof enviado.fechaVencimientoPago === "string" ? enviado.fechaVencimientoPago : "";
+  if (fecha && condicionPago) errores.push(...erroresVencimiento(condicionPago, fecha, vencimientoEnviado));
+
+  const listaPrecioId = esUuid(enviado.listaPrecioId) ? enviado.listaPrecioId : null;
+
+  const puntoVenta = aDecimal(enviado.puntoVenta as string | number | null);
+  if (puntoVenta === null || !Number.isInteger(puntoVenta) || puntoVenta < 1 || puntoVenta > 99999) {
+    errores.push("Elegí el punto de venta.");
+  }
+
+  const leidos = armarItems(enviado.items, contexto.productos);
+  errores.push(...leidos.errores);
+  const items = leidos.items;
 
   // Asociados: el de la base no se toca; el cargado a mano o el período se
   // reemplazan. Una factura y una nota con asociado de la base no llevan período.
@@ -359,14 +402,7 @@ export function armarBorrador(
     ({ letra, tipoArca } = letraYTipoNota(contexto.condicionIvaCliente, clase!, letraAsociado));
   }
 
-  const totales = calcularTotales(
-    items.map((i) => ({
-      cantidad: i.cantidad,
-      precioUnitario: i.precio_unitario,
-      descuentoPct: i.descuento_pct,
-      alicuotaIva: i.gravado ? i.alicuota_iva! : NO_GRAVADO,
-    })),
-  );
+  const totales = totalesDeItems(items);
 
   return {
     borrador: {

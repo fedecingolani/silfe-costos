@@ -139,6 +139,11 @@ export type DatosPdfComprobante = {
   periodoAsociado: string | null;
   /** Diferencias entre el IVA por alícuota impreso y el IVA guardado (para el log; vacío si coinciden). */
   inconsistencias: string[];
+  /**
+   * Presupuesto: documento no fiscal, sin recuadro de letra, código, CAE ni
+   * QR, y con "válido hasta" (dd/mm/aaaa). null en un comprobante.
+   */
+  presupuesto: { validoHasta: string } | null;
 };
 
 const TITULOS: Record<ClaseComprobante, string> = {
@@ -147,7 +152,7 @@ const TITULOS: Record<ClaseComprobante, string> = {
   nota_debito: "NOTA DE DÉBITO",
 };
 
-const FORMAS_PAGO: Record<FilaComprobantePdf["condicion_pago"], string> = {
+export const FORMAS_PAGO: Record<FilaComprobantePdf["condicion_pago"], string> = {
   cuenta_corriente: "Cuenta Corriente",
   contado: "Contado",
 };
@@ -248,10 +253,42 @@ export function ivaDelComprobante(
   return { alicuotas, origen, inconsistencia };
 }
 
-/**
- * Arma los datos del PDF. Supone un comprobante que pasó puedeImprimir
- * (si falta algo, queda vacío en lugar de fallar).
- */
+/** Datos del emisor para el encabezado; vacíos si no están cargados. */
+export function emisorDelPdf(emisor: FilaEmisorPdf | null): DatosPdfComprobante["emisor"] {
+  return {
+    razonSocial: emisor?.razon_social ?? "",
+    domicilio: emisor?.domicilio_comercial ?? "",
+    condicionIva: emisor?.condicion_iva ?? "",
+    cuit: emisor?.cuit ? formatearCuit(emisor.cuit) : "",
+    ingresosBrutos: emisor?.ingresos_brutos ?? "",
+    inicioActividades: fechaCorta(emisor?.inicio_actividades),
+  };
+}
+
+/** Renglones de la tabla, ya formateados. */
+export function itemsDelPdf(items: readonly FilaItemPdf[]): ItemPdf[] {
+  return items.map((i) => ({
+    codigo: i.codigo ?? "",
+    articulo: i.descripcion,
+    observaciones: i.observaciones ?? "",
+    cantidad: `${precioFmt.format(Number(i.cantidad))}${i.unidad ? ` ${i.unidad}` : ""}`,
+    precio: precioFmt.format(Number(i.precio_unitario)),
+    descuento: importeFmt.format(Number(i.descuento_pct)),
+    importe: formatearImporte(Number(i.importe)),
+    alicuota: i.gravado === false ? "No grav." : `${alicuotaFmt.format(Number(i.alicuota_iva))}%`,
+    importeConIva: formatearImporte(Number(i.importe) + Number(i.iva)),
+  }));
+}
+
+/** IVA de cada alícuota del pie (todas, en 0 las que no tiene). */
+export function ivaDelPie(alicuotas: readonly IvaAutorizado[]): DatosPdfComprobante["ivaPorAlicuota"] {
+  const ivaDe = new Map(alicuotas.map((a) => [a.alicuota, a.importe]));
+  return ALICUOTAS_PIE.map((a) => ({
+    etiqueta: `IVA ${alicuotaFmt.format(a)}`,
+    importe: formatearImporte(ivaDe.get(a) ?? 0),
+  }));
+}
+
 /** Comprobante asociado para el PDF: tipo, punto de venta, número y fecha. */
 export type AsociadoPdf = {
   tipo_arca: number | string | null;
@@ -260,6 +297,10 @@ export type AsociadoPdf = {
   fecha: string | null;
 };
 
+/**
+ * Arma los datos del PDF. Supone un comprobante que pasó puedeImprimir
+ * (si falta algo, queda vacío en lugar de fallar).
+ */
 export function armarDatosPdf({
   comprobante: c,
   items,
@@ -277,7 +318,6 @@ export function armarDatosPdf({
   const docNro = c.receptor_doc_nro ?? "0";
 
   const iva = ivaDelComprobante(c, items);
-  const ivaDe = new Map(iva.alicuotas.map((a) => [a.alicuota, a.importe]));
   const periodo = c.clase === "factura" ? null : periodoDeFila(c);
 
   return {
@@ -286,14 +326,7 @@ export function armarDatosPdf({
     codigoArca: c.tipo_arca ? String(c.tipo_arca).padStart(3, "0") : "",
     numero,
     fecha: fechaCorta(c.fecha),
-    emisor: {
-      razonSocial: emisor.razon_social ?? "",
-      domicilio: emisor.domicilio_comercial ?? "",
-      condicionIva: emisor.condicion_iva ?? "",
-      cuit: emisor.cuit ? formatearCuit(emisor.cuit) : "",
-      ingresosBrutos: emisor.ingresos_brutos ?? "",
-      inicioActividades: fechaCorta(emisor.inicio_actividades),
-    },
+    emisor: emisorDelPdf(emisor),
     receptor: {
       razonSocial: c.receptor_razon_social ?? "",
       domicilio: c.receptor_domicilio ?? "",
@@ -305,21 +338,8 @@ export function armarDatosPdf({
     provinciaDestino: c.receptor_provincia ?? "",
     fechaVencimientoPago: fechaCorta(c.fecha_vencimiento_pago),
     formaPago: FORMAS_PAGO[c.condicion_pago],
-    items: items.map((i) => ({
-      codigo: i.codigo ?? "",
-      articulo: i.descripcion,
-      observaciones: i.observaciones ?? "",
-      cantidad: `${precioFmt.format(Number(i.cantidad))}${i.unidad ? ` ${i.unidad}` : ""}`,
-      precio: precioFmt.format(Number(i.precio_unitario)),
-      descuento: importeFmt.format(Number(i.descuento_pct)),
-      importe: formatearImporte(Number(i.importe)),
-      alicuota: i.gravado === false ? "No grav." : `${alicuotaFmt.format(Number(i.alicuota_iva))}%`,
-      importeConIva: formatearImporte(Number(i.importe) + Number(i.iva)),
-    })),
-    ivaPorAlicuota: ALICUOTAS_PIE.map((a) => ({
-      etiqueta: `IVA ${alicuotaFmt.format(a)}`,
-      importe: formatearImporte(ivaDe.get(a) ?? 0),
-    })),
+    items: itemsDelPdf(items),
+    ivaPorAlicuota: ivaDelPie(iva.alicuotas),
     bruto: formatearImporte(Number(c.neto)),
     noGravado: formatearImporte(Number(c.no_gravado ?? 0)),
     impuestos: formatearImporte(Number(c.iva)),
@@ -342,6 +362,7 @@ export function armarDatosPdf({
     asociados: c.clase === "factura" ? [] : asociados.map(textoAsociado),
     periodoAsociado: periodo ? textoPeriodo(periodo) : null,
     inconsistencias: iva.inconsistencia ? [`${numero}: ${iva.inconsistencia}`] : [],
+    presupuesto: null,
   };
 }
 
