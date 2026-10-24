@@ -228,6 +228,12 @@ describe("mensajeErrorGuardado", () => {
     expect(mensajeErrorGuardado({ code: "23514", message })).toBe(mensaje);
   });
 
+  it("un error del comprobante al convertir (CMxxx) dice que no se pudo generar la factura", () => {
+    expect(mensajeErrorGuardado({ code: "CM005", message: "El punto de venta 7 no coincide." })).toBe(
+      "No se pudo generar la factura: El punto de venta 7 no coincide.",
+    );
+  });
+
   it("deja el resto con el mensaje de la base", () => {
     expect(mensajeErrorGuardado({ code: "XX000", message: "algo" })).toBe("No se pudo guardar el presupuesto: algo");
   });

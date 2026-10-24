@@ -8,6 +8,10 @@
  * receptor se repiten, el pie (totales y QR) va sólo en la última y todas
  * llevan "Página N de M". En homologación cada página lleva la marca "SIN
  * VALIDEZ FISCAL". Función pura: los bytes del logo llegan como parámetro.
+ *
+ * Un presupuesto (`datos.presupuesto`) sale con el mismo formato pero sin
+ * recuadro de letra ni código, con "Válido hasta" y sin QR, leyenda de ARCA
+ * ni CAE.
  */
 import { PDFDocument, StandardFonts, degrees, rgb, type PDFFont, type PDFPage } from "pdf-lib";
 import { paginar, type DatosPdfComprobante, type ItemPdf } from "./pdf-datos";
@@ -196,18 +200,24 @@ export async function generarPdfComprobante(datos: DatosPdfComprobante, logoPng?
     }
 
     // Centro: letra en un recuadro, código de ARCA y condición de IVA del emisor.
+    // Un presupuesto no lleva letra: en su lugar, la aclaración de que no es una factura.
     const xCentro = ANCHO / 2;
     const yCaja = ARRIBA - LADO_LETRA;
-    pagina.drawRectangle({
-      x: xCentro - LADO_LETRA / 2,
-      y: yCaja,
-      width: LADO_LETRA,
-      height: LADO_LETRA,
-      borderColor: NEGRO,
-      borderWidth: 1.2,
-    });
-    escribir(pagina, datos.letra, xCentro, yCaja + 12, negrita, 30, "centro");
-    escribir(pagina, datos.codigoArca, xCentro, yCaja - 11, negrita, 9, "centro");
+    if (datos.presupuesto) {
+      escribir(pagina, "Documento no", xCentro, yCaja + 22, negrita, 8, "centro");
+      escribir(pagina, "válido como factura", xCentro, yCaja + 12, negrita, 8, "centro");
+    } else {
+      pagina.drawRectangle({
+        x: xCentro - LADO_LETRA / 2,
+        y: yCaja,
+        width: LADO_LETRA,
+        height: LADO_LETRA,
+        borderColor: NEGRO,
+        borderWidth: 1.2,
+      });
+      escribir(pagina, datos.letra, xCentro, yCaja + 12, negrita, 30, "centro");
+      escribir(pagina, datos.codigoArca, xCentro, yCaja - 11, negrita, 9, "centro");
+    }
     escribir(pagina, datos.emisor.condicionIva, xCentro, yCaja - 22, normal, 7, "centro");
     pagina.drawLine({
       start: { x: xCentro, y: yCaja - 28 },
@@ -221,6 +231,7 @@ export async function generarPdfComprobante(datos: DatosPdfComprobante, logoPng?
     const filas: [string, string][] = [
       ["Número:", datos.numero],
       ["Fecha:", datos.fecha],
+      ...(datos.presupuesto ? [["Válido hasta:", datos.presupuesto.validoHasta] as [string, string]] : []),
       ["CUIT:", datos.emisor.cuit],
       ["Ing. Brutos:", datos.emisor.ingresosBrutos],
       ["Inicio Act.:", datos.emisor.inicioActividades],
@@ -349,6 +360,9 @@ export async function generarPdfComprobante(datos: DatosPdfComprobante, logoPng?
     etiquetaValor(pagina, "Impuestos:", datos.impuestos, MARGEN + 265, yBanda, 9);
     const total = `Total: ${datos.total}`;
     escribir(pagina, total, DERECHA - 6, yBanda - 0.5, negrita, 10.5, "derecha");
+
+    // Un presupuesto no es fiscal: sin QR, leyenda de ARCA ni CAE.
+    if (datos.presupuesto) return;
 
     // QR vectorial: cada tramo horizontal de módulos oscuros es un rectángulo.
     const matriz = matrizQr(datos.qrUrl);

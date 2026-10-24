@@ -120,3 +120,20 @@ export async function duplicarPresupuesto(id: string): Promise<ResultadoPresupue
   revalidatePath(RUTA);
   redirect(`${RUTA}/${String(nuevoId)}`);
 }
+
+/**
+ * Convierte un presupuesto abierto en un borrador de factura
+ * (convertir_presupuesto: copia cliente, cabecera e ítems tal cual, fecha de
+ * hoy, primer punto de venta electrónico activo) y abre la factura.
+ */
+export async function convertirPresupuesto(id: string): Promise<ResultadoPresupuesto> {
+  if (!UUID.test(id)) return { error: "Presupuesto inválido." };
+  const supabase = await createClient();
+  const { data: comprobanteId, error } = await supabase.rpc("convertir_presupuesto", { p_id: id });
+  if (error) return { error: mensajeErrorGuardado(error) };
+
+  revalidatePath(RUTA);
+  revalidatePath(`${RUTA}/${id}`);
+  revalidatePath("/comprobantes");
+  redirect(`/comprobantes/${String(comprobanteId)}`);
+}

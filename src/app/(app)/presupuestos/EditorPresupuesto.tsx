@@ -7,14 +7,16 @@ import { Tarjeta } from "@/components/ui";
 import { CamposComerciales, type DatosComerciales } from "@/components/ventas/CamposComerciales";
 import { TablaItems } from "@/components/ventas/TablaItems";
 import { mapaPrecios } from "@/lib/comprobantes/borrador";
+import { fecha } from "@/lib/formato";
 import { validezPorDefecto, type PresupuestoEnviado } from "@/lib/presupuestos/borrador";
 import { validezAlCambiarFecha } from "@/lib/presupuestos/editor";
+import { estaVencido } from "@/lib/presupuestos/listado";
 import { filaEnviada, filasIniciales, type FilaItem, type ItemEditable } from "@/lib/ventas/filas";
 import type { CondicionPago } from "@/lib/tipos";
 import { preciosDeLista, type ClienteEncontrado } from "../comprobantes/acciones";
 import { BuscadorCliente } from "../comprobantes/BuscadorCliente";
 import type { ContextoEditor } from "../comprobantes/datos";
-import { borrarPresupuesto, duplicarPresupuesto, guardarPresupuesto } from "./acciones";
+import { borrarPresupuesto, convertirPresupuesto, duplicarPresupuesto, guardarPresupuesto } from "./acciones";
 
 export type PresupuestoEditable = {
   id: string;
@@ -90,17 +92,25 @@ export function EditorPresupuesto({
     return JSON.stringify(enviado);
   }
 
+  // Se convierte lo guardado: con cambios sin guardar, el botón espera a que se guarden.
+  const actual = datos();
+  const [guardado, setGuardado] = useState(actual);
+  const sinCambios = actual === guardado;
+  const vencido = presupuesto !== null && estaVencido(presupuesto.valido_hasta, hoy);
+
   function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setMensaje(null);
+    const enviado = actual;
     iniciar(async () => {
       // Uno nuevo redirige a su dirección; uno editado devuelve "ok".
-      const resultado = await guardarPresupuesto(id, datos());
+      const resultado = await guardarPresupuesto(id, enviado);
       if (resultado?.error) {
         setMensaje({ error: resultado.error });
         return;
       }
       if (!resultado?.ok) return;
+      setGuardado(enviado);
       setMensaje({ ok: resultado.ok });
       router.refresh();
     });
@@ -110,6 +120,17 @@ export function EditorPresupuesto({
     if (!id || !confirm("¿Borrar este presupuesto? No se puede deshacer.")) return;
     iniciar(async () => {
       const resultado = await borrarPresupuesto(id);
+      if (resultado?.error) setMensaje({ error: resultado.error });
+    });
+  }
+
+  function convertir() {
+    if (!id || !sinCambios) return;
+    const aviso = vencido ? ` Venció el ${fecha(presupuesto!.valido_hasta)}.` : "";
+    if (!confirm(`¿Convertir este presupuesto en un borrador de factura?${aviso} Después no se puede editar.`)) return;
+    setMensaje(null);
+    iniciar(async () => {
+      const resultado = await convertirPresupuesto(id);
       if (resultado?.error) setMensaje({ error: resultado.error });
     });
   }
@@ -183,13 +204,32 @@ export function EditorPresupuesto({
             <button type="button" disabled={pendiente} onClick={duplicar} className="boton-secundario">
               Duplicar
             </button>
-            {/* T5: "Convertir en factura". T6: "PDF". */}
+            <button
+              type="button"
+              disabled={pendiente || !sinCambios}
+              onClick={convertir}
+              title={sinCambios ? undefined : "Guardá los cambios antes de convertir."}
+              className="boton-secundario"
+            >
+              Convertir en factura
+            </button>
+            <a href={`/presupuestos/${id}/pdf`} target="_blank" rel="noopener noreferrer" className="boton-secundario">
+              PDF
+            </a>
             <button type="button" disabled={pendiente} onClick={borrar} className="boton-peligro ml-auto">
               Borrar
             </button>
           </>
         )}
       </div>
+      {id && !sinCambios && (
+        <p className="text-xs text-stone-500">Hay cambios sin guardar: guardalos para convertir o imprimir lo que ves.</p>
+      )}
+      {id && sinCambios && vencido && (
+        <p role="status" className="text-sm text-amber-800">
+          Este presupuesto venció el {fecha(presupuesto!.valido_hasta)}; se puede convertir igual.
+        </p>
+      )}
     </form>
   );
 }

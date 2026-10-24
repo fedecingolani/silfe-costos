@@ -169,6 +169,8 @@ export function mensajeErrorGuardado(error: { code?: string; message: string; hi
     const control = MENSAJES_CONTROL.find(([restriccion]) => error.message.includes(restriccion));
     if (control) return control[1];
   }
+  // Al convertir, los triggers del comprobante (CMxxx) pueden rechazar el borrador: su mensaje ya es legible.
+  if (error.code?.startsWith("CM")) return `No se pudo generar la factura: ${error.message}`;
   return (
     (error.code && MENSAJES_GUARDADO[error.code]) ||
     (error.hint && MENSAJES_GUARDADO[error.hint]) ||

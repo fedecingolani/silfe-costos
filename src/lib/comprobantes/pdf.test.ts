@@ -2,6 +2,7 @@ import { inflateSync } from "node:zlib";
 import { PDFArray, PDFDocument, PDFName, PDFRawStream, type PDFPage } from "pdf-lib";
 import { describe, expect, it } from "vitest";
 import { generarPdfComprobante } from "./pdf";
+import { armarDatosPdfPresupuesto } from "@/lib/presupuestos/pdf-datos";
 import { armarDatosPdf } from "./pdf-datos";
 import { ejemploConItems } from "./pdf-fixtures";
 
@@ -138,5 +139,46 @@ describe("generarPdfComprobante: no gravado y período asociado", () => {
     expect(texto).toContain("No grav.");
     expect(texto).toContain("Período asociado:");
     expect(texto).toContain("01/10/2026 – 15/10/2026");
+  });
+});
+
+describe("generarPdfComprobante: presupuesto", () => {
+  it("titula PRESUPUESTO con número P-… y validez, sin letra, CAE ni QR", async () => {
+    const { items, emisor } = ejemploConItems(1);
+    const datos = armarDatosPdfPresupuesto({
+      presupuesto: {
+        numero: 49,
+        fecha: "2026-10-24",
+        valido_hasta: "2026-11-08",
+        fecha_vencimiento_pago: "2026-10-24",
+        condicion_pago: "contado",
+        neto: 1000,
+        no_gravado: 0,
+        iva: 210,
+        total: 1210,
+      },
+      cliente: {
+        razon_social: "Frutícola del Valle S.R.L.",
+        cuit: "30698765432",
+        condicion_iva: "Responsable Inscripto",
+        direccion: null,
+        localidad: null,
+        provincia: "Río Negro",
+      },
+      items,
+      emisor,
+    });
+    const bytes = await generarPdfComprobante(datos);
+    const texto = (await PDFDocument.load(bytes)).getPages().map(textoDePagina).join("\n");
+    for (const esperado of ["PRESUPUESTO", "P-00000049", "Válido hasta:", "08/11/2026", "$ 1.210,00", "Página 1 de 1"]) {
+      expect(texto).toContain(esperado);
+    }
+    for (const ausente of ["CAE", "Comprobante Autorizado", "ARCA", "FACTURA"]) expect(texto).not.toContain(ausente);
+  });
+
+  it("una factura no lleva la validez del presupuesto", async () => {
+    const { paginas } = await generar(1);
+    expect(paginas[0]).not.toContain("Válido hasta");
+    expect(paginas[0]).not.toContain("no válido como factura");
   });
 });
