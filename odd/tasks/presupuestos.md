@@ -90,8 +90,17 @@ conversión parcial, moneda extranjera.
 
 ## Entrega
 
-- Pronóstico: ~1500 líneas (más de 400) → estrategia `ask-on-risk`; estrategia de cadena
-  pendiente de elegir.
+- Pronóstico: ~1500 líneas → `ask-on-risk`. Estrategia de cadena elegida: **`feature-branch-chain`**.
+- `feat/presupuestos` = rama integradora (PR tracker en draft, no se mergea hasta el final).
+- Cadena (cada PR apunta a la rama anterior):
+
+```
+main ← feat/presupuestos (tracker, draft)
+        ← 01-db (T1) ← 02-logica (T2) ← 03-editor (T3) ← 04-pantallas (T4) ← 05-conversion-pdf (T5+T6)
+```
+
+- PR 01-db: ~1040 líneas (migración + pgTAP, no se parte sin romper cohesión) → pedir `size:exception`.
+- Push y apertura de PRs: decisión del usuario.
 
 ## Criterios de aceptación
 
@@ -120,4 +129,4 @@ conversión parcial, moneda extranjera.
 
 ## Próximo paso
 
-T2 — Lógica pura (tras elegir estrategia de cadena).
+T2 — Lógica pura, en `feat/presupuestos-02-logica`.
