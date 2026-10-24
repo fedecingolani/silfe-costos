@@ -75,7 +75,7 @@ conversión parcial, moneda extranjera.
 
 ## Checklist
 
-- [ ] **T1 — Base de datos.** Migración `presupuesto` + `presupuesto_item` (+ secuencia de
+- [x] **T1 — Base de datos.** Migración `presupuesto` + `presupuesto_item` (+ secuencia de
   número, triggers de inmutabilidad y de vuelta a `abierto`), RPC
   `guardar_presupuesto` y `convertir_presupuesto`, migración RLS, tests pgTAP.
 - [ ] **T2 — Lógica pura.** `src/lib/presupuestos/`: armado y validación del borrador
@@ -111,7 +111,13 @@ conversión parcial, moneda extranjera.
 
 | Tarea | Ruta | Evidencia | Commit |
 | --- | --- | --- | --- |
+| T1 | delegada (writer: 3 archivos nuevos, SQL no trivial) | pgTAP presupuestos 78/78 (RED antes de migrar), comprobantes 165/165, suite 701 PASS; re-corrido presupuestos por el padre: PASS | be4f703 |
+
+## Revisión
+
+- T1: riesgo medio, `slice_budget_reached`. Revisión nativa **pendiente**: el preflight pide declarar
+  un archivo sin trackear ajeno a la feature (`src/app/(app)/configuracion/arca/guia/page.tsx`).
 
 ## Próximo paso
 
-T1 — Base de datos.
+T2 — Lógica pura (tras elegir estrategia de cadena).
