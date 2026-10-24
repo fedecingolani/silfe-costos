@@ -1,12 +1,14 @@
 "use client";
 
-import { useMemo, useRef, useState, useTransition, type FormEvent } from "react";
+import { useRef, useState, useTransition, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Pastilla, Tarjeta, Vacio } from "@/components/ui";
-import { numero, pesos } from "@/lib/formato";
+import { Pastilla, Tarjeta } from "@/components/ui";
+import { CamposComerciales, type DatosComerciales } from "@/components/ventas/CamposComerciales";
+import { TablaItems } from "@/components/ventas/TablaItems";
+import { pesos } from "@/lib/formato";
 import { validarCuit } from "@/lib/clientes/validaciones";
-import { calcularItem, calcularTotales } from "@/lib/comprobantes/calculo";
+import { calcularTotales } from "@/lib/comprobantes/calculo";
 import { letraYTipoNota } from "@/lib/comprobantes/letra";
 import { validarParaAutorizar } from "@/lib/comprobantes/validacion";
 import {
@@ -17,22 +19,11 @@ import {
   type AsociadoManualEnviado,
   type PeriodoAsociado,
 } from "@/lib/comprobantes/asociados";
+import { itemParaCalcular, mapaPrecios, type BorradorEnviado } from "@/lib/comprobantes/borrador";
+import { filaEnviada, filasIniciales, type FilaItem, type ItemEditable } from "@/lib/ventas/filas";
 import {
-  buscarProductos,
-  itemParaCalcular,
-  mapaPrecios,
-  precioPropuesto,
-  vencimientoPara,
-  type BorradorEnviado,
-  type FilaItemEnviada,
-} from "@/lib/comprobantes/borrador";
-import {
-  ALICUOTAS_IVA,
-  CONDICIONES_PAGO,
-  NO_GRAVADO,
   NOMBRES_AMBIENTE_ARCA,
   NOMBRES_CLASE_COMPROBANTE,
-  NOMBRES_CONDICION_PAGO,
   type AmbienteArca,
   type ClaseComprobante,
   type CondicionPago,
@@ -47,18 +38,7 @@ import {
   type ClienteEncontrado,
 } from "./acciones";
 import { BuscadorCliente } from "./BuscadorCliente";
-import type { ContextoEditor, ProductoOfrecido } from "./datos";
-
-/** Renglón en pantalla: lo que se envía más lo que sólo sirve para mostrar. */
-type Fila = FilaItemEnviada & {
-  clave: string;
-  libre: boolean;
-  codigo: string | null;
-  /** Alícuota del producto (texto), para volver a ella después de pasar el renglón a no gravado. */
-  alicuotaProducto: string | null;
-  busqueda: string;
-  aviso: string | null;
-};
+import type { ContextoEditor } from "./datos";
 
 export type ComprobanteEditable = {
   id: string;
@@ -86,37 +66,8 @@ export type ComprobanteEditable = {
     } | null;
     manual: { tipo_arca: number | null; punto_venta: number | null; numero: number | null; fecha: string | null } | null;
   };
-  items: {
-    producto_id: string | null;
-    codigo: string | null;
-    descripcion: string;
-    observaciones: string | null;
-    cantidad: number;
-    precio_unitario: number;
-    descuento_pct: number;
-    gravado: boolean;
-    alicuota_iva: number | null;
-  }[];
+  items: ItemEditable[];
 };
-
-let contador = 0;
-const nuevaClave = () => `fila-${++contador}`;
-
-const filaVacia = (): Fila => ({
-  clave: nuevaClave(),
-  libre: false,
-  productoId: null,
-  codigo: null,
-  alicuotaProducto: null,
-  descripcion: "",
-  observaciones: "",
-  cantidad: "1",
-  precioUnitario: "0",
-  descuentoPct: "0",
-  alicuotaIva: "21",
-  busqueda: "",
-  aviso: null,
-});
 
 /**
  * Clases que se cargan desde esta pantalla. Una nota sobre un comprobante de
@@ -145,16 +96,17 @@ export function EditorComprobante({
 
   const [cliente, setCliente] = useState<ClienteEncontrado | null>(comprobante?.cliente ?? null);
   const [clase, setClase] = useState<ClaseComprobante>(comprobante?.clase ?? "factura");
-  const [fecha, setFecha] = useState(comprobante?.fecha ?? hoy);
-  const [vencimiento, setVencimiento] = useState(comprobante?.fecha_vencimiento_pago ?? hoy);
-  const [condicion, setCondicion] = useState<CondicionPago>(comprobante?.condicion_pago ?? "cuenta_corriente");
-  const [listaId, setListaId] = useState<string | null>(
-    comprobante ? comprobante.lista_precio_id : (contexto.listas[0]?.id ?? null),
-  );
+  const [comerciales, setComerciales] = useState<DatosComerciales>(() => ({
+    fecha: comprobante?.fecha ?? hoy,
+    vencimiento: comprobante?.fecha_vencimiento_pago ?? hoy,
+    condicion: comprobante?.condicion_pago ?? "cuenta_corriente",
+    listaId: comprobante ? comprobante.lista_precio_id : (contexto.listas[0]?.id ?? null),
+    observaciones: comprobante?.observaciones ?? "",
+  }));
+  const { fecha, vencimiento, condicion, listaId, observaciones } = comerciales;
   const [puntoVenta, setPuntoVenta] = useState<number | null>(
     comprobante?.punto_venta ?? contexto.puntosVenta[0] ?? null,
   );
-  const [observaciones, setObservaciones] = useState(comprobante?.observaciones ?? "");
   const interno = comprobante?.asociado?.interno ?? null;
   const manualGuardado = comprobante?.asociado?.manual ?? null;
   const [manual, setManual] = useState<AsociadoManualEnviado>({
@@ -166,36 +118,8 @@ export function EditorComprobante({
   // Una nota sin asociado de la base se asocia a un comprobante cargado a mano o a un período.
   const [asociarA, setAsociarA] = useState<"comprobante" | "periodo">(comprobante?.periodo ? "periodo" : "comprobante");
   const [periodo, setPeriodo] = useState<PeriodoAsociado>(comprobante?.periodo ?? { desde: "", hasta: "" });
-  const [masOpciones, setMasOpciones] = useState(Boolean(comprobante?.observaciones));
   const [precios, setPrecios] = useState(() => mapaPrecios(preciosIniciales));
-  const [filas, setFilas] = useState<Fila[]>(() =>
-    comprobante && comprobante.items.length > 0
-      ? comprobante.items.map((i) => ({
-          clave: nuevaClave(),
-          libre: i.producto_id === null,
-          productoId: i.producto_id,
-          codigo: i.codigo,
-          alicuotaProducto: i.producto_id
-            ? i.gravado
-              ? String(i.alicuota_iva)
-              : (() => {
-                  const p = contexto.productos.find((x) => x.id === i.producto_id);
-                  return p ? String(p.alicuota ?? p.alicuotaOriginal) : null;
-                })()
-            : null,
-          descripcion: i.descripcion,
-          observaciones: i.observaciones ?? "",
-          cantidad: String(i.cantidad),
-          precioUnitario: String(i.precio_unitario),
-          descuentoPct: String(i.descuento_pct),
-          alicuotaIva: i.gravado ? String(i.alicuota_iva) : NO_GRAVADO,
-          busqueda: "",
-          aviso: null,
-        }))
-      : [filaVacia()],
-  );
-
-  const productosPorId = useMemo(() => new Map(contexto.productos.map((p) => [p.id, p])), [contexto.productos]);
+  const [filas, setFilas] = useState<FilaItem[]>(() => filasIniciales(comprobante?.items, contexto.productos));
 
   // ----- Datos calculados ---------------------------------------------------
 
@@ -228,42 +152,12 @@ export function EditorComprobante({
 
   // ----- Cambios ------------------------------------------------------------
 
-  const cambiarFila = (clave: string, cambios: Partial<Fila>) =>
-    setFilas((actuales) => actuales.map((f) => (f.clave === clave ? { ...f, ...cambios } : f)));
-
-  function elegirProducto(clave: string, producto: ProductoOfrecido) {
-    const { precio, enLista } = precioPropuesto(precios, producto.id);
-    cambiarFila(clave, {
-      productoId: producto.id,
-      codigo: producto.codigo,
-      descripcion: producto.nombre,
-      alicuotaIva: producto.alicuota !== null ? String(producto.alicuota) : String(producto.alicuotaOriginal),
-      alicuotaProducto: producto.alicuota !== null ? String(producto.alicuota) : String(producto.alicuotaOriginal),
-      precioUnitario: String(precio),
-      busqueda: "",
-      aviso:
-        producto.alicuota === null
-          ? `La alícuota del producto (${producto.alicuotaOriginal}%) no es una de ARCA: corregila en el producto.`
-          : enLista
-            ? null
-            : "No está en la lista: cargá el precio.",
-    });
-  }
-
-  function cambiarFecha(valor: string) {
-    setFecha(valor);
-    setVencimiento((v) => vencimientoPara(condicion, valor, v));
-  }
-
-  function cambiarCondicion(valor: CondicionPago) {
-    setCondicion(valor);
-    setVencimiento((v) => vencimientoPara(valor, fecha, v));
-  }
-
-  async function cambiarLista(valor: string) {
-    const nueva = valor || null;
-    setListaId(nueva);
-    setPrecios(mapaPrecios(nueva ? await preciosDeLista(nueva) : []));
+  async function cambiarComerciales(cambios: Partial<DatosComerciales>) {
+    setComerciales((actuales) => ({ ...actuales, ...cambios }));
+    if ("listaId" in cambios) {
+      const nueva = cambios.listaId ?? null;
+      setPrecios(mapaPrecios(nueva ? await preciosDeLista(nueva) : []));
+    }
   }
 
   // ----- Acciones -----------------------------------------------------------
@@ -280,15 +174,7 @@ export function EditorComprobante({
       observaciones,
       asociadoManual: esNota && !interno && !porPeriodo ? manual : null,
       periodoAsociado: porPeriodo ? periodo : null,
-      items: filas.map((f) => ({
-        productoId: f.productoId,
-        descripcion: f.descripcion,
-        observaciones: f.observaciones,
-        cantidad: f.cantidad,
-        precioUnitario: f.precioUnitario,
-        descuentoPct: f.descuentoPct,
-        alicuotaIva: f.alicuotaIva,
-      })),
+      items: filas.map(filaEnviada),
     };
     return JSON.stringify(enviado);
   }
@@ -482,80 +368,7 @@ export function EditorComprobante({
               ))}
             </select>
           </div>
-          <div>
-            <label className="etiqueta" htmlFor="fecha">
-              Fecha *
-            </label>
-            <input id="fecha" type="date" value={fecha} onChange={(e) => cambiarFecha(e.target.value)} className="campo" />
-          </div>
-          <div>
-            <label className="etiqueta" htmlFor="condicion">
-              Condición de pago
-            </label>
-            <select
-              id="condicion"
-              value={condicion}
-              onChange={(e) => cambiarCondicion(e.target.value as CondicionPago)}
-              className="campo"
-            >
-              {CONDICIONES_PAGO.map((c) => (
-                <option key={c} value={c}>
-                  {NOMBRES_CONDICION_PAGO[c]}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="etiqueta" htmlFor="vencimiento">
-              Vencimiento del cobro
-            </label>
-            <input
-              id="vencimiento"
-              type="date"
-              value={vencimiento}
-              min={fecha}
-              disabled={condicion === "contado"}
-              onChange={(e) => setVencimiento(e.target.value)}
-              className="campo"
-            />
-          </div>
-          <div>
-            <label className="etiqueta" htmlFor="lista">
-              Lista de precios
-            </label>
-            <select id="lista" value={listaId ?? ""} onChange={(e) => cambiarLista(e.target.value)} className="campo">
-              <option value="">Sin lista</option>
-              {contexto.listas.map((l) => (
-                <option key={l.id} value={l.id}>
-                  {l.nombre}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="sm:col-span-6">
-            <button
-              type="button"
-              onClick={() => setMasOpciones((v) => !v)}
-              className="text-xs font-medium text-marca-700 hover:underline"
-            >
-              {masOpciones ? "− Menos opciones" : "+ Más opciones"}
-            </button>
-            {masOpciones && (
-              <div className="mt-2">
-                <label className="etiqueta" htmlFor="observaciones">
-                  Observaciones
-                </label>
-                <textarea
-                  id="observaciones"
-                  rows={2}
-                  value={observaciones}
-                  onChange={(e) => setObservaciones(e.target.value)}
-                  className="campo"
-                />
-              </div>
-            )}
-          </div>
+          <CamposComerciales valores={comerciales} onCambiar={cambiarComerciales} listas={contexto.listas} />
         </div>
       </Tarjeta>
 
@@ -705,208 +518,7 @@ export function EditorComprobante({
         </Tarjeta>
       )}
 
-      <Tarjeta
-        titulo="Ítems"
-        descripcion="Precios unitarios sin IVA. Al elegir un producto, el precio sale de la lista elegida."
-        acciones={
-          <button type="button" onClick={() => setFilas((f) => [...f, filaVacia()])} className="boton-secundario">
-            + Agregar ítem
-          </button>
-        }
-      >
-        <div className="overflow-x-auto">
-          <table className="tabla">
-            <thead>
-              <tr>
-                <th className="min-w-72">Producto / descripción</th>
-                <th className="w-24">Cantidad</th>
-                <th className="w-32">Precio</th>
-                <th className="w-20">% dto</th>
-                <th className="w-24">IVA %</th>
-                <th className="text-right">Importe</th>
-                <th className="text-right">IVA</th>
-                <th className="text-right">Total</th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
-              {filas.length === 0 && <Vacio mensaje="Agregá al menos un ítem." colSpan={9} />}
-              {filas.map((f, i) => {
-                const calculado = calculables[i] ? calcularItem(calculables[i]) : null;
-                const producto = f.productoId ? productosPorId.get(f.productoId) : undefined;
-                return (
-                  <tr key={f.clave} className="align-top">
-                    <td>
-                      <div className="space-y-1">
-                        {f.libre ? (
-                          <input
-                            value={f.descripcion}
-                            onChange={(e) => cambiarFila(f.clave, { descripcion: e.target.value })}
-                            placeholder="Descripción del ítem libre"
-                            className="campo"
-                            aria-label={`Descripción del ítem ${i + 1}`}
-                          />
-                        ) : f.productoId ? (
-                          <div className="flex items-center justify-between gap-2">
-                            <span className="text-sm">
-                              <span className="font-medium tabular-nums">{f.codigo}</span> {f.descripcion}
-                              {!producto && <span className="ml-1 text-xs text-stone-400">(inactivo)</span>}
-                            </span>
-                            <button
-                              type="button"
-                              onClick={() =>
-                                cambiarFila(f.clave, {
-                                  productoId: null,
-                                  codigo: null,
-                                  alicuotaProducto: null,
-                                  descripcion: "",
-                                  aviso: null,
-                                })
-                              }
-                              className="text-xs text-marca-700 hover:underline"
-                            >
-                              Cambiar
-                            </button>
-                          </div>
-                        ) : (
-                          <BuscadorProducto
-                            productos={contexto.productos}
-                            texto={f.busqueda}
-                            onTexto={(busqueda) => cambiarFila(f.clave, { busqueda })}
-                            onElegir={(p) => elegirProducto(f.clave, p)}
-                            etiqueta={`Producto del ítem ${i + 1}`}
-                          />
-                        )}
-                        <input
-                          value={f.observaciones}
-                          onChange={(e) => cambiarFila(f.clave, { observaciones: e.target.value })}
-                          placeholder="Observaciones (se imprimen debajo)"
-                          className="campo text-xs"
-                          aria-label={`Observaciones del ítem ${i + 1}`}
-                        />
-                        <label className="flex items-center gap-1.5 text-xs text-stone-500">
-                          <input
-                            type="checkbox"
-                            checked={f.libre}
-                            onChange={(e) =>
-                              cambiarFila(f.clave, {
-                                libre: e.target.checked,
-                                productoId: null,
-                                codigo: null,
-                                alicuotaProducto: null,
-                                descripcion: "",
-                                alicuotaIva: "21",
-                                aviso: null,
-                              })
-                            }
-                          />
-                          Ítem libre (sin producto)
-                        </label>
-                        {f.aviso && <p className="text-xs text-amber-700">⚠ {f.aviso}</p>}
-                      </div>
-                    </td>
-                    <td>
-                      <input
-                        inputMode="decimal"
-                        value={f.cantidad}
-                        onChange={(e) => cambiarFila(f.clave, { cantidad: e.target.value })}
-                        className="campo text-right"
-                        aria-label={`Cantidad del ítem ${i + 1}`}
-                      />
-                    </td>
-                    <td>
-                      <input
-                        inputMode="decimal"
-                        value={f.precioUnitario}
-                        onChange={(e) => cambiarFila(f.clave, { precioUnitario: e.target.value, aviso: null })}
-                        className="campo text-right"
-                        aria-label={`Precio del ítem ${i + 1}`}
-                      />
-                    </td>
-                    <td>
-                      <input
-                        inputMode="decimal"
-                        value={f.descuentoPct}
-                        onChange={(e) => cambiarFila(f.clave, { descuentoPct: e.target.value })}
-                        className="campo text-right"
-                        aria-label={`Descuento del ítem ${i + 1}`}
-                      />
-                    </td>
-                    <td>
-                      {f.libre ? (
-                        <select
-                          value={f.alicuotaIva}
-                          onChange={(e) => cambiarFila(f.clave, { alicuotaIva: e.target.value })}
-                          className="campo"
-                          aria-label={`Alícuota del ítem ${i + 1}`}
-                        >
-                          {ALICUOTAS_IVA.map((a) => (
-                            <option key={a} value={String(a)}>
-                              {numero(a, 1)}%
-                            </option>
-                          ))}
-                          <option value={NO_GRAVADO}>No gravado</option>
-                        </select>
-                      ) : f.productoId ? (
-                        // Un producto lleva su alícuota; sólo se puede pasar a no gravado.
-                        <select
-                          value={f.alicuotaIva}
-                          onChange={(e) => cambiarFila(f.clave, { alicuotaIva: e.target.value })}
-                          className="campo"
-                          aria-label={`Alícuota del ítem ${i + 1}`}
-                        >
-                          {f.alicuotaProducto !== null && (
-                            <option value={f.alicuotaProducto}>{numero(Number(f.alicuotaProducto), 1)}%</option>
-                          )}
-                          <option value={NO_GRAVADO}>No gravado</option>
-                        </select>
-                      ) : (
-                        <span className="tabular-nums">—</span>
-                      )}
-                    </td>
-                    <td className="text-right tabular-nums">{calculado ? pesos(calculado.importe) : "—"}</td>
-                    <td className="text-right tabular-nums">{calculado ? pesos(calculado.iva) : "—"}</td>
-                    <td className="text-right tabular-nums">
-                      {calculado ? pesos(calculado.importe + calculado.iva) : "—"}
-                    </td>
-                    <td>
-                      <button
-                        type="button"
-                        onClick={() => setFilas((actuales) => actuales.filter((x) => x.clave !== f.clave))}
-                        className="boton-peligro px-2 py-1 text-xs"
-                        aria-label={`Quitar el ítem ${i + 1}`}
-                      >
-                        Quitar
-                      </button>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-
-        <dl className="ml-auto max-w-xs space-y-1 border-t border-stone-200 p-4 text-sm">
-          <div className="flex justify-between">
-            <dt className="text-stone-500">Neto gravado</dt>
-            <dd className="tabular-nums">{pesos(totales.neto)}</dd>
-          </div>
-          <div className="flex justify-between">
-            <dt className="text-stone-500">No gravado</dt>
-            <dd className="tabular-nums">{pesos(totales.noGravado)}</dd>
-          </div>
-          {totales.ivaPorAlicuota.map((a) => (
-            <div key={a.id} className="flex justify-between">
-              <dt className="text-stone-500">IVA {numero(a.alicuota, 1)}%</dt>
-              <dd className="tabular-nums">{pesos(a.importe)}</dd>
-            </div>
-          ))}
-          <div className="flex justify-between border-t border-stone-200 pt-1 font-semibold">
-            <dt>Total</dt>
-            <dd className="tabular-nums">{pesos(totales.total)}</dd>
-          </div>
-        </dl>
-      </Tarjeta>
+      <TablaItems filas={filas} onCambiar={setFilas} productos={contexto.productos} precios={precios} />
 
       <div className="flex flex-wrap items-center gap-2">
         <button type="submit" disabled={pendiente} className="boton-secundario">
@@ -949,50 +561,5 @@ export function EditorComprobante({
         </div>
       </dialog>
     </form>
-  );
-}
-
-/** Buscador de productos activos por código o nombre (filtra en el navegador). */
-function BuscadorProducto({
-  productos,
-  texto,
-  onTexto,
-  onElegir,
-  etiqueta,
-}: {
-  productos: ProductoOfrecido[];
-  texto: string;
-  onTexto: (texto: string) => void;
-  onElegir: (producto: ProductoOfrecido) => void;
-  etiqueta: string;
-}) {
-  const encontrados = buscarProductos(productos, texto);
-  return (
-    <div className="relative">
-      <input
-        type="search"
-        value={texto}
-        onChange={(e) => onTexto(e.target.value)}
-        placeholder="Buscar producto por código o nombre"
-        className="campo"
-        aria-label={etiqueta}
-      />
-      {texto.trim() !== "" && (
-        <ul className="absolute z-10 mt-1 max-h-64 w-full overflow-y-auto rounded-lg border border-stone-200 bg-white text-sm shadow-lg">
-          {encontrados.length === 0 && <li className="px-3 py-2 text-stone-400">Ningún producto activo coincide.</li>}
-          {encontrados.map((p) => (
-            <li key={p.id}>
-              <button
-                type="button"
-                onClick={() => onElegir(p)}
-                className="block w-full px-3 py-1.5 text-left hover:bg-marca-50"
-              >
-                <span className="font-medium tabular-nums">{p.codigo}</span> {p.nombre}
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
   );
 }
