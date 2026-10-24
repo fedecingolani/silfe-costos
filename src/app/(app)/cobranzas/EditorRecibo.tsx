@@ -211,7 +211,10 @@ export function EditorRecibo({
   );
 
   const medios = useMemo(() => filas.map(medioDeFila), [filas]);
-  const total = totalRecibo(medios.map((m) => ({ importe: Number.isFinite(m.importe) ? m.importe : 0 })));
+  const total = useMemo(
+    () => totalRecibo(medios.map((m) => ({ importe: Number.isFinite(m.importe) ? m.importe : 0 }))),
+    [medios],
+  );
   const debitos = useMemo(() => cuenta?.debitos ?? [], [cuenta]);
   const elegidas = useMemo(() => (contado ? [] : leerImputacionesEditor(aImputar)), [aImputar, contado]);
   // Los importes ilegibles bloquean el guardado (ver errores); los totales en vivo usan sólo los legibles.
