@@ -136,7 +136,7 @@ export default async function PresupuestoPage({ params }: { params: Promise<{ id
 
       {p.comprobante_id && (
         <div role="status" className="mb-4 rounded-lg border border-marca-200 bg-marca-50 px-3 py-2 text-sm text-marca-800">
-          Convertido el {fechaHora(p.convertido_en)}.{" "}
+          Convertido el {fechaHora(p.convertido_en)} ·{" "}
           <Link href={`/comprobantes/${p.comprobante_id}`} className="font-medium underline">
             Ver la factura
           </Link>

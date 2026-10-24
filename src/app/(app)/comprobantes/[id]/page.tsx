@@ -22,6 +22,7 @@ import {
   type ComprobanteRelacionado,
 } from "@/lib/comprobantes/asociados-carga";
 import { NOMBRES_ESTADO, TONO_ESTADO, nombreComprobante, numeroVisible } from "@/lib/comprobantes/listado";
+import { numeroPresupuesto } from "@/lib/presupuestos/listado";
 import {
   NOMBRES_AMBIENTE_ARCA,
   NOMBRES_CONDICION_PAGO,
@@ -141,6 +142,20 @@ export default async function ComprobantePage({ params }: { params: Promise<{ id
       cheque N° {chequeRechazado.numero} ({chequeRechazado.banco})
     </Link>
   );
+  // Factura generada al convertir un presupuesto: enlaza al presupuesto (borrador y detalle).
+  const { data: presupuestoOrigen } =
+    c.clase === "factura"
+      ? await supabase.from("presupuesto").select("id, numero").eq("comprobante_id", c.id).maybeSingle()
+      : { data: null };
+  const origen = presupuestoOrigen && (
+    <p className="mb-4 text-sm text-stone-600">
+      Generada desde el presupuesto{" "}
+      <Link href={`/presupuestos/${presupuestoOrigen.id}`} className="font-medium text-marca-700 hover:underline">
+        {numeroPresupuesto(presupuestoOrigen.numero)}
+      </Link>
+      .
+    </p>
+  );
   const homologacion = c.ambiente === "homologacion" && (
     <div role="status" className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
       Homologación: este comprobante no tiene validez fiscal.
@@ -176,6 +191,7 @@ export default async function ComprobantePage({ params }: { params: Promise<{ id
           acciones={<Pastilla tono={TONO_ESTADO[c.estado]}>{NOMBRES_ESTADO[c.estado]}</Pastilla>}
         />
         {homologacion}
+        {origen}
         {enlaceCheque && (
           <div role="status" className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
             Nota de débito por cheque rechazado: revisala y autorizala. Es la del {enlaceCheque}; no se puede borrar.
@@ -305,6 +321,7 @@ export default async function ComprobantePage({ params }: { params: Promise<{ id
         acciones={<Pastilla tono={TONO_ESTADO[c.estado]}>{NOMBRES_ESTADO[c.estado]}</Pastilla>}
       />
       {homologacion}
+      {origen}
 
       {enlaceCheque && (
         <div role="status" className="mb-4 rounded-lg border border-stone-200 bg-stone-50 px-3 py-2 text-sm text-stone-700">
