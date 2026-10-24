@@ -627,6 +627,50 @@ export type ComprobanteAsociado = {
 };
 
 // ---------------------------------------------------------------------
+// Presupuestos de venta
+// ---------------------------------------------------------------------
+
+/** abierto: se edita y se convierte; convertido: ya generó su borrador de factura. */
+export const ESTADOS_PRESUPUESTO = ["abierto", "convertido"] as const;
+
+export type EstadoPresupuesto = (typeof ESTADOS_PRESUPUESTO)[number];
+
+/** Días de validez de un presupuesto nuevo. */
+export const DIAS_VALIDEZ_PRESUPUESTO = 15;
+
+/** Fila de presupuesto. Los importes llegan de Postgres como números. */
+export type Presupuesto = {
+  id: string;
+  /** Correlativo interno: se muestra como P-00000001. */
+  numero: number;
+  cliente_id: string;
+  /** yyyy-mm-dd */
+  fecha: string;
+  /** yyyy-mm-dd, no anterior a la fecha. */
+  valido_hasta: string;
+  fecha_vencimiento_pago: string;
+  condicion_pago: CondicionPago;
+  lista_precio_id: string | null;
+  observaciones: string | null;
+  /** Neto gravado. */
+  neto: number;
+  no_gravado: number;
+  iva: number;
+  /** neto + no_gravado + iva */
+  total: number;
+  estado: EstadoPresupuesto;
+  /** Borrador de factura generado al convertir. */
+  comprobante_id: string | null;
+  convertido_en: string | null;
+  creado_por: string | null;
+  creado_en: string;
+  actualizado_en: string;
+};
+
+/** Fila de presupuesto_item: las mismas columnas que comprobante_item. */
+export type PresupuestoItem = Omit<ComprobanteItem, "comprobante_id"> & { presupuesto_id: string };
+
+// ---------------------------------------------------------------------
 // Cobranzas, cartera de cheques y cuenta corriente
 // ---------------------------------------------------------------------
 

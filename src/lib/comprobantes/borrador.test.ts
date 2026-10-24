@@ -3,11 +3,14 @@ import {
   aDecimal,
   alicuotaArca,
   armarBorrador,
+  armarItems,
   buscarProductos,
+  erroresVencimiento,
   itemParaCalcular,
   mapaPrecios,
   mensajeErrorGuardado,
   precioPropuesto,
+  totalesDeItems,
   vencimientoPara,
   type BorradorEnviado,
   type ProductoCatalogo,
@@ -396,5 +399,37 @@ describe("armarBorrador: notas con comprobante asociado", () => {
   it("informa los errores del asociado cargado a mano", () => {
     const r = armar({ clase: "nota_credito", asociadoManual: { ...manual, numero: "0" } });
     expect(r).toEqual({ errores: ["Comprobante asociado: el número tiene que ser un entero mayor a cero."] });
+  });
+});
+
+describe("armarItems y totalesDeItems (compartidos con presupuestos)", () => {
+  it("arman los mismos ítems y totales que el borrador", () => {
+    const resultado = armarBorrador(enviado(), contexto);
+    if (!("borrador" in resultado)) throw new Error(JSON.stringify(resultado));
+    const { items, errores } = armarItems(enviado().items, productos);
+    expect(errores).toEqual([]);
+    expect(items).toEqual(resultado.borrador.items);
+    expect(totalesDeItems(items)).toMatchObject({ neto: 2300.9, noGravado: 0, iva: 430.69, total: 2731.59 });
+  });
+
+  it("devuelven los errores numerados por renglón", () => {
+    expect(armarItems([null, { ...enviado().items[1], cantidad: "0" }], productos)).toEqual({
+      items: [],
+      errores: ["Ítem 1: los datos no son válidos.", "Ítem 2: la cantidad tiene que ser mayor a cero."],
+    });
+  });
+});
+
+describe("erroresVencimiento", () => {
+  it("con cuenta corriente pide un vencimiento válido y no anterior a la fecha", () => {
+    expect(erroresVencimiento("cuenta_corriente", "2026-10-16", "2026-10-16")).toEqual([]);
+    expect(erroresVencimiento("cuenta_corriente", "2026-10-16", "")).toEqual(["El vencimiento del cobro no es válido."]);
+    expect(erroresVencimiento("cuenta_corriente", "2026-10-16", "2026-10-15")).toEqual([
+      "El vencimiento del cobro no puede ser anterior a la fecha.",
+    ]);
+  });
+
+  it("con contado no mira el vencimiento", () => {
+    expect(erroresVencimiento("contado", "2026-10-16", "")).toEqual([]);
   });
 });
