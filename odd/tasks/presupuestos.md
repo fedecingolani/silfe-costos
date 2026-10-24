@@ -100,7 +100,7 @@ main ← feat/presupuestos (tracker, draft)
 ```
 
 - PR 01-db: ~1040 líneas (migración + pgTAP, no se parte sin romper cohesión) → pedir `size:exception`.
-- Push y apertura de PRs: decisión del usuario.
+- PRs abiertos el 24/10/2026: integradora #4 (draft), #5 01-db, #6 02-logica, #7 03-editor, #8 04-pantallas, #9 05-conversion-pdf. Todos con `size:exception`.
 
 ## Criterios de aceptación
 
@@ -135,4 +135,4 @@ main ← feat/presupuestos (tracker, draft)
 
 ## Próximo paso
 
-Push de la cadena y apertura de PRs (decisión del usuario); revisión nativa pendiente de T1–T6; reaplicar migraciones al remoto con `supabase db push` cuando se mergee.
+Revisar #5 → #9 en orden y después mergear #4; revisión nativa pendiente de T1–T6; reaplicar migraciones al remoto con `supabase db push` cuando se mergee.
