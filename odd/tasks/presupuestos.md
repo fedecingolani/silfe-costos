@@ -78,7 +78,7 @@ conversión parcial, moneda extranjera.
 - [x] **T1 — Base de datos.** Migración `presupuesto` + `presupuesto_item` (+ secuencia de
   número, triggers de inmutabilidad y de vuelta a `abierto`), RPC
   `guardar_presupuesto` y `convertir_presupuesto`, migración RLS, tests pgTAP.
-- [ ] **T2 — Lógica pura.** `src/lib/presupuestos/`: armado y validación del borrador
+- [x] **T2 — Lógica pura.** `src/lib/presupuestos/`: armado y validación del borrador
   (reutilizando `calculo.ts`), número visible, vencido, datos de conversión. Con tests.
 - [ ] **T3 — Extraer componentes del editor de comprobantes.** Tabla de ítems y campos
   comerciales de cabecera a componentes reutilizables, sin cambio de comportamiento.
@@ -90,8 +90,17 @@ conversión parcial, moneda extranjera.
 
 ## Entrega
 
-- Pronóstico: ~1500 líneas (más de 400) → estrategia `ask-on-risk`; estrategia de cadena
-  pendiente de elegir.
+- Pronóstico: ~1500 líneas → `ask-on-risk`. Estrategia de cadena elegida: **`feature-branch-chain`**.
+- `feat/presupuestos` = rama integradora (PR tracker en draft, no se mergea hasta el final).
+- Cadena (cada PR apunta a la rama anterior):
+
+```
+main ← feat/presupuestos (tracker, draft)
+        ← 01-db (T1) ← 02-logica (T2) ← 03-editor (T3) ← 04-pantallas (T4) ← 05-conversion-pdf (T5+T6)
+```
+
+- PR 01-db: ~1040 líneas (migración + pgTAP, no se parte sin romper cohesión) → pedir `size:exception`.
+- Push y apertura de PRs: decisión del usuario.
 
 ## Criterios de aceptación
 
@@ -112,12 +121,15 @@ conversión parcial, moneda extranjera.
 | Tarea | Ruta | Evidencia | Commit |
 | --- | --- | --- | --- |
 | T1 | delegada (writer: 3 archivos nuevos, SQL no trivial) | pgTAP presupuestos 78/78 (RED antes de migrar), comprobantes 165/165, suite 701 PASS; re-corrido presupuestos por el padre: PASS | be4f703 |
+| T2 | delegada (writer: lib nueva + extracción `armarItems`/`totalesDeItems` en comprobantes) | vitest presupuestos RED (módulos inexistentes) → 33/33; `npm test` 678 PASS (re-corrido por el padre), tsc y lint limpios | 116e35d |
 
 ## Revisión
 
 - T1: riesgo medio, `slice_budget_reached`. Revisión nativa **pendiente**: el preflight pide declarar
   un archivo sin trackear ajeno a la feature (`src/app/(app)/configuracion/arca/guia/page.tsx`).
+- T2: riesgo medio, `slice_budget_reached` (791 líneas). Revisión nativa **pendiente** por el mismo motivo.
+- PR 02-logica: ~776 líneas (la mitad son tests; lib + tests cohesivos) → `size:exception`.
 
 ## Próximo paso
 
-T2 — Lógica pura (tras elegir estrategia de cadena).
+T3 — Extraer componentes del editor, en `feat/presupuestos-03-editor`.
