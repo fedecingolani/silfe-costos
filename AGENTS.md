@@ -14,7 +14,7 @@ Este directorio (`silfecostos/`) es su **propio repo git**, anidado dentro de un
 
 ## Stack
 
-- **Next.js 15** (App Router, Server Actions) + React 19 + TypeScript (`strict: true`)
+- **Next.js 16** (App Router, Server Actions) + React 19 + TypeScript (`strict: true`)
 - **Tailwind CSS 4**
 - **Supabase** (Postgres 17 + Auth) — sin signup abierto, usuarios se crean a mano desde el dashboard
 - Deploy a **Cloudflare Workers** vía `@opennextjs/cloudflare` (no Vercel)
@@ -25,7 +25,7 @@ Patrón de carpetas por feature, sin capas hexagonales ni `hooks/`/`types/` sepa
 
 ```
 src/
-├── middleware.ts          # guard de auth (Supabase SSR), redirige a /login
+├── middleware.ts          # guard de auth (Supabase SSR), redirige a /login. Sigue como middleware (edge) y no `proxy.ts`: en Next 16 proxy corre sólo en Node y OpenNext lo soporta en Workers como experimental
 ├── app/
 │   ├── login/             # única ruta pública
 │   └── (app)/              # todo lo demás, requiere sesión
@@ -61,7 +61,7 @@ Alias de import: `@/*` → `./src/*`.
 npm run dev          # next dev
 npm run build        # next build
 npm run typecheck    # tsc --noEmit
-npm run lint         # next lint
+npm run lint         # eslint . (Next 16 ya no trae `next lint`)
 npm run preview      # build + preview local sobre el runtime de Cloudflare
 npm run deploy       # build + deploy a Cloudflare Workers
 ```

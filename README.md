@@ -151,4 +151,4 @@ costos pero no los modifique), el lugar para eso son las políticas en
 
 ## Stack
 
-Next.js 15 (App Router, Server Actions) · TypeScript · Tailwind CSS 4 · Supabase (Postgres + Auth)
+Next.js 16 (App Router, Server Actions) · TypeScript · Tailwind CSS 4 · Supabase (Postgres + Auth)
