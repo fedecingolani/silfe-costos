@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
-import { Encabezado, Tarjeta, Vacio } from "@/components/ui";
+import { Encabezado, Kpi, Tarjeta, Vacio } from "@/components/ui";
 import { Modal } from "@/components/Modal";
 import type { ClienteContacto, ClienteSeguimiento, EstadoSeguimiento, Zona } from "@/lib/tipos";
 import { fecha } from "@/lib/formato";
@@ -11,11 +11,15 @@ import { PastillaSeguimiento, UltimoContacto } from "../clientes/componentes";
 
 export const dynamic = "force-dynamic";
 
-/** Grupos de la pantalla, en orden. Dentro de cada uno, el más viejo primero. */
+/**
+ * Grupos de la pantalla, en orden. Dentro de cada uno, el más viejo primero;
+ * los sin agenda no tienen fecha y van por razón social.
+ */
 const GRUPOS: { estado: EstadoSeguimiento; titulo: string; vacio: string }[] = [
   { estado: "atrasado", titulo: "Atrasados", vacio: "No hay contactos atrasados." },
   { estado: "hoy", titulo: "Hoy", vacio: "No hay contactos para hoy." },
   { estado: "proximo", titulo: "Próximos 7 días", vacio: "No hay contactos en los próximos 7 días." },
+  { estado: "sin_agenda", titulo: "Sin agenda", vacio: "No hay clientes sin próximo contacto." },
 ];
 
 type ContactoAgenda = Pick<ClienteContacto, "id" | "cliente_id" | "nombre" | "cargo" | "telefono" | "whatsapp">;
@@ -74,6 +78,10 @@ export default async function SeguimientoPage({
     contactosPorCliente.set(c.cliente_id, [...(contactosPorCliente.get(c.cliente_id) ?? []), c]);
   }
 
+  const filasPorEstado = new Map(
+    GRUPOS.map((g) => [g.estado, clientes.filter((c) => c.estado_seguimiento === g.estado)]),
+  );
+
   const ahora = fechaLocalArgentina(new Date());
   const volver = zonaId ? `/seguimiento?zona=${zonaId}` : "/seguimiento";
 
@@ -81,8 +89,24 @@ export default async function SeguimientoPage({
     <>
       <Encabezado
         titulo="Seguimiento"
-        descripcion="A quién hay que contactar: los atrasados, los de hoy y los de los próximos 7 días. Sólo clientes activos."
+        descripcion="A quién hay que contactar: los atrasados, los de hoy, los de los próximos 7 días y los que no tienen próximo contacto. Sólo clientes activos."
       />
+
+      <div className="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        {GRUPOS.map((grupo) => {
+          const cantidad = filasPorEstado.get(grupo.estado)?.length ?? 0;
+          return (
+            <a key={grupo.estado} href={`#grupo-${grupo.estado}`} className="block hover:opacity-80">
+              <Kpi
+                etiqueta={grupo.titulo}
+                valor={String(cantidad)}
+                detalle={cantidad === 1 ? "cliente" : "clientes"}
+                acento={grupo.estado === "atrasado" && cantidad > 0}
+              />
+            </a>
+          );
+        })}
+      </div>
 
       <form method="get" className="tarjeta mb-4 flex flex-wrap items-end gap-3 p-4">
         <div className="w-56">
@@ -110,9 +134,14 @@ export default async function SeguimientoPage({
 
       <div className="space-y-6">
         {GRUPOS.map((grupo) => {
-          const filas = clientes.filter((c) => c.estado_seguimiento === grupo.estado);
+          const filas = filasPorEstado.get(grupo.estado) ?? [];
           return (
-            <Tarjeta key={grupo.estado} titulo={`${grupo.titulo} (${filas.length})`}>
+            <Tarjeta
+              key={grupo.estado}
+              id={`grupo-${grupo.estado}`}
+              className="scroll-mt-4"
+              titulo={`${grupo.titulo} (${filas.length})`}
+            >
               <div className="overflow-x-auto">
                 <table className="tabla">
                   <thead>

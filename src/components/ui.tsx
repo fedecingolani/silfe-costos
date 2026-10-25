@@ -22,12 +22,14 @@ export function Encabezado({
 }
 
 export function Tarjeta({
+  id,
   titulo,
   descripcion,
   acciones,
   children,
   className = "",
 }: {
+  id?: string;
   titulo?: string;
   descripcion?: string;
   acciones?: ReactNode;
@@ -35,7 +37,7 @@ export function Tarjeta({
   className?: string;
 }) {
   return (
-    <section className={`tarjeta ${className}`}>
+    <section id={id} className={`tarjeta ${className}`}>
       {(titulo || acciones) && (
         <header className="flex flex-wrap items-center justify-between gap-3 border-b border-stone-200 px-4 py-3">
           <div>
