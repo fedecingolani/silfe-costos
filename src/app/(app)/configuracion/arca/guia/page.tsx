@@ -80,6 +80,15 @@ export default function GuiaCredencialesArcaPage() {
   -subj "/C=AR/O=RAZON SOCIAL SA/CN=silfe/serialNumber=CUIT 30123456789" \\
   -out silfe.csr`}
           </Codigo>
+          <Nota>
+            En Windows con Git Bash, anteponé <code>MSYS_NO_PATHCONV=1</code> al comando. Si no, Git Bash toma el
+            texto que empieza con <code>/C=AR</code> como una ruta de archivo, lo cambia y el pedido sale mal.
+          </Nota>
+          <Codigo>
+            {`MSYS_NO_PATHCONV=1 openssl req -new -key silfe.key \\
+  -subj "/C=AR/O=RAZON SOCIAL SA/CN=silfe/serialNumber=CUIT 30123456789" \\
+  -out silfe.csr`}
+          </Codigo>
           <p>
             Quedan dos archivos: <Ruta>silfe.key</Ruta> (guardalo, se sube en esta aplicación) y{" "}
             <Ruta>silfe.csr</Ruta> (es el que se pega en ARCA).
