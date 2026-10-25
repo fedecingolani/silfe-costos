@@ -10,6 +10,7 @@ const config = [
       ".next/**",
       ".open-next/**",
       ".wrangler/**",
+      "supabase/.temp/**",
       "out/**",
       "build/**",
       "next-env.d.ts",
