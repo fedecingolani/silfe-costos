@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { Encabezado, Pastilla, Tarjeta } from "@/components/ui";
 import { fechaHora } from "@/lib/formato";
@@ -170,17 +171,13 @@ export default async function ArcaPage() {
           <Tarjeta titulo="Cómo se consiguen las credenciales">
             <div className="space-y-2 p-4 text-sm text-stone-600">
               <p>
-                1. Generá una clave privada y un pedido de certificado (CSR) con OpenSSL. Guardá el archivo .key:
-                es lo que se sube acá junto con el certificado.
+                Se genera una clave privada con OpenSSL, se pide el certificado en ARCA con clave fiscal, se lo
+                autoriza para factura electrónica (wsfe) y se habilita un punto de venta para Web Services.
               </p>
               <p>
-                2. En ARCA, con clave fiscal, pedí el certificado: &quot;WSASS – Autogestión Certificados
-                Homologación&quot; para pruebas o &quot;Administración de Certificados Digitales&quot; para
-                producción. Descargá el .crt.
-              </p>
-              <p>
-                3. Asociá el certificado al servicio de factura electrónica (wsfe) y habilitá un punto de venta
-                para Web Services.
+                <Link href="/configuracion/arca/guia" className="font-medium text-marca-700 hover:underline">
+                  Ver la guía paso a paso →
+                </Link>
               </p>
               <p className="text-xs text-stone-500">
                 El ticket de acceso de ARCA dura 12 horas y se reutiliza mientras esté vigente. Al reemplazar las
