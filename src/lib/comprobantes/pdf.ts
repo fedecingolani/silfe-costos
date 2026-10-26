@@ -128,8 +128,8 @@ export function recortar(lineas: string[], maximo: number): string[] {
 export async function generarPdfComprobante(datos: DatosPdfComprobante, logoPng?: Uint8Array | null): Promise<Uint8Array> {
   const doc = await PDFDocument.create();
   doc.setTitle(datos.nombreArchivo);
-  doc.setCreator("Silfe Costos");
-  doc.setProducer("Silfe Costos");
+  doc.setCreator("Charoli Gestión");
+  doc.setProducer("Charoli Gestión");
 
   const normal = await doc.embedFont(StandardFonts.Helvetica);
   const negrita = await doc.embedFont(StandardFonts.HelveticaBold);

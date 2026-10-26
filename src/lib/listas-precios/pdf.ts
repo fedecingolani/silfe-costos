@@ -84,8 +84,8 @@ function partirEnLineas(texto: string, fuente: PDFFont, tamano: number, ancho: n
 export async function generarPdf(datos: DatosListaDescarga): Promise<Uint8Array> {
   const doc = await PDFDocument.create();
   doc.setTitle(datos.titulo);
-  doc.setCreator("Silfe Costos");
-  doc.setProducer("Silfe Costos");
+  doc.setCreator("Charoli Gestión");
+  doc.setProducer("Charoli Gestión");
   // Fechas fijas de la lista (no la hora de generación): la misma lista da los mismos bytes.
   const creada = new Date(datos.creadoEn);
   if (!Number.isNaN(creada.getTime())) {

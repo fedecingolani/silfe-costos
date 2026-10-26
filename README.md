@@ -1,4 +1,9 @@
-# Silfe Costos
+# Charoli Gestión
+
+Sistema de gestión para empresas de fabricación: costos, ventas, facturación electrónica (ARCA)
+y cobranzas. Se despliega una instancia por empresa.
+
+## Módulo de costos
 
 Sistema de costeo de productos para la fabricación de elementos de cosecha de fruta.
 

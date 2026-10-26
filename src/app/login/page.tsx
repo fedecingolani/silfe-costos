@@ -10,8 +10,8 @@ export default function LoginPage() {
   return (
     <main className="flex min-h-screen items-center justify-center px-4">
       <div className="tarjeta w-full max-w-sm p-6">
-        <h1 className="text-xl font-semibold text-marca-700">Silfe Costos</h1>
-        <p className="mt-1 text-sm text-stone-500">Sistema de costeo de productos.</p>
+        <h1 className="text-xl font-semibold text-marca-700">Charoli Gestión</h1>
+        <p className="mt-1 text-sm text-stone-500">Sistema de gestión.</p>
 
         <form onSubmit={enviarSinReiniciar(accion)} className="mt-6 space-y-4">
           <div>

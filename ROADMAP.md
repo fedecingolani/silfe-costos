@@ -1,6 +1,6 @@
-# Roadmap — Silfe Costos
+# Roadmap — Charoli Gestión
 
-Silfe Costos es el **primer módulo** de un programa de uso interno que se va a construir
+Charoli Gestión nació como el sistema de costos (su **primer módulo**) de un programa de uso interno que se va a construir
 alrededor de este repo. Este roadmap registra lo que ya está hecho y ordena lo que sigue.
 
 Producción: https://silfe-costos.fedechingo.workers.dev · Rama principal: `main`.

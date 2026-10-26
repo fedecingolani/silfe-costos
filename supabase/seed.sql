@@ -1,5 +1,5 @@
 -- =====================================================================
--- Silfe Costos - Datos de ejemplo
+-- Charoli Gestión - Datos de ejemplo
 -- Fabricación de elementos para cosecha de fruta.
 -- Ejecutable varias veces (idempotente por códigos).
 -- =====================================================================

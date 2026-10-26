@@ -1,4 +1,4 @@
-# AGENTS.md — Silfe Costos
+# AGENTS.md — Charoli Gestión
 
 Guía de contexto para agentes de IA que trabajen en este repo. Leé esto antes de tocar código.
 
@@ -8,9 +8,15 @@ Sistema interno de costeo de productos para una empresa que fabrica elementos de
 
 Toda la lógica de cálculo vive en **vistas de Postgres** (no en el código de la app): un cambio de precio o de tiempo de proceso se propaga solo. Ver [README.md](README.md) para las fórmulas completas y el detalle de reglas de negocio (merma por material vs. merma de uso, factor de conversión propio de cada materia prima, tope de 2 niveles de estructura, etc.) — no las dupliques acá, son la fuente de verdad y pueden cambiar.
 
-## Aviso: repo anidado
+## Producto e instancias
 
-Este directorio (`silfecostos/`) es su **propio repo git**, anidado dentro de un repo padre en `/Users/federico/Proyectos/SILFE/silfe-costos` que hoy no tiene código propio (solo `.atl/` y artefactos sueltos). Todo el trabajo real pasa acá adentro. Si alguna vez ves comandos `git` que corren desde el padre, confirmá el `cwd` antes de interpretarlos.
+El producto se llama **Charoli Gestión** (identificador técnico `charoli-gestion`). Se despliega **una instancia por empresa**: cada empresa tiene su propio proyecto de Supabase y su propio worker. No es multi-tenant: no agregues `empresa_id` a las tablas. Los datos de la empresa (razón social, logo, CUIT, colores) son configuración, no código; no escribas el nombre de una empresa en el código.
+
+Nombres que todavía no cambiaron, a propósito: el worker de Cloudflare sigue siendo `silfe-costos` (renombrarlo crea otro worker con otra URL) y el proyecto remoto de Supabase también se llama `silfe-costos`.
+
+## Aviso: carpeta contenedora
+
+Este directorio es el repo git. La carpeta que lo contiene (`/Users/federico/Proyectos/SILFE/silfe-costos`) **no es un repo**: solo guarda `.atl/`, los worktrees y archivos sueltos. Si ves comandos `git` que corren desde ahí, confirmá el `cwd` antes de interpretarlos.
 
 ## Stack
 
