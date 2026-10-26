@@ -14,9 +14,9 @@ El producto se llama **Charoli Gestión** (identificador técnico `charoli-gesti
 
 Nombres que todavía no cambiaron, a propósito: el worker de Cloudflare sigue siendo `silfe-costos` (renombrarlo crea otro worker con otra URL) y el proyecto remoto de Supabase también se llama `silfe-costos`.
 
-## Aviso: carpeta contenedora
+## Ubicación local
 
-Este directorio es el repo git. La carpeta que lo contiene (`/Users/federico/Proyectos/SILFE/silfe-costos`) **no es un repo**: solo guarda `.atl/`, los worktrees y archivos sueltos. Si ves comandos `git` que corren desde ahí, confirmá el `cwd` antes de interpretarlos.
+El repo vive en `SILFE/charoli-gestion/` y sus worktrees en la carpeta hermana `SILFE/charoli-gestion-worktrees/`. No hay carpeta contenedora ni repo padre.
 
 ## Stack
 

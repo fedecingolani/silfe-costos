@@ -54,7 +54,14 @@ Ruta: los cambios son reemplazos de texto ya entendidos, sin diseño pendiente; 
 
 ## Próximo paso
 
-Aplanar la carpeta local y parametrizar la identidad de la empresa.
+Parametrizar la identidad de la empresa (feature propia) y migrar el worker de Cloudflare.
+
+## Carpeta local
+
+Aplanada: el repo pasó de `SILFE/silfe-costos/silfecostos` a `SILFE/charoli-gestion` y los
+worktrees a `SILFE/charoli-gestion-worktrees` (reparados con `git worktree repair`). El SQL de
+Xubio y los sobrantes de la carpeta vieja (`.atl`, `.claude`, `package-lock.json` vacío) quedaron
+en `SILFE/_archivo/`. Se borraron `firebase-debug.log` y `.wrangler/`.
 
 ## Verificación
 
