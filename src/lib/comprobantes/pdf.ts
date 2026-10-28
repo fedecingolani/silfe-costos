@@ -72,11 +72,12 @@ type Columna = { titulo: string; ancho: number; alinear: Alineacion; campo: keyo
 /** Columnas de la tabla: suman el ancho útil de la página (539 pt). */
 const COLUMNAS: Columna[] = [
   { titulo: "Cód.", ancho: 42, alinear: "izquierda", campo: "codigo", ajustar: true },
-  { titulo: "Artículo", ancho: 130, alinear: "izquierda", campo: "articulo", ajustar: true },
-  { titulo: "Observaciones", ancho: 80, alinear: "izquierda", campo: "observaciones", ajustar: true },
+  { titulo: "Artículo", ancho: 95, alinear: "izquierda", campo: "articulo", ajustar: true },
+  { titulo: "Observaciones", ancho: 60, alinear: "izquierda", campo: "observaciones", ajustar: true },
   { titulo: "Cantidad", ancho: 45, alinear: "derecha", campo: "cantidad" },
   { titulo: "Precio", ancho: 55, alinear: "derecha", campo: "precio" },
   { titulo: "% Dto.", ancho: 30, alinear: "derecha", campo: "descuento" },
+  { titulo: "Precio c/Dto.", ancho: 55, alinear: "derecha", campo: "precioConDescuento" },
   { titulo: "Importe", ancho: 57, alinear: "derecha", campo: "importe" },
   { titulo: "Alíc. IVA", ancho: 38, alinear: "derecha", campo: "alicuota" },
   { titulo: "Impt. c/IVA", ancho: 62.28, alinear: "derecha", campo: "importeConIva" },

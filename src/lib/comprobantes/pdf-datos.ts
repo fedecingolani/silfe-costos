@@ -87,6 +87,7 @@ export type ItemPdf = {
   cantidad: string;
   precio: string;
   descuento: string;
+  precioConDescuento: string;
   importe: string;
   alicuota: string;
   importeConIva: string;
@@ -274,6 +275,7 @@ export function itemsDelPdf(items: readonly FilaItemPdf[]): ItemPdf[] {
     cantidad: `${precioFmt.format(Number(i.cantidad))}${i.unidad ? ` ${i.unidad}` : ""}`,
     precio: precioFmt.format(Number(i.precio_unitario)),
     descuento: importeFmt.format(Number(i.descuento_pct)),
+    precioConDescuento: precioFmt.format((Number(i.precio_unitario) * (100 - Number(i.descuento_pct))) / 100),
     importe: formatearImporte(Number(i.importe)),
     alicuota: i.gravado === false ? "No grav." : `${alicuotaFmt.format(Number(i.alicuota_iva))}%`,
     importeConIva: formatearImporte(Number(i.importe) + Number(i.iva)),

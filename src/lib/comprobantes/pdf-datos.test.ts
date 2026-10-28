@@ -187,11 +187,26 @@ describe("armarDatosPdf", () => {
         cantidad: "100,00 un",
         precio: "14.000,00",
         descuento: "0,00",
+        precioConDescuento: "14.000,00",
         importe: "1.400.000,00",
         alicuota: "21%",
         importeConIva: "1.694.000,00",
       },
     ]);
+  });
+
+  it("muestra el precio unitario con el descuento aplicado", () => {
+    const conDescuento = armarDatosPdf({
+      comprobante: COMPROBANTE_EJEMPLO,
+      items: [
+        { ...ITEM_EJEMPLO, precio_unitario: 14000, descuento_pct: 12.5 },
+        { ...ITEM_EJEMPLO, precio_unitario: 33.3333, descuento_pct: 10 },
+        { ...ITEM_EJEMPLO, precio_unitario: 500, descuento_pct: 100 },
+      ],
+      emisor: EMISOR_EJEMPLO,
+    });
+    // 33,3333 × 0,9 = 29,99997: se redondea a los 4 decimales del precio.
+    expect(conDescuento.items.map((i) => i.precioConDescuento)).toEqual(["12.250,00", "30,00", "0,00"]);
   });
 
   it("muestra el IVA de todas las alícuotas gravadas, con cero las que no tiene", () => {
