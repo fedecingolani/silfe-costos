@@ -62,8 +62,20 @@ describe("saldoDe", () => {
 
 describe("datosAsociado y asociadosParaGuardar", () => {
   it("usa los datos del comprobante de la base, o los cargados a mano", () => {
-    expect(datosAsociado(interno)).toEqual({ tipo_arca: 1, punto_venta: 7, numero: 361, fecha: "2026-10-10" });
-    expect(datosAsociado(manual)).toEqual({ tipo_arca: 6, punto_venta: 7, numero: 150, fecha: "2026-01-09" });
+    expect(datosAsociado(interno)).toEqual({ tipo_arca: 1, letra: "A", punto_venta: 7, numero: 361, fecha: "2026-10-10" });
+    expect(datosAsociado(manual)).toEqual({ tipo_arca: 6, letra: "B", punto_venta: 7, numero: 150, fecha: "2026-01-09" });
+  });
+
+  it("un X de la base no tiene código de ARCA: lleva su letra", () => {
+    const facturaX: ComprobanteRelacionado = { ...FACTURA, letra: "X", tipo_arca: null, punto_venta: 9999, numero: 3, ambiente: null };
+    expect(datosAsociado({ ...interno, interno: facturaX })).toEqual({
+      tipo_arca: null,
+      letra: "X",
+      punto_venta: 9999,
+      numero: 3,
+      fecha: "2026-10-10",
+    });
+    expect(saldoDe([{ ...interno, interno: facturaX }], [])).toEqual({ saldo: 1210, asociado: "X-09999-00000003" });
   });
 
   it("copia los asociados para guardarlos en otro comprobante", () => {

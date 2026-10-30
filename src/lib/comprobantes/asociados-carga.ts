@@ -15,7 +15,7 @@ import type {
   LetraComprobante,
   TipoComprobanteArca,
 } from "@/lib/tipos";
-import { saldoNotaCredito, type AsociadoGuardado } from "./asociados";
+import { letraDeTipoArca, saldoNotaCredito, type AsociadoGuardado } from "./asociados";
 import { formatearNumero } from "./numero";
 
 type Cliente = Pick<SupabaseClient, "from">;
@@ -111,11 +111,20 @@ export async function leerNotasSobre(
   return ((comprobantes ?? []) as unknown as Record<string, unknown>[]).map(relacionado);
 }
 
-/** Datos del asociado para mostrar e imprimir (los del comprobante de la base si es interno). */
+/**
+ * Datos del asociado para mostrar e imprimir (los del comprobante de la base
+ * si es interno). Un X de la base no tiene código de ARCA: va su letra.
+ */
 export function datosAsociado(a: AsociadoLeido) {
   return a.interno
-    ? { tipo_arca: a.interno.tipo_arca, punto_venta: a.interno.punto_venta, numero: a.interno.numero, fecha: a.interno.fecha }
-    : { tipo_arca: a.tipo_arca, punto_venta: a.punto_venta, numero: a.numero, fecha: a.fecha };
+    ? {
+        tipo_arca: a.interno.tipo_arca,
+        letra: a.interno.letra,
+        punto_venta: a.interno.punto_venta,
+        numero: a.interno.numero,
+        fecha: a.interno.fecha,
+      }
+    : { tipo_arca: a.tipo_arca, letra: letraDeTipoArca(a.tipo_arca), punto_venta: a.punto_venta, numero: a.numero, fecha: a.fecha };
 }
 
 /**

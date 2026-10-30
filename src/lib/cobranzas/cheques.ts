@@ -8,7 +8,7 @@ import { validarPeriodoAsociado } from "@/lib/comprobantes/asociados";
 import type { ItemGuardado } from "@/lib/comprobantes/borrador";
 import { NO_GRAVADO, calcularItem, calcularTotales, type ItemACalcular } from "@/lib/comprobantes/calculo";
 import { letraYTipo, tipoArcaDe } from "@/lib/comprobantes/letra";
-import type { NotaArmada } from "@/lib/comprobantes/notas";
+import type { NotaArmada, PuntoVentaActivo } from "@/lib/comprobantes/notas";
 
 /**
  * en_cartera → depositado | entregado | rechazado; depositado y entregado →
@@ -41,14 +41,17 @@ export type ComprobanteImputado = { id: string; clase: ClaseComprobante; letra: 
 export type ContextoRechazo = {
   /** Fecha de la nota, yyyy-mm-dd. */
   hoy: string;
-  /** Punto de venta en que se emite la nota. */
-  puntoVenta: number;
+  /**
+   * Puntos de venta activos: la nota va en el electrónico de número más
+   * bajo (A o B) o en el no electrónico de número más bajo (X).
+   */
+  puntosActivos: readonly PuntoVentaActivo[];
   condicionIva: CondicionIva | null;
   listaPrecioId: string | null;
   /** Fecha del recibo del cheque, yyyy-mm-dd. */
   reciboFecha: string;
   imputados: readonly ComprobanteImputado[];
-  /** Gastos bancarios del rechazo: van en un ítem gravado al 21%. */
+  /** Gastos bancarios del rechazo: van en un ítem gravado al 21% (en un X, con IVA 0). */
   gastos?: { importe: number; descripcion: string } | null;
 };
 
@@ -60,6 +63,9 @@ export type ContextoRechazo = {
  * Se asocia a las facturas que canceló el recibo del cheque (con su letra,
  * como exige ARCA); si fue a cuenta, al período del mes del recibo, del
  * primer día a la fecha del recibo (mismo mes, 10209; hasta ≤ nota, 10208).
+ * Si las facturas canceladas son todas X, la nota es X (sin código de ARCA
+ * ni IVA) en un punto de venta no electrónico; si mezclan X con A o B, no se
+ * arma (CB018).
  */
 export function armarNotaDebitoRechazo(cheque: ChequeRechazado, contexto: ContextoRechazo): NotaArmada | { error: string } {
   const facturas = [...new Map(contexto.imputados.filter((c) => c.clase === "factura").map((c) => [c.id, c])).values()];
@@ -70,6 +76,13 @@ export function armarNotaDebitoRechazo(cheque: ChequeRechazado, contexto: Contex
     if (letras.length === 0) {
       return {
         error: "Las facturas que canceló el recibo del cheque no tienen letra: no se puede armar la nota de débito.",
+      };
+    }
+    if (letras.length > 1 && letras.includes("X")) {
+      return {
+        error:
+          `El recibo del cheque canceló facturas X y ${letras.filter((l) => l !== "X").join(" y ")}: ` +
+          "la nota de débito no se genera sola. Cargá las notas de débito a mano.",
       };
     }
     if (letras.length > 1) {
@@ -91,6 +104,20 @@ export function armarNotaDebitoRechazo(cheque: ChequeRechazado, contexto: Contex
     const errores = validarPeriodoAsociado(periodo, contexto.hoy);
     if (errores.length > 0) return { error: errores[0] };
   }
+
+  const esX = letra === "X";
+  const puntos = contexto.puntosActivos
+    .filter((p) => p.electronico === !esX)
+    .map((p) => Number(p.numero))
+    .sort((a, b) => a - b);
+  if (puntos.length === 0) {
+    return {
+      error: esX
+        ? "No hay ningún punto de venta no electrónico activo para la nota de débito X."
+        : "No hay ningún punto de venta electrónico activo.",
+    };
+  }
+  const opciones = { sinIva: esX };
 
   const item: ItemGuardado = {
     producto_id: null,
@@ -117,15 +144,15 @@ export function armarNotaDebitoRechazo(cheque: ChequeRechazado, contexto: Contex
       precio_unitario: gastos.importe,
       gravado: true,
       alicuota_iva: 21,
-      ...calcularItem(gasto),
+      ...calcularItem(gasto, opciones),
     });
     aCalcular.push(gasto);
   }
-  const totales = calcularTotales(aCalcular);
+  const totales = calcularTotales(aCalcular, opciones);
 
   return {
     cabecera: {
-      punto_venta: contexto.puntoVenta,
+      punto_venta: puntos[0],
       clase: "nota_debito",
       letra,
       tipo_arca: tipoArcaDe(letra, "nota_debito"),

@@ -57,18 +57,17 @@ async function previaDelRechazo(
       .from("imputacion")
       .select("comprobante:comprobante_id(id, clase, letra, punto_venta, numero)")
       .eq("recibo_id", cheque.recibo_id),
-    supabase.from("punto_venta").select("numero").eq("activo", true).eq("electronico", true).order("numero").limit(1),
+    supabase.from("punto_venta").select("numero, electronico").eq("activo", true).order("numero"),
   ]);
   if (error ?? errorPuntos) return { error: `No se pudo preparar la nota de débito: ${(error ?? errorPuntos)?.message}` };
-  const puntoVenta = puntos?.[0]?.numero;
-  if (puntoVenta === undefined) return { error: "No hay ningún punto de venta electrónico activo: no se puede crear la nota de débito." };
 
   const comprobantes = ((imputadas ?? []) as unknown as Imputado[]).flatMap((i) => (i.comprobante ? [i.comprobante] : []));
   const nota = armarNotaDebitoRechazo(
     { numero: cheque.numero, banco: cheque.banco, importe: Number(cheque.importe), clienteId: cheque.cliente_id },
     {
       hoy,
-      puntoVenta: Number(puntoVenta),
+      // Electrónico para A o B, no electrónico para X: lo elige el armado.
+      puntosActivos: (puntos ?? []).map((p) => ({ numero: Number(p.numero), electronico: Boolean(p.electronico) })),
       condicionIva: cheque.cliente?.condicion_iva ?? null,
       listaPrecioId: null,
       reciboFecha: cheque.recibo?.fecha ?? hoy,

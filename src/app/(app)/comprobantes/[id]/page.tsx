@@ -227,11 +227,12 @@ export default async function ComprobantePage({ params }: { params: Promise<{ id
             cliente,
             periodo: interno ? null : periodo,
             asociado: {
+              // Un X de la base no tiene código de ARCA: se nombra por su clase y letra.
               interno:
-                interno && interno.tipo_arca && interno.letra
+                interno && interno.letra
                   ? {
                       id: interno.id,
-                      texto: `${nombreTipoArca(interno.tipo_arca)} ${textoAsociado(interno)}`,
+                      texto: `${interno.tipo_arca ? nombreTipoArca(interno.tipo_arca) : nombreComprobante(interno.clase, interno.letra)} ${textoAsociado(interno)}`,
                       letra: interno.letra,
                       tipoArca: interno.tipo_arca,
                       saldo,

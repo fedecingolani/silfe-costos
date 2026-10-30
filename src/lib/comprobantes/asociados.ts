@@ -116,23 +116,35 @@ export type PeriodoAsociado = PeriodoSolicitud;
 
 export const MENSAJE_ASOCIADOS_Y_PERIODO = "Una nota se asocia a comprobantes o a un período, no a los dos.";
 
+/** Asociado de la base, por su letra y clase: un X no tiene código de ARCA. */
+export type AsociadoPorLetra = { letra: LetraComprobante | null; clase: ClaseComprobante };
+
+export const MENSAJE_NOTA_X_MANUAL =
+  "Una nota X sólo se asocia a comprobantes X emitidos con el sistema, no a uno cargado a mano.";
+
 /**
- * Valida los asociados de un comprobante por sus códigos de ARCA, o su
- * período asociado. Devuelve la letra que tiene que llevar la nota (null en
- * una factura o en una nota asociada a un período: va la del cliente) o el
- * error.
+ * Valida los asociados de un comprobante, o su período asociado. Cada
+ * asociado va por su código de ARCA (cargado a mano, o de la base) o por su
+ * letra y clase (de la base: es la única forma de un X). Devuelve la letra
+ * que tiene que llevar la nota (null en una factura o en una nota asociada
+ * a un período: va la del cliente, o X) o el error.
+ *
+ * Una nota de un punto de venta no electrónico (`electronico` false) es X:
+ * sólo se asocia a comprobantes X de la base; una de un punto electrónico
+ * nunca a un X (las mismas reglas que guardar_borrador_comprobante, CM007).
  */
 export function validarAsociadosNota(
   clase: ClaseComprobante,
-  tipos: readonly (number | string)[],
+  asociados: readonly (number | string | AsociadoPorLetra)[],
   periodo: PeriodoAsociado | null = null,
+  electronico = true,
 ): { letra: LetraComprobante | null } | { error: string } {
   if (clase === "factura") {
     if (periodo) return { error: "Una factura no lleva período asociado." };
-    return tipos.length === 0 ? { letra: null } : { error: "Una factura no lleva comprobante asociado." };
+    return asociados.length === 0 ? { letra: null } : { error: "Una factura no lleva comprobante asociado." };
   }
-  if (periodo) return tipos.length === 0 ? { letra: null } : { error: MENSAJE_ASOCIADOS_Y_PERIODO };
-  if (tipos.length === 0) {
+  if (periodo) return asociados.length === 0 ? { letra: null } : { error: MENSAJE_ASOCIADOS_Y_PERIODO };
+  if (asociados.length === 0) {
     return {
       error:
         clase === "nota_credito"
@@ -141,9 +153,17 @@ export function validarAsociadosNota(
     };
   }
   const letras = new Set<LetraComprobante>();
-  for (const tipo of tipos) {
-    const asociado = porTipo(tipo);
-    if (!asociado) return { error: `El comprobante asociado tiene un tipo que no es de ARCA (${tipo}).` };
+  for (const dato of asociados) {
+    let asociado: { letra: LetraComprobante; clase: ClaseComprobante };
+    if (typeof dato === "object") {
+      if (!dato.letra) return { error: "El comprobante asociado no está autorizado: sólo se asocian comprobantes con número." };
+      asociado = { letra: dato.letra, clase: dato.clase };
+    } else {
+      if (!electronico) return { error: MENSAJE_NOTA_X_MANUAL };
+      const porCodigo = porTipo(dato);
+      if (!porCodigo) return { error: `El comprobante asociado tiene un tipo que no es de ARCA (${dato}).` };
+      asociado = porCodigo;
+    }
     if (!notasPermitidas({ clase: asociado.clase, estado: "autorizado" }).includes(clase)) {
       return {
         error:
@@ -151,6 +171,10 @@ export function validarAsociadosNota(
           `${NOMBRES_CLASE_COMPROBANTE[asociado.clase].toLowerCase()} ${asociado.letra}.`,
       };
     }
+    if (electronico && asociado.letra === "X") {
+      return { error: "Una nota de un punto de venta electrónico no se asocia a un comprobante X." };
+    }
+    if (!electronico && asociado.letra !== "X") return { error: "Una nota X sólo se asocia a comprobantes X." };
     letras.add(asociado.letra);
   }
   if (letras.size > 1) return { error: "Los comprobantes asociados tienen letras distintas: la nota lleva una sola letra." };
@@ -259,14 +283,15 @@ export function mensajeExcedeSaldo(totalNota: number, saldo: number, asociado: s
 
 // ----- Texto -------------------------------------------------------------------
 
-/** "A-00007-00000361 del 16/10/2026". */
+/** "A-00007-00000361 del 16/10/2026". Un X de la base no tiene código de ARCA: va su letra. */
 export function textoAsociado(a: {
   tipo_arca: number | string | null;
+  letra?: LetraComprobante | null;
   punto_venta: number | string | null;
   numero: number | string | null;
   fecha: string | null;
 }): string {
-  const letra = letraDeTipoArca(a.tipo_arca);
+  const letra = letraDeTipoArca(a.tipo_arca) ?? a.letra ?? null;
   const numero = letra ? formatearNumero(letra, Number(a.punto_venta), Number(a.numero)) : `${a.punto_venta}-${a.numero}`;
   const fecha = a.fecha ? /^(\d{4})-(\d{2})-(\d{2})/.exec(a.fecha) : null;
   return fecha ? `${numero} del ${fecha[3]}/${fecha[2]}/${fecha[1]}` : numero;

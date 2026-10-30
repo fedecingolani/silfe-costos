@@ -60,7 +60,8 @@ export type ComprobanteEditable = {
       /** "Factura A A-00007-00000361 del 10/10/2026" */
       texto: string;
       letra: LetraComprobante;
-      tipoArca: number;
+      /** null: es un X (no tiene código de ARCA). */
+      tipoArca: number | null;
       /** Lo que queda para acreditar (sólo notas de crédito). */
       saldo: number | null;
     } | null;
@@ -130,7 +131,9 @@ export function EditorComprobante({
   const esX = !electronico;
   // Una nota lleva la letra de su asociado (ARCA exige la misma), no la de la condición IVA actual del cliente.
   const esNota = clase !== "factura";
-  const porPeriodo = esNota && !interno && asociarA === "periodo";
+  // Una nota X no lleva un asociado cargado a mano (esos tienen código de
+  // ARCA): sin asociado de la base, va asociada a un período.
+  const porPeriodo = esNota && !interno && (esX || asociarA === "periodo");
   // Con un período no hay asociado del que heredar: va la letra del cliente.
   const letraAsociado: LetraComprobante | null =
     esNota && !porPeriodo ? (interno?.letra ?? letraDeTipoArca(manual.tipoArca || null)) : null;
@@ -384,7 +387,9 @@ export function EditorComprobante({
           descripcion={
             interno
               ? "La nota lleva la letra de este comprobante."
-              : "Un comprobante del sistema anterior (se informa a ARCA con la CUIT del emisor) o un período."
+              : esX
+                ? "Una nota X se genera desde el comprobante X que corrige, o se asocia a un período."
+                : "Un comprobante del sistema anterior (se informa a ARCA con la CUIT del emisor) o un período."
           }
         >
           {interno ? (
@@ -403,27 +408,29 @@ export function EditorComprobante({
             </div>
           ) : (
             <div className="space-y-3 p-4">
-              <fieldset className="flex flex-wrap gap-4 text-sm">
-                <legend className="sr-only">Asociar la nota a</legend>
-                {(
-                  [
-                    ["comprobante", "Comprobante"],
-                    ["periodo", "Período"],
-                  ] as const
-                ).map(([valor, texto]) => (
-                  <label key={valor} className="flex items-center gap-1.5">
-                    <input
-                      type="radio"
-                      name="asociar-a"
-                      value={valor}
-                      checked={asociarA === valor}
-                      onChange={() => setAsociarA(valor)}
-                    />
-                    {texto}
-                  </label>
-                ))}
-              </fieldset>
-              {asociarA === "periodo" ? (
+              {!esX && (
+                <fieldset className="flex flex-wrap gap-4 text-sm">
+                  <legend className="sr-only">Asociar la nota a</legend>
+                  {(
+                    [
+                      ["comprobante", "Comprobante"],
+                      ["periodo", "Período"],
+                    ] as const
+                  ).map(([valor, texto]) => (
+                    <label key={valor} className="flex items-center gap-1.5">
+                      <input
+                        type="radio"
+                        name="asociar-a"
+                        value={valor}
+                        checked={asociarA === valor}
+                        onChange={() => setAsociarA(valor)}
+                      />
+                      {texto}
+                    </label>
+                  ))}
+                </fieldset>
+              )}
+              {porPeriodo ? (
                 <div className="grid gap-3 sm:grid-cols-4">
                   <div>
                     <label className="etiqueta" htmlFor="periodo-desde">
@@ -453,7 +460,7 @@ export function EditorComprobante({
                   </div>
                   <p className="text-xs text-stone-500 sm:col-span-4">
                     ARCA pide que el desde y el hasta sean del mismo mes y que el hasta no sea posterior a la fecha de
-                    la nota. La letra sale de la condición IVA del cliente.
+                    la nota. {esX ? "La nota es X: sin ARCA ni IVA." : "La letra sale de la condición IVA del cliente."}
                   </p>
                 </div>
               ) : (
