@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { generarPdfComprobante } from "./pdf";
 import { armarDatosPdfPresupuesto } from "@/lib/presupuestos/pdf-datos";
 import { armarDatosPdf } from "./pdf-datos";
-import { ejemploConItems } from "./pdf-fixtures";
+import { ejemploConItems, ejemploX } from "./pdf-fixtures";
 
 /** Bytes WinAnsi (cp1252) que usa el test y no coinciden con latin1. */
 const WIN_ANSI_EXTRA: Record<number, string> = { 0x96: "–" };
@@ -180,5 +180,30 @@ describe("generarPdfComprobante: presupuesto", () => {
     const { paginas } = await generar(1);
     expect(paginas[0]).not.toContain("Válido hasta");
     expect(paginas[0]).not.toContain("no válido como factura");
+  });
+});
+
+describe("generarPdfComprobante: comprobante X", () => {
+  it("recuadro X con la leyenda de no válido como factura, sin CAE, QR, ARCA ni IVA", async () => {
+    const bytes = await generarPdfComprobante(armarDatosPdf(ejemploX()));
+    const texto = (await PDFDocument.load(bytes)).getPages().map(textoDePagina).join("\n");
+    for (const esperado of [
+      "FACTURA DE VENTA",
+      "X",
+      "X-09999-00000001",
+      "Documento no válido",
+      "como factura",
+      "Precio c/Dto.",
+      "Importe",
+      "1.400.000,00",
+      "$ 1.400.000,00",
+      "Página 1 de 1",
+    ]) {
+      expect(texto).toContain(esperado);
+    }
+    for (const ausente of ["CAE", "Comprobante Autorizado", "ARCA", "Alíc. IVA", "Impt. c/IVA", "IVA 21", "Impuestos:", "21%"]) {
+      expect(texto).not.toContain(ausente);
+    }
+    expect(Buffer.from(bytes).toString("latin1")).not.toContain("HOMOLOGACI");
   });
 });

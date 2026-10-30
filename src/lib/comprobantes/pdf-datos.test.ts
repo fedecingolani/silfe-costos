@@ -9,7 +9,7 @@ import {
   paginar,
   puedeImprimir,
 } from "./pdf-datos";
-import { COMPROBANTE_EJEMPLO, EMISOR_EJEMPLO, ITEM_EJEMPLO, ejemploConItems } from "./pdf-fixtures";
+import { COMPROBANTE_EJEMPLO, EMISOR_EJEMPLO, ITEM_EJEMPLO, ejemploConItems, ejemploX } from "./pdf-fixtures";
 
 describe("formatos", () => {
   it("formatea importes con punto de miles y coma decimal", () => {
@@ -57,6 +57,63 @@ describe("puedeImprimir", () => {
     const sinCuit = puedeImprimir({ ...imprimible, cuitEmisor: null });
     expect(sinCuit.ok).toBe(false);
     if (!sinCuit.ok) expect(sinCuit.motivo).toMatch(/CUIT/);
+  });
+
+  it("acepta un comprobante X autorizado de un punto de venta no electrónico, sin CAE ni tipo de ARCA", () => {
+    const x = { ...ejemploX().comprobante, puntoVentaElectronico: false, cuitEmisor: null };
+    expect(puedeImprimir(x)).toEqual({ ok: true });
+  });
+
+  it("rechaza un comprobante X sin autorizar o sin número", () => {
+    const x = { ...ejemploX().comprobante, puntoVentaElectronico: false, cuitEmisor: EMISOR_EJEMPLO.cuit };
+    expect(puedeImprimir({ ...x, estado: "borrador" }).ok).toBe(false);
+    expect(puedeImprimir({ ...x, numero: null }).ok).toBe(false);
+  });
+
+  it("sigue rechazando un A o B de un punto de venta no electrónico", () => {
+    const r = puedeImprimir({ ...imprimible, letra: "B", puntoVentaElectronico: false });
+    expect(r.ok).toBe(false);
+  });
+});
+
+describe("armarDatosPdf: comprobante X", () => {
+  const datos = armarDatosPdf(ejemploX());
+
+  it("lleva la letra X, sin código de ARCA, CAE ni QR", () => {
+    expect(datos.letra).toBe("X");
+    expect(datos.sinArca).toBe(true);
+    expect(datos.codigoArca).toBe("");
+    expect(datos.numero).toBe("X-09999-00000001");
+    expect(datos.cae).toBe("");
+    expect(datos.caeVencimiento).toBe("");
+    expect(datos.qrUrl).toBe("");
+    expect(datos.homologacion).toBe(false);
+    expect(datos.nombreArchivo).toBe("Factura X-09999-00000001");
+  });
+
+  it("no lleva IVA: ni por alícuota, ni en los renglones; total = neto + no gravado", () => {
+    expect(datos.ivaPorAlicuota).toEqual([]);
+    expect(datos.inconsistencias).toEqual([]);
+    expect(datos.items[0].importeConIva).toBe("1.400.000,00");
+    expect(datos.bruto).toBe("1.400.000,00");
+    expect(datos.total).toBe("$ 1.400.000,00");
+  });
+
+  it("un A o B no es sinArca", () => {
+    expect(armarDatosPdf({ comprobante: COMPROBANTE_EJEMPLO, items: [ITEM_EJEMPLO], emisor: EMISOR_EJEMPLO }).sinArca).toBe(
+      false,
+    );
+  });
+
+  it("nombra el asociado X de una nota por su letra", () => {
+    const { comprobante, items, emisor } = ejemploX();
+    const nc = armarDatosPdf({
+      comprobante: { ...comprobante, clase: "nota_credito" },
+      items,
+      emisor,
+      asociados: [{ tipo_arca: null, letra: "X", punto_venta: 9999, numero: 1, fecha: "2026-10-10" }],
+    });
+    expect(nc.asociados).toEqual(["X-09999-00000001 del 10/10/2026"]);
   });
 });
 
