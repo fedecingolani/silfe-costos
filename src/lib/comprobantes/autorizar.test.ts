@@ -756,6 +756,16 @@ describe("autorizar: punto de venta no electrónico (X)", () => {
     expect(estado.recalculado).toMatchObject({ neto: 100, iva: 0, total: 100, items: [{ id: "i1", importe: 100, iva: 0 }] });
   });
 
+  it("un rechazado no se emite ni se guarda: autorizar_comprobante_interno sólo acepta borradores", async () => {
+    const datos = datosX();
+    datos.comprobante.estado = "rechazado";
+    const { deps, eventos } = escenario({ datos });
+    const resultado = await autorizar(ID, deps);
+
+    expect(resultado).toEqual({ error: "Sólo se emite un borrador.", estado: "rechazado" });
+    expect(eventos).toEqual(["cargar"]);
+  });
+
   it("no exige CUIT al cliente", async () => {
     const datos = datosX();
     datos.cliente.cuit = null;

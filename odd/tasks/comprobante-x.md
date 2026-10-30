@@ -68,5 +68,8 @@ Limitación: dos NC X simultáneas sobre la misma factura pueden pasar el contro
 
 ## Siguiente paso
 
-Corregir R3-002 y R3-004, probar la migración en una base local, `supabase migration list` +
+- 30/10: R3-004 corregida (`emitirInterno` sólo acepta `borrador`, con test). R3-002 descartada:
+  el editor fuerza período en una nota X sin asociado interno y manda `asociadoManual: null`.
+
+Probar la migración en una base local, `supabase migration list` +
 `db push`, y abrir PR.

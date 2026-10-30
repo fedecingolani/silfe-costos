@@ -444,7 +444,8 @@ async function ejecutar(ctx: Contexto, id: string, puedeReconciliar: boolean): P
 /** Comprobante X de un punto de venta no electrónico: sin ARCA (ver arriba). */
 async function emitirInterno(ctx: Contexto, datos: DatosAutorizacion): Promise<ResultadoAutorizacion> {
   const { comprobante: c, cliente } = datos;
-  if (c.estado !== "borrador" && c.estado !== "rechazado") {
+  // Una X nunca pasa por ARCA, así que no llega a rechazado: autorizar_comprobante_interno sólo acepta borradores.
+  if (c.estado !== "borrador") {
     return { error: "Sólo se emite un borrador.", estado: c.estado };
   }
   // Asociados de una nota X: los valida la base (sólo comprobantes X).
