@@ -41,10 +41,10 @@ rechazado, conversión de presupuesto a X, PDF no fiscal, filtro de listado.
 
 | ID | Tarea | Ruta | Estado | Commit |
 | --- | --- | --- | --- | --- |
-| T1 | DB: letra X, checks, validación en trigger/guardar, numeración propia, ND de cheque, presupuesto | delegada (2+ archivos, SQL) | pendiente | |
-| T2 | TS: tipo, letra, cálculo sin IVA, editor con PV no electrónico, autorizar sin ARCA | delegada | pendiente | |
-| T3 | Notas X (asociados por letra/clase), duplicar, cheques.ts | delegada | pendiente | |
-| T4 | PDF no fiscal X y filtro de listado | delegada | pendiente | |
+| T1 | DB: letra X, checks, validación en trigger/guardar, numeración propia, ND de cheque, presupuesto | delegada (2+ archivos, SQL) | hecha (sin ejecutar) | 4757e23 |
+| T2 | TS: tipo, letra, cálculo sin IVA, editor con PV no electrónico, autorizar sin ARCA | delegada | hecha | 67e8f58 |
+| T3 | Notas X (asociados por letra/clase), duplicar, cheques.ts | delegada | hecha | c1b0691 |
+| T4 | PDF no fiscal X y filtro de listado | delegada | hecha | a69f4e7 |
 
 ## Verificación
 
@@ -55,3 +55,18 @@ rechazado, conversión de presupuesto a X, PDF no fiscal, filtro de listado.
 ## Progreso
 
 - 30/10: rama creada, mapeo de impacto hecho.
+- 30/10: T1–T4 hechas. `npm test` 757/757, typecheck y lint limpios. PDF X de muestra revisado.
+- 30/10: revisión RDD (riesgo medio, consentida) aprobada y acusada. Observaciones no bloqueantes:
+  - R3-001: la migración no tiene tests ni se ejecutó (sin base local).
+  - R3-002: una nota X puede quedar bloqueada por datos de asociado manual ocultos en el editor.
+  - R3-003: `esNoElectronico` ignora errores de lectura y puede mostrar "falta el secreto".
+  - R3-004: `emitirInterno` acepta `rechazado` pero el RPC sólo acepta `borrador`.
+
+Supuestos: la X sigue pidiendo condición IVA del cliente y la regla de ±5 días de fecha. En la
+X la columna de alícuota queda visible ("no se aplica") porque marca los ítems no gravados.
+Limitación: dos NC X simultáneas sobre la misma factura pueden pasar el control de saldo.
+
+## Siguiente paso
+
+Corregir R3-002 y R3-004, probar la migración en una base local, `supabase migration list` +
+`db push`, y abrir PR.
