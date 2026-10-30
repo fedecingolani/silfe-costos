@@ -17,11 +17,14 @@ export type ProductoOfrecido = {
 
 export type ListaOfrecida = { id: string; nombre: string };
 
+/** Punto de venta activo. No electrónico: emite comprobantes X, sin ARCA. */
+export type PuntoVentaOfrecido = { numero: number; electronico: boolean };
+
 /** Lo que necesita el editor además del comprobante: catálogos y valores por defecto. */
 export type ContextoEditor = {
   listas: ListaOfrecida[];
-  /** Puntos de venta electrónicos activos, de menor a mayor. */
-  puntosVenta: number[];
+  /** Puntos de venta activos (electrónicos y no electrónicos), de menor a mayor. */
+  puntosVenta: PuntoVentaOfrecido[];
   productos: ProductoOfrecido[];
   ambienteActivo: AmbienteArca;
 };
@@ -30,7 +33,7 @@ export type ContextoEditor = {
 export async function cargarContextoEditor(supabase: Supabase): Promise<ContextoEditor | string> {
   const [listas, puntos, productos, emisor] = await Promise.all([
     supabase.from("lista_precio").select("id, nombre").order("creado_en", { ascending: false }),
-    supabase.from("punto_venta").select("numero").eq("activo", true).eq("electronico", true).order("numero"),
+    supabase.from("punto_venta").select("numero, electronico").eq("activo", true).order("numero"),
     supabase
       .from("producto")
       .select("id, codigo, nombre, alicuota_iva")
@@ -43,7 +46,7 @@ export async function cargarContextoEditor(supabase: Supabase): Promise<Contexto
 
   return {
     listas: (listas.data ?? []) as ListaOfrecida[],
-    puntosVenta: (puntos.data ?? []).map((p) => Number(p.numero)),
+    puntosVenta: (puntos.data ?? []).map((p) => ({ numero: Number(p.numero), electronico: Boolean(p.electronico) })),
     productos: (productos.data ?? []).map((p) => ({
       id: p.id,
       codigo: p.codigo,

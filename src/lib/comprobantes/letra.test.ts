@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { condicionIvaReceptorId, documentoReceptor, letraYTipo, letraYTipoNota } from "./letra";
+import { condicionIvaReceptorId, documentoReceptor, letraYTipo, letraYTipoNota, tipoArcaDe } from "./letra";
 
 describe("letraYTipo", () => {
   it("da letra A a Responsable Inscripto y Monotributista", () => {
@@ -72,5 +72,47 @@ describe("letraYTipoNota", () => {
     expect(letraYTipoNota("Consumidor Final", "nota_credito", null)).toEqual({ letra: "B", tipoArca: 8, aviso: null });
     expect(letraYTipoNota("Consumidor Final", "factura", "A")).toEqual({ letra: "B", tipoArca: 6, aviso: null });
     expect(() => letraYTipoNota(null, "nota_credito", null)).toThrow(/condición frente al IVA/);
+  });
+});
+
+describe("punto de venta no electrónico: letra X", () => {
+  it("letraYTipo da X sin código de ARCA, aunque el cliente no tenga condición IVA", () => {
+    expect(letraYTipo("Responsable Inscripto", "factura", false)).toEqual({ letra: "X", tipoArca: null });
+    expect(letraYTipo(null, "nota_credito", false)).toEqual({ letra: "X", tipoArca: null });
+  });
+
+  it("en un punto electrónico no cambia", () => {
+    expect(letraYTipo("Consumidor Final", "factura", true)).toEqual({ letra: "B", tipoArca: 6 });
+  });
+
+  it("letraYTipoNota da X sin aviso, con o sin asociado", () => {
+    expect(letraYTipoNota("Consumidor Final", "nota_credito", "X", false)).toEqual({
+      letra: "X",
+      tipoArca: null,
+      aviso: null,
+    });
+    expect(letraYTipoNota("Responsable Inscripto", "factura", null, false)).toEqual({
+      letra: "X",
+      tipoArca: null,
+      aviso: null,
+    });
+    expect(letraYTipoNota("Responsable Inscripto", "nota_debito", "A", true)).toEqual({
+      letra: "A",
+      tipoArca: 2,
+      aviso: null,
+    });
+  });
+
+  it("una X no tiene código de ARCA", () => {
+    expect(tipoArcaDe("X", "factura")).toBeNull();
+    expect(tipoArcaDe("B", "nota_credito")).toBe(8);
+  });
+
+  it("documentoReceptor de una X no exige CUIT: usa la CUIT si es válida, si no 99", () => {
+    expect(documentoReceptor(null, "Responsable Inscripto", "X")).toEqual({ docTipo: 99, docNro: "0" });
+    expect(documentoReceptor("20111111112", "Responsable Inscripto", "X")).toEqual({
+      docTipo: 80,
+      docNro: "20111111112",
+    });
   });
 });

@@ -76,10 +76,14 @@ function Mensajes({ titulo, mensajes, tono }: { titulo: string; mensajes: Mensaj
   );
 }
 
-/** "Factura A A-00007-00000361 del 10/10/2026", con enlace si está en la base. */
+/** "Factura A A-00007-00000361 del 10/10/2026", con enlace si está en la base. Un X no tiene tipo de ARCA. */
 function Asociado({ asociado }: { asociado: AsociadoLeido }) {
   const datos = datosAsociado(asociado);
-  const tipo = datos.tipo_arca ? nombreTipoArca(datos.tipo_arca as TipoComprobanteArca) : "Comprobante";
+  const tipo = datos.tipo_arca
+    ? nombreTipoArca(datos.tipo_arca as TipoComprobanteArca)
+    : asociado.interno
+      ? nombreComprobante(asociado.interno.clase, asociado.interno.letra)
+      : "Comprobante";
   const texto = `${tipo} ${textoAsociado(datos)}`;
   return asociado.interno ? (
     <Link href={`/comprobantes/${asociado.interno.id}`} className="text-marca-700 hover:underline">
@@ -187,7 +191,13 @@ export default async function ComprobantePage({ params }: { params: Promise<{ id
         {migas}
         <Encabezado
           titulo={titulo}
-          descripcion={c.estado === "rechazado" ? "ARCA lo rechazó: corregilo y volvé a autorizarlo." : "Borrador."}
+          descripcion={
+            c.estado === "rechazado"
+              ? "ARCA lo rechazó: corregilo y volvé a autorizarlo."
+              : c.letra === "X"
+                ? "Borrador de un comprobante X: se emite sin ARCA y sin IVA."
+                : "Borrador."
+          }
           acciones={<Pastilla tono={TONO_ESTADO[c.estado]}>{NOMBRES_ESTADO[c.estado]}</Pastilla>}
         />
         {homologacion}
@@ -272,6 +282,7 @@ export default async function ComprobantePage({ params }: { params: Promise<{ id
   });
   const observaciones = c.arca_observaciones ?? [];
   const verificando = c.estado === "verificando";
+  const esX = c.letra === "X";
 
   // Notas que asocian este comprobante y, en una factura, lo que queda para acreditar.
   const notas: ComprobanteRelacionado[] | string = c.clase === "nota_credito" ? [] : await leerNotasSobre(supabase, [c.id]);
@@ -316,7 +327,9 @@ export default async function ComprobantePage({ params }: { params: Promise<{ id
         descripcion={
           verificando
             ? "Enviado a ARCA sin confirmar el resultado."
-            : "Autorizado en ARCA: es un documento fiscal y no se modifica. Para corregirlo, emití una nota de crédito."
+            : esX
+              ? "Comprobante X emitido sin ARCA: no es un documento fiscal y no se modifica. Para corregirlo, emití una nota de crédito X."
+              : "Autorizado en ARCA: es un documento fiscal y no se modifica. Para corregirlo, emití una nota de crédito."
         }
         acciones={<Pastilla tono={TONO_ESTADO[c.estado]}>{NOMBRES_ESTADO[c.estado]}</Pastilla>}
       />
@@ -384,10 +397,16 @@ export default async function ComprobantePage({ params }: { params: Promise<{ id
             <Dato etiqueta="Fecha">{fecha(c.fecha)}</Dato>
             <Dato etiqueta="Vencimiento del cobro">{fecha(c.fecha_vencimiento_pago)}</Dato>
             <Dato etiqueta="Condición de pago">{NOMBRES_CONDICION_PAGO[c.condicion_pago]}</Dato>
-            <Dato etiqueta="Ambiente">{c.ambiente ? NOMBRES_AMBIENTE_ARCA[c.ambiente] : "—"}</Dato>
-            <Dato etiqueta="CAE">{c.cae ?? "—"}</Dato>
-            <Dato etiqueta="Vencimiento del CAE">{fecha(c.cae_vencimiento)}</Dato>
-            <Dato etiqueta="Autorizado el">{fechaHora(c.autorizado_en)}</Dato>
+            {esX ? (
+              <Dato etiqueta="Ambiente">Sin ARCA (comprobante X)</Dato>
+            ) : (
+              <>
+                <Dato etiqueta="Ambiente">{c.ambiente ? NOMBRES_AMBIENTE_ARCA[c.ambiente] : "—"}</Dato>
+                <Dato etiqueta="CAE">{c.cae ?? "—"}</Dato>
+                <Dato etiqueta="Vencimiento del CAE">{fecha(c.cae_vencimiento)}</Dato>
+              </>
+            )}
+            <Dato etiqueta={esX ? "Emitido el" : "Autorizado el"}>{fechaHora(c.autorizado_en)}</Dato>
             {asociados.length > 0 && (
               <div className="col-span-2">
                 <Dato etiqueta="Comprobante asociado">
@@ -493,7 +512,7 @@ export default async function ComprobantePage({ params }: { params: Promise<{ id
                 <th className="text-right">Precio</th>
                 <th className="text-right">% dto</th>
                 <th className="text-right">Importe</th>
-                <th className="text-right">IVA %</th>
+                {!esX && <th className="text-right">IVA %</th>}
                 <th className="text-right">Total</th>
               </tr>
             </thead>
@@ -511,9 +530,11 @@ export default async function ComprobantePage({ params }: { params: Promise<{ id
                   <td className="text-right tabular-nums">{numero(Number(i.precio_unitario), 4)}</td>
                   <td className="text-right tabular-nums">{numero(Number(i.descuento_pct), 2)}</td>
                   <td className="text-right tabular-nums">{pesos(Number(i.importe))}</td>
-                  <td className="text-right tabular-nums">
-                    {i.gravado ? `${numero(Number(i.alicuota_iva), 1)}%` : "No grav."}
-                  </td>
+                  {!esX && (
+                    <td className="text-right tabular-nums">
+                      {i.gravado ? `${numero(Number(i.alicuota_iva), 1)}%` : "No grav."}
+                    </td>
+                  )}
                   <td className="text-right tabular-nums">{pesos(Number(i.importe) + Number(i.iva))}</td>
                 </tr>
               ))}
@@ -529,7 +550,8 @@ export default async function ComprobantePage({ params }: { params: Promise<{ id
             <dt className="text-stone-500">No gravado</dt>
             <dd className="tabular-nums">{pesos(Number(c.no_gravado))}</dd>
           </div>
-          {ivaPorAlicuota.map((a) => (
+          {/* Un X no lleva IVA: no se muestra el detalle por alícuota. */}
+          {!esX && ivaPorAlicuota.map((a) => (
             <div key={a.id} className="flex justify-between">
               <dt className="text-stone-500">IVA {numero(a.alicuota, 1)}%</dt>
               <dd className="tabular-nums">{pesos(a.importe)}</dd>

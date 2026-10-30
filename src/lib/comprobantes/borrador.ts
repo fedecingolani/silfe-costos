@@ -26,7 +26,7 @@ import {
   type AsociadoGuardado,
   type AsociadoManualEnviado,
 } from "./asociados";
-import { calcularItem, calcularTotales, type ItemACalcular, type Totales } from "./calculo";
+import { calcularItem, calcularTotales, type ItemACalcular, type OpcionesCalculo, type Totales } from "./calculo";
 import { letraYTipoNota } from "./letra";
 import { esFechaValida } from "./validacion";
 
@@ -232,6 +232,7 @@ export function erroresVencimiento(condicion: CondicionPago, fecha: string, venc
 export function armarItems(
   valores: readonly unknown[],
   productos: ReadonlyMap<string, ProductoCatalogo>,
+  opciones: OpcionesCalculo = {},
 ): { items: ItemGuardado[]; errores: string[] } {
   const errores: string[] = [];
   const items: ItemGuardado[] = [];
@@ -282,7 +283,7 @@ export function armarItems(
       descuentoPct: redondear(descuento, 2),
       alicuotaIva: alicuota,
     };
-    const { importe, iva } = calcularItem(calculable);
+    const { importe, iva } = calcularItem(calculable, opciones);
     items.push({
       ...datosProducto,
       observaciones: texto(valor.observaciones),
@@ -299,7 +300,7 @@ export function armarItems(
 }
 
 /** Totales de los renglones ya armados. */
-export function totalesDeItems(items: readonly ItemGuardado[]): Totales {
+export function totalesDeItems(items: readonly ItemGuardado[], opciones: OpcionesCalculo = {}): Totales {
   return calcularTotales(
     items.map((i) => ({
       cantidad: i.cantidad,
@@ -307,6 +308,7 @@ export function totalesDeItems(items: readonly ItemGuardado[]): Totales {
       descuentoPct: i.descuento_pct,
       alicuotaIva: i.gravado ? i.alicuota_iva! : NO_GRAVADO,
     })),
+    opciones,
   );
 }
 
@@ -317,15 +319,24 @@ export function totalesDeItems(items: readonly ItemGuardado[]): Totales {
  * Importes y totales se calculan acá.
  *
  * Una nota lleva la letra de su asociado (de la base, o el tipo del cargado
- * a mano); sin asociado, la de la condición IVA del cliente.
+ * a mano); sin asociado, la de la condición IVA del cliente. En un punto de
+ * venta no electrónico la letra es X, sin código de ARCA ni IVA.
  */
 export function armarBorrador(
   enviado: unknown,
   contexto: {
     productos: ReadonlyMap<string, ProductoCatalogo>;
     condicionIvaCliente: CondicionIva | null;
-    /** Asociado de la base que ya tiene la nota (lo puso "Generar nota"). */
-    asociadoInterno?: { tipoArca: number } | null;
+    /**
+     * Si el punto de venta elegido es electrónico, leído de la base (no de
+     * la pantalla). null: el punto de venta no existe.
+     */
+    puntoVentaElectronico: boolean | null;
+    /**
+     * Asociado de la base que ya tiene la nota (lo puso "Generar nota").
+     * tipoArca null: es un X.
+     */
+    asociadoInterno?: { tipoArca: number | null } | null;
     /** CUIT del emisor: va en el asociado cargado a mano. */
     cuitEmisor?: string | null;
   },
@@ -359,9 +370,13 @@ export function armarBorrador(
   const puntoVenta = aDecimal(enviado.puntoVenta as string | number | null);
   if (puntoVenta === null || !Number.isInteger(puntoVenta) || puntoVenta < 1 || puntoVenta > 99999) {
     errores.push("Elegí el punto de venta.");
+  } else if (contexto.puntoVentaElectronico === null) {
+    errores.push("El punto de venta no existe.");
   }
+  const electronico = contexto.puntoVentaElectronico !== false;
+  const opcionesCalculo: OpcionesCalculo = { sinIva: !electronico };
 
-  const leidos = armarItems(enviado.items, contexto.productos);
+  const leidos = armarItems(enviado.items, contexto.productos, opcionesCalculo);
   errores.push(...leidos.errores);
   const items = leidos.items;
 
@@ -371,9 +386,18 @@ export function armarBorrador(
   let letraAsociado: LetraComprobante | null = null;
   let periodo: { desde: string; hasta: string } | null = null;
   if (clase && contexto.asociadoInterno) {
-    const validos = validarAsociadosNota(clase, [contexto.asociadoInterno.tipoArca]);
-    if ("error" in validos) errores.push(validos.error);
-    else letraAsociado = validos.letra;
+    // Una nota X sobre un X: la letra sale del punto de venta y la base
+    // controla que el asociado sea X.
+    const tipo = contexto.asociadoInterno.tipoArca;
+    if (electronico && tipo === null) {
+      errores.push("Una nota de un punto de venta electrónico no se asocia a un comprobante X.");
+    } else if (electronico && tipo !== null) {
+      const validos = validarAsociadosNota(clase, [tipo]);
+      if ("error" in validos) errores.push(validos.error);
+      else letraAsociado = validos.letra;
+    } else if (clase === "factura") {
+      errores.push("Una factura no lleva comprobante asociado.");
+    }
     asociados = null;
   } else if (clase && clase !== "factura") {
     const manual = leerAsociadoManual(enviado.asociadoManual, clase, fecha, contexto.cuitEmisor ?? null);
@@ -398,11 +422,11 @@ export function armarBorrador(
 
   let letra: LetraComprobante | null = null;
   let tipoArca: TipoComprobanteArca | null = null;
-  if (contexto.condicionIvaCliente || letraAsociado) {
-    ({ letra, tipoArca } = letraYTipoNota(contexto.condicionIvaCliente, clase!, letraAsociado));
+  if (!electronico || contexto.condicionIvaCliente || letraAsociado) {
+    ({ letra, tipoArca } = letraYTipoNota(contexto.condicionIvaCliente, clase!, letraAsociado, electronico));
   }
 
-  const totales = totalesDeItems(items);
+  const totales = totalesDeItems(items, opcionesCalculo);
 
   return {
     borrador: {
@@ -439,6 +463,8 @@ const MENSAJES_GUARDADO: Record<string, string> = {
   CM004: "El comprobante ya no es un borrador: no se puede modificar. Recargá la página.",
   CM005: "El punto de venta no existe o no coincide con el ambiente de ARCA.",
   CM006: "No se encontró el comprobante. Puede que lo hayan borrado.",
+  CM008: "La letra no corresponde al punto de venta: en uno electrónico va A o B, y en uno no electrónico va X.",
+  CM009: "Un comprobante X no lleva código de ARCA, CAE ni IVA. Recargá la página y volvé a guardarlo.",
   "23503": "El cliente, la lista de precios o el punto de venta ya no existen. Recargá la página.",
 };
 

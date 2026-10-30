@@ -8,7 +8,7 @@ import type { FetchArca } from "@/lib/arca/wsaa";
 import { hoyArgentina } from "@/lib/clientes/seguimiento";
 import { filtroBusquedaClientes } from "@/lib/clientes/busqueda";
 import { asociadosParaGuardar, leerAsociados } from "@/lib/comprobantes/asociados-carga";
-import { autorizar } from "@/lib/comprobantes/autorizar";
+import { autorizar, type ServiciosArca } from "@/lib/comprobantes/autorizar";
 import { repositorioComprobantes, serviciosArca } from "@/lib/comprobantes/autorizar-supabase";
 import {
   armarBorrador,
@@ -119,12 +119,26 @@ export async function guardarBorrador(id: string | null, datos: string): Promise
   const productos = await productosPorId(supabase, ids);
   if (typeof productos === "string") return { error: productos };
 
-  let asociadoInterno: { tipoArca: number } | null = null;
+  // Si el punto de venta es electrónico se lee de la base: no se confía en la pantalla.
+  const puntoVentaEnviado = Number((enviado as { puntoVenta?: unknown })?.puntoVenta);
+  let puntoVentaElectronico: boolean | null = null;
+  if (Number.isInteger(puntoVentaEnviado) && puntoVentaEnviado > 0) {
+    const { data: puntoVenta, error: errorPuntoVenta } = await supabase
+      .from("punto_venta")
+      .select("electronico")
+      .eq("numero", puntoVentaEnviado)
+      .maybeSingle();
+    if (errorPuntoVenta) return { error: `No se pudo leer el punto de venta: ${errorPuntoVenta.message}` };
+    puntoVentaElectronico = puntoVenta ? Boolean(puntoVenta.electronico) : null;
+  }
+
+  // Asociado de la base (un X no tiene tipo de ARCA: tipoArca null).
+  let asociadoInterno: { tipoArca: number | null } | null = null;
   if (id !== null) {
     const asociados = await leerAsociados(supabase, id);
     if (typeof asociados === "string") return { error: asociados };
-    const interno = asociados.find((a) => a.interno?.tipo_arca)?.interno;
-    if (interno?.tipo_arca) asociadoInterno = { tipoArca: interno.tipo_arca };
+    const interno = asociados.find((a) => a.interno)?.interno;
+    if (interno) asociadoInterno = { tipoArca: interno.tipo_arca };
   }
   const { data: emisor, error: errorEmisor } = await supabase.from("arca_emisor").select("cuit").eq("id", true).maybeSingle();
   if (errorEmisor) return { error: `No se pudieron leer los datos del emisor: ${errorEmisor.message}` };
@@ -132,6 +146,7 @@ export async function guardarBorrador(id: string | null, datos: string): Promise
   const armado = armarBorrador(enviado, {
     productos,
     condicionIvaCliente: cliente?.condicion_iva ?? null,
+    puntoVentaElectronico,
     asociadoInterno,
     cuitEmisor: (emisor?.cuit as string | null | undefined) ?? null,
   });
@@ -337,19 +352,48 @@ export async function preciosDeLista(listaId: string): Promise<{ producto_id: st
   return (data ?? []).map((f) => ({ producto_id: f.producto_id, precio_final: Number(f.precio_final) }));
 }
 
+/** ARCA sin el secreto de cifrado: sólo sirve para un comprobante X, que no lo usa. */
+const SIN_ARCA: ServiciosArca = {
+  autenticar: async () => {
+    throw new Error(MENSAJE_SIN_SECRETO);
+  },
+  ultimoAutorizado: async () => {
+    throw new Error(MENSAJE_SIN_SECRETO);
+  },
+  solicitarCae: async () => {
+    throw new Error(MENSAJE_SIN_SECRETO);
+  },
+  consultar: async () => {
+    throw new Error(MENSAJE_SIN_SECRETO);
+  },
+};
+
+/** true si el punto de venta del comprobante no es electrónico (comprobante X). */
+async function esNoElectronico(supabase: Supabase, id: string): Promise<boolean> {
+  const { data: c } = await supabase.from("comprobante").select("punto_venta").eq("id", id).maybeSingle();
+  if (!c) return false;
+  const { data: puntoVenta } = await supabase
+    .from("punto_venta")
+    .select("electronico")
+    .eq("numero", c.punto_venta)
+    .maybeSingle();
+  return puntoVenta?.electronico === false;
+}
+
 /**
  * Autoriza el comprobante en ARCA (CAE). Si quedó en verificación por una
- * respuesta perdida, primero lo reconcilia con ARCA.
+ * respuesta perdida, primero lo reconcilia con ARCA. Un X (punto de venta no
+ * electrónico) se emite sin ARCA: no necesita el secreto ni las credenciales.
  */
 export async function autorizarComprobante(id: string): Promise<EstadoAccionComprobante> {
   if (!UUID.test(id)) return { error: "Comprobante inválido." };
-  const claveCifrado = leerClaveCifrado();
-  if (!claveCifrado) return { error: MENSAJE_SIN_SECRETO };
-
   const supabase = await createClient();
+  const claveCifrado = leerClaveCifrado();
+  if (!claveCifrado && !(await esNoElectronico(supabase, id))) return { error: MENSAJE_SIN_SECRETO };
+
   const resultado = await autorizar(id, {
     repositorio: repositorioComprobantes(supabase),
-    arca: serviciosArca(supabase, fetchArca, claveCifrado),
+    arca: claveCifrado ? serviciosArca(supabase, fetchArca, claveCifrado) : SIN_ARCA,
   });
 
   revalidatePath(RUTA);

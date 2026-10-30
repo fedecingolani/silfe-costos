@@ -18,10 +18,13 @@ export default async function NuevoComprobantePage() {
   return (
     <>
       <Migas items={[{ href: "/comprobantes", texto: "Comprobantes" }, { texto: "Nuevo" }]} />
-      <Encabezado titulo="Nuevo comprobante" descripcion="Se guarda como borrador hasta autorizarlo en ARCA." />
+      <Encabezado
+        titulo="Nuevo comprobante"
+        descripcion="Se guarda como borrador hasta autorizarlo en ARCA (o emitirlo, si es X)."
+      />
       {contexto.puntosVenta.length === 0 && (
         <div role="alert" className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
-          No hay ningún punto de venta electrónico activo: agregalo en Configuración → ARCA.
+          No hay ningún punto de venta activo: agregalo en Configuración → ARCA.
         </div>
       )}
       <EditorComprobante comprobante={null} contexto={contexto} precios={precios} hoy={hoyArgentina()} />
