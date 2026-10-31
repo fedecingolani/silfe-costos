@@ -76,5 +76,9 @@ Limitación: dos NC X simultáneas sobre la misma factura pueden pasar el contro
 
 ## Siguiente paso
 
-PR #14 abierto. Falta `supabase migration list` contra el remoto, `db push` y merge (decisión del
-usuario).
+- 31/10: migración aplicada en el remoto (`supabase db push`, sólo `20261030000003`). Verificado:
+  historial local = remoto, RPC con grant a `authenticated` y no a `anon`, checks e índices
+  creados, el comprobante existente intacto.
+
+PR #14 abierto. Falta merge y deploy al Worker, y dar de alta el punto de venta 9999 sin ARCA en
+Configuración > ARCA (decisión del usuario).
