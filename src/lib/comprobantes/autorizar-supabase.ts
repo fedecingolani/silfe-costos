@@ -68,16 +68,20 @@ export function repositorioComprobantes(supabase: Supabase): RepositorioComproba
     return saldoDe(leidos, notas);
   }
 
-  /** CbtesAsoc (validados antes de tocar ARCA) y, en una nota de crédito, el saldo de sus asociados. */
+  /**
+   * CbtesAsoc (validados antes de tocar ARCA) y, en una nota de crédito, el
+   * saldo de sus asociados. Una nota X no va a ARCA: sólo el saldo.
+   */
   async function asociados(
     id: string,
     clase: DatosAutorizacion["comprobante"]["clase"],
     cuitEmisor: string | null,
+    electronico: boolean,
   ): Promise<Pick<DatosAutorizacion, "asociados" | "saldoNotaCredito">> {
     const leidos = await leerAsociadosDe(id);
 
     // Un error de un asociado llega tal cual a la pantalla.
-    const solicitud = leidos.map((a) => {
+    const solicitud = (electronico ? leidos : []).map((a) => {
       if (!a.asociado_id) return asociadoManual(a);
       if (!a.interno) throw new Error("El comprobante asociado ya no existe.");
       return asociadoInterno(a.interno, cuitEmisor);
@@ -154,7 +158,7 @@ export function repositorioComprobantes(supabase: Supabase): RepositorioComproba
           importe: Number(i.importe),
           iva: Number(i.iva),
         })),
-        ...(await asociados(id, c.clase, cuitEmisor)),
+        ...(await asociados(id, c.clase, cuitEmisor, Boolean(puntoVenta.data.electronico))),
         periodo: periodoDeFila(c),
         cliente: {
           razonSocial: cliente.data.razon_social,
@@ -206,6 +210,12 @@ export function repositorioComprobantes(supabase: Supabase): RepositorioComproba
         // Lo enviado a ARCA: queda fijo desde acá (ver 20261024000005).
         iva_detalle: d.ivaDetalle,
       });
+    },
+
+    async autorizarInterno(id) {
+      const { data, error } = await supabase.rpc("autorizar_comprobante_interno", { p_id: id });
+      if (error) fallar("No se pudo emitir el comprobante", error);
+      return Number(data);
     },
 
     async cambiarIntento(id, intentoNumero) {

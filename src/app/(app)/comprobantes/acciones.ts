@@ -7,8 +7,9 @@ import { MENSAJE_SIN_SECRETO, leerClaveCifrado } from "@/lib/arca/secreto";
 import type { FetchArca } from "@/lib/arca/wsaa";
 import { hoyArgentina } from "@/lib/clientes/seguimiento";
 import { filtroBusquedaClientes } from "@/lib/clientes/busqueda";
+import { MENSAJE_NOTA_X_MANUAL, validarAsociadosNota } from "@/lib/comprobantes/asociados";
 import { asociadosParaGuardar, leerAsociados } from "@/lib/comprobantes/asociados-carga";
-import { autorizar } from "@/lib/comprobantes/autorizar";
+import { autorizar, type ServiciosArca } from "@/lib/comprobantes/autorizar";
 import { repositorioComprobantes, serviciosArca } from "@/lib/comprobantes/autorizar-supabase";
 import {
   armarBorrador,
@@ -17,7 +18,7 @@ import {
   type ProductoCatalogo,
 } from "@/lib/comprobantes/borrador";
 import { nombreComprobante } from "@/lib/comprobantes/listado";
-import { armarNota } from "@/lib/comprobantes/notas";
+import { armarNota, puntoVentaPara, type PuntoVentaActivo } from "@/lib/comprobantes/notas";
 import { pesos } from "@/lib/formato";
 import {
   CLASES_COMPROBANTE,
@@ -82,6 +83,13 @@ async function productosPorId(supabase: Supabase, ids: string[]): Promise<Map<st
   return mapa;
 }
 
+/** Si la pantalla mandó algún dato del asociado cargado a mano. */
+function hayAsociadoManual(enviado: unknown): boolean {
+  const manual = (enviado as { asociadoManual?: unknown })?.asociadoManual;
+  if (typeof manual !== "object" || manual === null) return false;
+  return Object.values(manual).some((v) => (typeof v === "string" ? v.trim() !== "" : v !== null && v !== undefined));
+}
+
 /**
  * Crea (id null) o actualiza un borrador con su cabecera e ítems en una sola
  * transacción (guardar_borrador_comprobante). Un rechazado vuelve a borrador.
@@ -119,12 +127,40 @@ export async function guardarBorrador(id: string | null, datos: string): Promise
   const productos = await productosPorId(supabase, ids);
   if (typeof productos === "string") return { error: productos };
 
-  let asociadoInterno: { tipoArca: number } | null = null;
+  // Si el punto de venta es electrónico se lee de la base: no se confía en la pantalla.
+  const puntoVentaEnviado = Number((enviado as { puntoVenta?: unknown })?.puntoVenta);
+  let puntoVentaElectronico: boolean | null = null;
+  if (Number.isInteger(puntoVentaEnviado) && puntoVentaEnviado > 0) {
+    const { data: puntoVenta, error: errorPuntoVenta } = await supabase
+      .from("punto_venta")
+      .select("electronico")
+      .eq("numero", puntoVentaEnviado)
+      .maybeSingle();
+    if (errorPuntoVenta) return { error: `No se pudo leer el punto de venta: ${errorPuntoVenta.message}` };
+    puntoVentaElectronico = puntoVenta ? Boolean(puntoVenta.electronico) : null;
+  }
+
+  // Asociado de la base (un X no tiene tipo de ARCA: tipoArca null). Se
+  // valida por su letra y clase: una nota X sólo sobre un X y una A o B
+  // nunca sobre un X (la base vuelve a controlarlo, CM007).
+  const claseEnviada = (enviado as { clase?: unknown })?.clase;
+  const esNota = claseEnviada === "nota_credito" || claseEnviada === "nota_debito";
+  let asociadoInterno: { tipoArca: number | null } | null = null;
   if (id !== null) {
     const asociados = await leerAsociados(supabase, id);
     if (typeof asociados === "string") return { error: asociados };
-    const interno = asociados.find((a) => a.interno?.tipo_arca)?.interno;
-    if (interno?.tipo_arca) asociadoInterno = { tipoArca: interno.tipo_arca };
+    const interno = asociados.find((a) => a.interno)?.interno;
+    if (interno) {
+      asociadoInterno = { tipoArca: interno.tipo_arca };
+      if (esNota && puntoVentaElectronico !== null) {
+        const validos = validarAsociadosNota(claseEnviada, [interno], null, puntoVentaElectronico);
+        if ("error" in validos) return { error: validos.error };
+      }
+    }
+  }
+  // Una nota X no lleva un asociado cargado a mano (esos tienen código de ARCA).
+  if (esNota && puntoVentaElectronico === false && asociadoInterno === null && hayAsociadoManual(enviado)) {
+    return { error: MENSAJE_NOTA_X_MANUAL };
   }
   const { data: emisor, error: errorEmisor } = await supabase.from("arca_emisor").select("cuit").eq("id", true).maybeSingle();
   if (errorEmisor) return { error: `No se pudieron leer los datos del emisor: ${errorEmisor.message}` };
@@ -132,6 +168,7 @@ export async function guardarBorrador(id: string | null, datos: string): Promise
   const armado = armarBorrador(enviado, {
     productos,
     condicionIvaCliente: cliente?.condicion_iva ?? null,
+    puntoVentaElectronico,
     asociadoInterno,
     cuitEmisor: (emisor?.cuit as string | null | undefined) ?? null,
   });
@@ -178,11 +215,15 @@ export async function borrarBorrador(id: string): Promise<EstadoAccionComprobant
   redirect(RUTA);
 }
 
+function puntosActivos(filas: { numero: unknown; electronico: unknown }[] | null): PuntoVentaActivo[] {
+  return (filas ?? []).map((p) => ({ numero: Number(p.numero), electronico: Boolean(p.electronico) }));
+}
+
 /**
  * Crea un borrador nuevo con el mismo cliente, la misma cabecera, los mismos
  * ítems y los mismos comprobantes (o período) asociados, con fecha de hoy. Sirve para
- * cualquier estado. Si el punto de venta se desactivó, usa el electrónico
- * activo de número más bajo.
+ * cualquier estado. Si el punto de venta se desactivó, usa el activo del
+ * mismo tipo (electrónico, o no electrónico para un X) de número más bajo.
  */
 export async function duplicarComprobante(id: string): Promise<EstadoAccionComprobante> {
   if (!UUID.test(id)) return { error: "Comprobante inválido." };
@@ -192,7 +233,7 @@ export async function duplicarComprobante(id: string): Promise<EstadoAccionCompr
       supabase
         .from("comprobante")
         .select(
-          "punto_venta, clase, letra, tipo_arca, cliente_id, lista_precio_id, condicion_pago, observaciones, periodo_asoc_desde, periodo_asoc_hasta, neto, no_gravado, iva, total",
+          "punto_venta, ambiente, clase, letra, tipo_arca, cliente_id, lista_precio_id, condicion_pago, observaciones, periodo_asoc_desde, periodo_asoc_hasta, neto, no_gravado, iva, total",
         )
         .eq("id", id)
         .maybeSingle(),
@@ -203,15 +244,18 @@ export async function duplicarComprobante(id: string): Promise<EstadoAccionCompr
         )
         .eq("comprobante_id", id)
         .order("orden"),
-      supabase.from("punto_venta").select("numero").eq("activo", true).eq("electronico", true).order("numero"),
+      supabase.from("punto_venta").select("numero, electronico").eq("activo", true).order("numero"),
     ]);
   const errorCarga = error ?? errorItems ?? errorPuntos;
   if (errorCarga) return { error: `No se pudo leer el comprobante: ${errorCarga.message}` };
   if (!c) return { error: "No se encontró el comprobante." };
 
-  const activos = (puntos ?? []).map((p) => Number(p.numero));
-  const puntoVenta = activos.includes(Number(c.punto_venta)) ? Number(c.punto_venta) : activos[0];
-  if (puntoVenta === undefined) return { error: "No hay ningún punto de venta electrónico activo." };
+  // Un X (o un borrador sin letra de un punto no electrónico: sin ambiente)
+  // se copia a un punto no electrónico, como X, sin código de ARCA ni IVA.
+  const esX = c.letra === "X" || (c.letra === null && c.ambiente === null);
+  const punto = puntoVentaPara(Number(c.punto_venta), esX, puntosActivos(puntos));
+  if ("error" in punto) return { error: punto.error };
+  const copiados = ((items ?? []) as ItemGuardado[]).map((i) => (esX ? { ...i, iva: 0 } : i));
   const asociados = await leerAsociados(supabase, id);
   if (typeof asociados === "string") return { error: asociados };
 
@@ -219,10 +263,10 @@ export async function duplicarComprobante(id: string): Promise<EstadoAccionCompr
   const { data: nuevoId, error: errorGuardar } = await supabase.rpc("guardar_borrador_comprobante", {
     p_id: null,
     p_comprobante: {
-      punto_venta: puntoVenta,
+      punto_venta: punto.puntoVenta,
       clase: c.clase,
-      letra: c.letra,
-      tipo_arca: c.tipo_arca,
+      letra: esX ? "X" : c.letra,
+      tipo_arca: esX ? null : c.tipo_arca,
       fecha: hoy,
       fecha_vencimiento_pago: hoy,
       cliente_id: c.cliente_id,
@@ -233,10 +277,10 @@ export async function duplicarComprobante(id: string): Promise<EstadoAccionCompr
       periodo_asoc_hasta: c.periodo_asoc_hasta,
       neto: c.neto,
       no_gravado: c.no_gravado,
-      iva: c.iva,
-      total: c.total,
+      iva: esX ? 0 : c.iva,
+      total: esX ? Number(c.neto) + Number(c.no_gravado) : c.total,
     },
-    p_items: (items ?? []) as ItemGuardado[],
+    p_items: copiados,
     p_asociados: asociadosParaGuardar(asociados),
   });
   if (errorGuardar) return { error: mensajeErrorGuardado(errorGuardar) };
@@ -270,7 +314,7 @@ export async function generarNota(id: string, clase: ClaseComprobante): Promise<
         )
         .eq("comprobante_id", id)
         .order("orden"),
-      supabase.from("punto_venta").select("numero").eq("activo", true).eq("electronico", true).order("numero"),
+      supabase.from("punto_venta").select("numero, electronico").eq("activo", true).order("numero"),
     ]);
   const errorCarga = error ?? errorItems ?? errorPuntos;
   if (errorCarga) return { error: `No se pudo leer el comprobante: ${errorCarga.message}` };
@@ -288,7 +332,7 @@ export async function generarNota(id: string, clase: ClaseComprobante): Promise<
     })),
     clase,
     hoyArgentina(),
-    (puntos ?? []).map((p) => Number(p.numero)),
+    puntosActivos(puntos),
   );
   if ("error" in nota) return { error: nota.error };
 
@@ -337,19 +381,48 @@ export async function preciosDeLista(listaId: string): Promise<{ producto_id: st
   return (data ?? []).map((f) => ({ producto_id: f.producto_id, precio_final: Number(f.precio_final) }));
 }
 
+/** ARCA sin el secreto de cifrado: sólo sirve para un comprobante X, que no lo usa. */
+const SIN_ARCA: ServiciosArca = {
+  autenticar: async () => {
+    throw new Error(MENSAJE_SIN_SECRETO);
+  },
+  ultimoAutorizado: async () => {
+    throw new Error(MENSAJE_SIN_SECRETO);
+  },
+  solicitarCae: async () => {
+    throw new Error(MENSAJE_SIN_SECRETO);
+  },
+  consultar: async () => {
+    throw new Error(MENSAJE_SIN_SECRETO);
+  },
+};
+
+/** true si el punto de venta del comprobante no es electrónico (comprobante X). */
+async function esNoElectronico(supabase: Supabase, id: string): Promise<boolean> {
+  const { data: c } = await supabase.from("comprobante").select("punto_venta").eq("id", id).maybeSingle();
+  if (!c) return false;
+  const { data: puntoVenta } = await supabase
+    .from("punto_venta")
+    .select("electronico")
+    .eq("numero", c.punto_venta)
+    .maybeSingle();
+  return puntoVenta?.electronico === false;
+}
+
 /**
  * Autoriza el comprobante en ARCA (CAE). Si quedó en verificación por una
- * respuesta perdida, primero lo reconcilia con ARCA.
+ * respuesta perdida, primero lo reconcilia con ARCA. Un X (punto de venta no
+ * electrónico) se emite sin ARCA: no necesita el secreto ni las credenciales.
  */
 export async function autorizarComprobante(id: string): Promise<EstadoAccionComprobante> {
   if (!UUID.test(id)) return { error: "Comprobante inválido." };
-  const claveCifrado = leerClaveCifrado();
-  if (!claveCifrado) return { error: MENSAJE_SIN_SECRETO };
-
   const supabase = await createClient();
+  const claveCifrado = leerClaveCifrado();
+  if (!claveCifrado && !(await esNoElectronico(supabase, id))) return { error: MENSAJE_SIN_SECRETO };
+
   const resultado = await autorizar(id, {
     repositorio: repositorioComprobantes(supabase),
-    arca: serviciosArca(supabase, fetchArca, claveCifrado),
+    arca: claveCifrado ? serviciosArca(supabase, fetchArca, claveCifrado) : SIN_ARCA,
   });
 
   revalidatePath(RUTA);

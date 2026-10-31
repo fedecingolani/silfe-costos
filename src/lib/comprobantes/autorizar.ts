@@ -31,6 +31,11 @@
  * a borrador y sigue el flujo normal. Nunca se pide un CAE dos veces para
  * el mismo número sin consultar antes.
  *
+ * En un punto de venta no electrónico (comprobante X) no hay ARCA:
+ * recalcula sin IVA (letra X, sin código), valida, lo guarda y lo numera
+ * con autorizar_comprobante_interno, que lo pasa de borrador a autorizado
+ * con el siguiente número de su punto de venta y clase.
+ *
  * Ningún resultado lleva la clave privada, el token ni el sign.
  */
 import { hoyArgentina } from "@/lib/clientes/seguimiento";
@@ -50,6 +55,7 @@ import {
   type CondicionIva,
   type EstadoComprobante,
   type IvaAutorizado,
+  type LetraArca,
   type LetraComprobante,
   type TipoComprobanteArca,
 } from "@/lib/tipos";
@@ -59,7 +65,7 @@ import {
   validarPeriodoAsociado,
   type PeriodoAsociado,
 } from "./asociados";
-import { calcularItem, calcularTotales, type ItemACalcular } from "./calculo";
+import { calcularItem, calcularTotales, type ItemACalcular, type OpcionesCalculo, type Totales } from "./calculo";
 import { condicionIvaReceptorId, documentoReceptor, letraYTipoNota } from "./letra";
 import { formatearNumero } from "./numero";
 import { validarParaAutorizar } from "./validacion";
@@ -117,7 +123,8 @@ export type DatosAutorizacion = {
 
 export type BorradorRecalculado = {
   letra: LetraComprobante;
-  tipoArca: TipoComprobanteArca;
+  /** null en un X. */
+  tipoArca: TipoComprobanteArca | null;
   receptor: {
     razonSocial: string;
     docTipo: number;
@@ -150,6 +157,11 @@ export type RepositorioComprobantes = {
       ivaDetalle: IvaAutorizado[];
     },
   ): Promise<void>;
+  /**
+   * Comprobante X: borrador → autorizado con el siguiente número de su punto
+   * de venta y clase (autorizar_comprobante_interno). Devuelve el número.
+   */
+  autorizarInterno(id: string): Promise<number>;
   /** Cambia el número enviado (reintento por número no correlativo). */
   cambiarIntento(id: string, intentoNumero: number): Promise<void>;
   marcarAutorizado(
@@ -215,9 +227,9 @@ const MENSAJES_BASE: Record<string, string> = {
   CM003: "Sólo se pueden borrar borradores y rechazados.",
   CM004: "El comprobante se está verificando con ARCA: sus datos no se pueden cambiar hasta terminar la verificación.",
   CM005: "El punto de venta del comprobante no coincide con el ambiente de ARCA, o falta el CAE.",
+  CM008: "La letra no corresponde al punto de venta: en uno electrónico va A o B, y en uno no electrónico va X.",
+  CM009: "Un comprobante X no lleva código de ARCA, CAE ni IVA. Recargá la página y volvé a intentar.",
 };
-
-export const MENSAJE_NO_ELECTRONICO = "La emisión en puntos de venta no electrónicos todavía no está disponible.";
 
 /** Mensaje legible de cualquier error. obtenerTicket ya traduce los de WSAA. */
 export function mensajeError(error: unknown): string {
@@ -299,12 +311,21 @@ function documento(valor: string | null | undefined): string {
 
 // ----- Recalcular ----------------------------------------------------------
 
-function recalcular(datos: DatosAutorizacion, letraAsociado: LetraComprobante | null) {
-  const { comprobante, cliente, items } = datos;
-  const { letra, tipoArca } = letraYTipoNota(cliente.condicionIva, comprobante.clase, letraAsociado);
+/**
+ * Receptor, totales e ítems recalculados con la letra dada. Un X va sin IVA.
+ * Se llama después de validarParaAutorizar: el cliente tiene razón social y
+ * condición IVA.
+ */
+function recalcularBorrador(
+  datos: DatosAutorizacion,
+  letra: LetraComprobante,
+  tipoArca: TipoComprobanteArca | null,
+): { borrador: BorradorRecalculado; totales: Totales } {
+  const { cliente, items } = datos;
+  const opciones: OpcionesCalculo = { sinIva: letra === "X" };
   const condicionIva = cliente.condicionIva!;
   const doc = documentoReceptor(cliente.cuit, condicionIva, letra);
-  const totales = calcularTotales(items);
+  const totales = calcularTotales(items, opciones);
   const domicilio = [cliente.direccion, cliente.localidad, cliente.provincia]
     .map((parte) => parte?.trim())
     .filter(Boolean)
@@ -326,18 +347,29 @@ function recalcular(datos: DatosAutorizacion, letraAsociado: LetraComprobante | 
     iva: totales.iva,
     total: totales.total,
     items: items
-      .map((item) => ({ id: item.id, ...calcularItem(item), antes: item }))
+      .map((item) => ({ id: item.id, ...calcularItem(item, opciones), antes: item }))
       .filter((r) => r.importe !== r.antes.importe || r.iva !== r.antes.iva)
       .map(({ id, importe, iva }) => ({ id, importe, iva })),
   };
+  return { borrador, totales };
+}
+
+function recalcular(datos: DatosAutorizacion, letraAsociado: LetraComprobante | null) {
+  const { comprobante, cliente } = datos;
+  // Un asociado X no da letra de ARCA: la base no deja asociarlo a una nota A o B.
+  const letraArca: LetraArca | null = letraAsociado === "X" ? null : letraAsociado;
+  const { letra, tipoArca } = letraYTipoNota(cliente.condicionIva, comprobante.clase, letraArca);
+  const { borrador, totales } = recalcularBorrador(datos, letra, tipoArca);
+  const { docTipo, docNro } = borrador.receptor;
+  const condicionIva = borrador.receptor.condicionIva;
 
   const solicitud = (numero: number): SolicitudCae => ({
     puntoVenta: comprobante.puntoVenta,
     tipoComprobante: tipoArca,
     numero,
     fecha: comprobante.fecha,
-    docTipo: doc.docTipo,
-    docNro: doc.docNro,
+    docTipo,
+    docNro,
     condicionIvaReceptorId: condicionIvaReceptorId(condicionIva),
     neto: totales.neto,
     noGravado: totales.noGravado,
@@ -356,7 +388,7 @@ function recalcular(datos: DatosAutorizacion, letraAsociado: LetraComprobante | 
     importe,
   }));
 
-  return { borrador, solicitud, ivaDetalle };
+  return { borrador, solicitud, ivaDetalle, letra, tipoArca };
 }
 
 // ----- Flujo ---------------------------------------------------------------
@@ -390,8 +422,8 @@ async function ejecutar(ctx: Contexto, id: string, puedeReconciliar: boolean): P
   if (!datos) return { error: "No se encontró el comprobante." };
   const c = datos.comprobante;
 
-  if (!datos.puntoVentaElectronico) return { error: MENSAJE_NO_ELECTRONICO };
   if (c.estado === "autorizado") return { error: "El comprobante ya está autorizado.", estado: "autorizado" };
+  if (!datos.puntoVentaElectronico) return emitirInterno(ctx, datos);
   if (!c.ambiente) return { error: "El comprobante no tiene ambiente de ARCA." };
   if (!datos.credencial) {
     return {
@@ -407,6 +439,38 @@ async function ejecutar(ctx: Contexto, id: string, puedeReconciliar: boolean): P
     return ejecutar(ctx, id, false);
   }
   return emitir(ctx, datos, c.ambiente, datos.credencial, datos.cuitEmisor);
+}
+
+/** Comprobante X de un punto de venta no electrónico: sin ARCA (ver arriba). */
+async function emitirInterno(ctx: Contexto, datos: DatosAutorizacion): Promise<ResultadoAutorizacion> {
+  const { comprobante: c, cliente } = datos;
+  // Una X nunca pasa por ARCA, así que no llega a rechazado: autorizar_comprobante_interno sólo acepta borradores.
+  if (c.estado !== "borrador") {
+    return { error: "Sólo se emite un borrador.", estado: c.estado };
+  }
+  // Asociados de una nota X: los valida la base (sólo comprobantes X).
+  const erroresPeriodo = datos.periodo ? validarPeriodoAsociado(datos.periodo, c.fecha) : [];
+  if (erroresPeriodo.length > 0) return { error: erroresPeriodo.join(" ") };
+  const errores = validarParaAutorizar(
+    {
+      clase: c.clase,
+      letra: "X",
+      fecha: c.fecha,
+      receptor: { razonSocial: cliente.razonSocial, condicionIva: cliente.condicionIva, cuit: cliente.cuit },
+      items: datos.items,
+    },
+    hoyArgentina(ctx.ahora()),
+  );
+  if (errores.length > 0) return { error: errores.join(" ") };
+
+  const { borrador } = recalcularBorrador(datos, "X", null);
+  if (c.clase === "nota_credito" && datos.saldoNotaCredito) {
+    const excede = mensajeExcedeSaldo(borrador.total, datos.saldoNotaCredito.saldo, datos.saldoNotaCredito.asociado);
+    if (excede) return { error: excede };
+  }
+  await ctx.repositorio.guardarRecalculado(c.id, borrador);
+  const numero = await ctx.repositorio.autorizarInterno(c.id);
+  return { ok: `Comprobante ${formatearNumero("X", c.puntoVenta, numero)} emitido.`, estado: "autorizado" };
 }
 
 async function emitir(
@@ -437,14 +501,13 @@ async function emitir(
   );
   if (errores.length > 0) return { error: errores.join(" ") };
 
-  const { borrador, solicitud, ivaDetalle } = recalcular(datos, asociados.letra);
+  const { borrador, solicitud, ivaDetalle, letra, tipoArca } = recalcular(datos, asociados.letra);
   if (c.clase === "nota_credito" && datos.saldoNotaCredito) {
     const excede = mensajeExcedeSaldo(borrador.total, datos.saldoNotaCredito.saldo, datos.saldoNotaCredito.asociado);
     if (excede) return { error: excede };
   }
   await ctx.repositorio.guardarRecalculado(c.id, borrador);
 
-  const { letra, tipoArca } = borrador;
   const clave: ClaveNumeracion = { ambiente, puntoVenta: c.puntoVenta, tipoArca };
   return conBloqueo(ctx, clave, async () => {
     if (c.clase === "nota_credito") {

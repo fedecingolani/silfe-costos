@@ -78,3 +78,27 @@ export function ejemploConItems(n: number, ambiente: FilaComprobantePdf["ambient
   };
   return { comprobante, items, emisor: EMISOR_EJEMPLO };
 }
+
+/**
+ * Factura X de un punto de venta no electrónico: sin código de ARCA, CAE ni
+ * ambiente, y sin IVA (el ítem conserva su alícuota, que se ignora).
+ */
+export function ejemploX() {
+  const items: FilaItemPdf[] = [{ ...ITEM_EJEMPLO, iva: 0 }];
+  const comprobante: FilaComprobantePdf = {
+    ...COMPROBANTE_EJEMPLO,
+    punto_venta: 9999,
+    ambiente: null,
+    letra: "X",
+    tipo_arca: null,
+    numero: 1,
+    neto: 1400000,
+    no_gravado: 0,
+    iva: 0,
+    total: 1400000,
+    iva_detalle: null,
+    cae: null,
+    cae_vencimiento: null,
+  };
+  return { comprobante, items, emisor: EMISOR_EJEMPLO };
+}

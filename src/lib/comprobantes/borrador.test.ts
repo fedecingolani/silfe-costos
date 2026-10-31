@@ -56,7 +56,7 @@ const enviado = (cambios: Partial<BorradorEnviado> = {}): BorradorEnviado => ({
   ...cambios,
 });
 
-const contexto = { productos, condicionIvaCliente: "Responsable Inscripto" as const };
+const contexto = { productos, condicionIvaCliente: "Responsable Inscripto" as const, puntoVentaElectronico: true };
 
 describe("aDecimal", () => {
   it.each([
@@ -276,6 +276,11 @@ describe("mensajeErrorGuardado", () => {
     ["CM001", "El comprobante está autorizado: no se puede modificar. Para corregirlo, emití una nota de crédito."],
     ["CM006", "No se encontró el comprobante. Puede que lo hayan borrado."],
     ["23503", "El cliente, la lista de precios o el punto de venta ya no existen. Recargá la página."],
+    [
+      "CM008",
+      "La letra no corresponde al punto de venta: en uno electrónico va A o B, y en uno no electrónico va X.",
+    ],
+    ["CM009", "Un comprobante X no lleva código de ARCA, CAE ni IVA. Recargá la página y volvé a guardarlo."],
   ])("traduce %s", (code, mensaje) => {
     expect(mensajeErrorGuardado({ code, message: "x" })).toBe(mensaje);
   });
@@ -399,6 +404,58 @@ describe("armarBorrador: notas con comprobante asociado", () => {
   it("informa los errores del asociado cargado a mano", () => {
     const r = armar({ clase: "nota_credito", asociadoManual: { ...manual, numero: "0" } });
     expect(r).toEqual({ errores: ["Comprobante asociado: el número tiene que ser un entero mayor a cero."] });
+  });
+});
+
+describe("armarBorrador: punto de venta no electrónico (X)", () => {
+  const armarX = (cambios: Partial<BorradorEnviado> = {}, extra: Partial<Parameters<typeof armarBorrador>[1]> = {}) =>
+    armarBorrador(enviado(cambios), { ...contexto, puntoVentaElectronico: false, ...extra });
+
+  it("lleva letra X, sin código de ARCA ni IVA: total = neto + no gravado", () => {
+    const r = armarX();
+    if ("errores" in r) throw new Error(r.errores.join(" "));
+    expect(r.borrador.cabecera).toMatchObject({ letra: "X", tipo_arca: null, neto: 2300.9, iva: 0, total: 2300.9 });
+    expect(r.borrador.items.map((i) => i.iva)).toEqual([0, 0]);
+    // La alícuota se conserva (la del catálogo en un producto), pero no se aplica.
+    expect(r.borrador.items.map((i) => [i.gravado, i.alicuota_iva])).toEqual([
+      [true, 21],
+      [true, 10.5],
+    ]);
+  });
+
+  it("un producto de $100 + 21% va a $100", () => {
+    const r = armarX({
+      items: [
+        {
+          productoId: null,
+          descripcion: "Lona",
+          observaciones: "",
+          cantidad: "1",
+          precioUnitario: "100",
+          descuentoPct: "",
+          alicuotaIva: "21",
+        },
+      ],
+    });
+    if ("errores" in r) throw new Error(r.errores.join(" "));
+    expect(r.borrador.cabecera).toMatchObject({ neto: 100, no_gravado: 0, iva: 0, total: 100 });
+  });
+
+  it("no necesita la condición IVA del cliente para la letra", () => {
+    const r = armarX({}, { condicionIvaCliente: null });
+    if ("errores" in r) throw new Error(r.errores.join(" "));
+    expect(r.borrador.cabecera).toMatchObject({ letra: "X", tipo_arca: null });
+  });
+
+  it("una nota X conserva el asociado de la base (sin código de ARCA)", () => {
+    const r = armarX({ clase: "nota_credito" }, { asociadoInterno: { tipoArca: null } });
+    if ("errores" in r) throw new Error(r.errores.join(" "));
+    expect(r.borrador.cabecera).toMatchObject({ letra: "X", tipo_arca: null });
+    expect(r.borrador.asociados).toBeNull();
+  });
+
+  it("pide un punto de venta que exista", () => {
+    expect(armarX({}, { puntoVentaElectronico: null })).toEqual({ errores: ["El punto de venta no existe."] });
   });
 });
 

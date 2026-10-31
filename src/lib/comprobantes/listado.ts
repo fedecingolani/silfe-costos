@@ -23,7 +23,8 @@ export type FiltrosListado = {
   cliente: string;
   clase: ClaseComprobante | "";
   estado: EstadoComprobante | "";
-  ambiente: AmbienteArca | "todos";
+  /** "interno": comprobantes X de puntos de venta no electrónicos (sin ambiente de ARCA). */
+  ambiente: AmbienteArca | "todos" | "interno";
 };
 
 type Parametros = Record<string, string | string[] | undefined>;
@@ -36,7 +37,10 @@ function deLista<T extends string>(valor: string, lista: readonly T[]): T | "" {
   return (lista as readonly string[]).includes(valor) ? (valor as T) : "";
 }
 
-/** Filtros del listado. Valores desconocidos se ignoran; por defecto, el ambiente activo. */
+/**
+ * Filtros del listado. Valores desconocidos se ignoran; por defecto, el
+ * ambiente activo. "interno" muestra los comprobantes sin ARCA (X).
+ */
 export function leerFiltros(parametros: Parametros, ambienteActivo: AmbienteArca): FiltrosListado {
   const desde = primero(parametros.desde);
   const hasta = primero(parametros.hasta);
@@ -47,7 +51,8 @@ export function leerFiltros(parametros: Parametros, ambienteActivo: AmbienteArca
     cliente: primero(parametros.cliente),
     clase: deLista(primero(parametros.clase), CLASES_COMPROBANTE),
     estado: deLista(primero(parametros.estado), ESTADOS_COMPROBANTE),
-    ambiente: ambiente === "todos" ? "todos" : deLista(ambiente, AMBIENTES_ARCA) || ambienteActivo,
+    ambiente:
+      ambiente === "todos" || ambiente === "interno" ? ambiente : deLista(ambiente, AMBIENTES_ARCA) || ambienteActivo,
   };
 }
 

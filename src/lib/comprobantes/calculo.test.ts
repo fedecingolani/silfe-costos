@@ -138,3 +138,30 @@ describe("ítems no gravados", () => {
     expect(tasaDeFila({ alicuota_iva: 21 })).toBe(21);
   });
 });
+
+describe("comprobante X (sin IVA)", () => {
+  it("un renglón gravado no lleva IVA: el precio se toma tal cual", () => {
+    expect(
+      calcularItem({ cantidad: 1, precioUnitario: 100, descuentoPct: 0, alicuotaIva: 21 }, { sinIva: true }),
+    ).toEqual({ importe: 100, iva: 0 });
+  });
+
+  it("un producto de $100 + 21% suma 100: sin IVA ni IVA por alícuota, total = neto + no gravado", () => {
+    expect(
+      calcularTotales([{ cantidad: 1, precioUnitario: 100, descuentoPct: 0, alicuotaIva: 21 }], { sinIva: true }),
+    ).toEqual({ neto: 100, noGravado: 0, iva: 0, total: 100, ivaPorAlicuota: [] });
+  });
+
+  it("suma lo no gravado aparte y no aplica ninguna alícuota", () => {
+    expect(
+      calcularTotales(
+        [
+          { cantidad: 2, precioUnitario: 500, descuentoPct: 0, alicuotaIva: 21 },
+          { cantidad: 1, precioUnitario: 100, descuentoPct: 0, alicuotaIva: 10.5 },
+          { cantidad: 1, precioUnitario: 50, descuentoPct: 0, alicuotaIva: NO_GRAVADO },
+        ],
+        { sinIva: true },
+      ),
+    ).toEqual({ neto: 1100, noGravado: 50, iva: 0, total: 1150, ivaPorAlicuota: [] });
+  });
+});

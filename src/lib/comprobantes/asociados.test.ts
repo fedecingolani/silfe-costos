@@ -112,6 +112,49 @@ describe("validarAsociadosNota", () => {
     expect(validarAsociadosNota("factura", [])).toEqual({ letra: null });
     expect(validarAsociadosNota("factura", [1])).toEqual({ error: "Una factura no lleva comprobante asociado." });
   });
+
+  describe("por letra y clase (asociados de la base, también los X)", () => {
+    const facturaX = { letra: "X" as const, clase: "factura" as const };
+
+    it("una nota X se asocia a comprobantes X de la base y lleva la letra X", () => {
+      expect(validarAsociadosNota("nota_credito", [facturaX], null, false)).toEqual({ letra: "X" });
+      expect(validarAsociadosNota("nota_credito", [{ letra: "X", clase: "nota_debito" }], null, false)).toEqual({
+        letra: "X",
+      });
+      expect(validarAsociadosNota("nota_debito", [facturaX], null, false)).toEqual({ letra: "X" });
+    });
+
+    it("aplica las mismas reglas de clase que a A y B", () => {
+      expect(validarAsociadosNota("nota_debito", [{ letra: "X", clase: "nota_debito" }], null, false)).toEqual({
+        error: "Una nota de débito no puede asociarse a una nota de débito X.",
+      });
+    });
+
+    it("una nota X no se asocia a un A o B, ni una A o B a un X", () => {
+      expect(validarAsociadosNota("nota_credito", [{ letra: "A", clase: "factura" }], null, false)).toEqual({
+        error: "Una nota X sólo se asocia a comprobantes X.",
+      });
+      expect(validarAsociadosNota("nota_credito", [facturaX])).toEqual({
+        error: "Una nota de un punto de venta electrónico no se asocia a un comprobante X.",
+      });
+    });
+
+    it("una nota X no lleva asociados cargados a mano", () => {
+      expect(validarAsociadosNota("nota_credito", [1], null, false)).toEqual({
+        error: "Una nota X sólo se asocia a comprobantes X emitidos con el sistema, no a uno cargado a mano.",
+      });
+    });
+
+    it("una nota A o B valida igual un asociado de la base por su letra", () => {
+      expect(validarAsociadosNota("nota_credito", [{ letra: "B", clase: "factura" }, 6])).toEqual({ letra: "B" });
+    });
+
+    it("una nota X puede ir asociada a un período", () => {
+      expect(validarAsociadosNota("nota_debito", [], { desde: "2026-10-01", hasta: "2026-10-17" }, false)).toEqual({
+        letra: null,
+      });
+    });
+  });
 });
 
 describe("asociadoInterno", () => {
@@ -159,6 +202,12 @@ describe("textoAsociado", () => {
     );
     expect(textoAsociado({ tipo_arca: 7, punto_venta: 2, numero: "15", fecha: "2026-01-02" })).toBe(
       "B-00002-00000015 del 02/01/2026",
+    );
+  });
+
+  it("un X de la base no tiene código de ARCA: usa su letra", () => {
+    expect(textoAsociado({ tipo_arca: null, letra: "X", punto_venta: 9999, numero: 3, fecha: "2026-10-30" })).toBe(
+      "X-09999-00000003 del 30/10/2026",
     );
   });
 });

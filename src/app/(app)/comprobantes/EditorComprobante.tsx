@@ -60,7 +60,8 @@ export type ComprobanteEditable = {
       /** "Factura A A-00007-00000361 del 10/10/2026" */
       texto: string;
       letra: LetraComprobante;
-      tipoArca: number;
+      /** null: es un X (no tiene código de ARCA). */
+      tipoArca: number | null;
       /** Lo que queda para acreditar (sólo notas de crédito). */
       saldo: number | null;
     } | null;
@@ -105,7 +106,7 @@ export function EditorComprobante({
   }));
   const { fecha, vencimiento, condicion, listaId, observaciones } = comerciales;
   const [puntoVenta, setPuntoVenta] = useState<number | null>(
-    comprobante?.punto_venta ?? contexto.puntosVenta[0] ?? null,
+    comprobante?.punto_venta ?? contexto.puntosVenta[0]?.numero ?? null,
   );
   const interno = comprobante?.asociado?.interno ?? null;
   const manualGuardado = comprobante?.asociado?.manual ?? null;
@@ -123,28 +124,35 @@ export function EditorComprobante({
 
   // ----- Datos calculados ---------------------------------------------------
 
+  // Un punto de venta no electrónico emite X: sin ARCA ni IVA. Uno inactivo
+  // no está en la lista: es no electrónico si el comprobante no tiene ambiente.
+  const puntoElegido = contexto.puntosVenta.find((p) => p.numero === puntoVenta);
+  const electronico = puntoElegido ? puntoElegido.electronico : !comprobante || comprobante.ambiente !== null;
+  const esX = !electronico;
   // Una nota lleva la letra de su asociado (ARCA exige la misma), no la de la condición IVA actual del cliente.
   const esNota = clase !== "factura";
-  const porPeriodo = esNota && !interno && asociarA === "periodo";
+  // Una nota X no lleva un asociado cargado a mano (esos tienen código de
+  // ARCA): sin asociado de la base, va asociada a un período.
+  const porPeriodo = esNota && !interno && (esX || asociarA === "periodo");
   // Con un período no hay asociado del que heredar: va la letra del cliente.
   const letraAsociado: LetraComprobante | null =
     esNota && !porPeriodo ? (interno?.letra ?? letraDeTipoArca(manual.tipoArca || null)) : null;
-  let letra: string | null = null;
+  let letra: LetraComprobante | null = esX ? "X" : null;
   const avisos: string[] = [];
   if (cliente && !cliente.condicion_iva) {
     avisos.push("El cliente no tiene condición frente al IVA: completala en su ficha antes de autorizar.");
   }
-  if (cliente && (cliente.condicion_iva || letraAsociado)) {
-    const resultado = letraYTipoNota(cliente.condicion_iva, clase, letraAsociado);
+  if (!esX && cliente && (cliente.condicion_iva || letraAsociado)) {
+    const resultado = letraYTipoNota(cliente.condicion_iva, clase, letraAsociado, true);
     letra = resultado.letra;
     if (resultado.aviso) avisos.push(resultado.aviso);
     if (letra === "A" && !(cliente.cuit && validarCuit(cliente.cuit).valido)) {
       avisos.push("Para un comprobante A el cliente necesita una CUIT válida: corregila en su ficha.");
     }
   }
-  const ambiente: AmbienteArca | null = comprobante?.ambiente ?? contexto.ambienteActivo;
+  const ambiente: AmbienteArca | null = esX ? null : (comprobante?.ambiente ?? contexto.ambienteActivo);
   const calculables = filas.map(itemParaCalcular);
-  const totales = calcularTotales(calculables.filter((c) => c !== null));
+  const totales = calcularTotales(calculables.filter((c) => c !== null), { sinIva: esX });
   // Una nota generada desde otro comprobante no cambia de clase.
   const clases = interno && comprobante ? [comprobante.clase] : CLASES_NUEVAS;
   const superaSaldo =
@@ -188,7 +196,7 @@ export function EditorComprobante({
     const problemas = validarParaAutorizar(
       {
         clase,
-        letra: letra === "A" || letra === "B" ? letra : null,
+        letra,
         fecha,
         receptor: {
           razonSocial: cliente?.razon_social ?? null,
@@ -313,7 +321,9 @@ export function EditorComprobante({
               <div>
                 <dt className="text-xs text-stone-500">Ambiente</dt>
                 <dd>
-                  {ambiente ? (
+                  {esX ? (
+                    <Pastilla tono="neutro">Sin ARCA</Pastilla>
+                  ) : ambiente ? (
                     <Pastilla tono={ambiente === "produccion" ? "verde" : "ambar"}>
                       {NOMBRES_AMBIENTE_ARCA[ambiente]}
                     </Pastilla>
@@ -357,13 +367,12 @@ export function EditorComprobante({
               onChange={(e) => setPuntoVenta(e.target.value ? Number(e.target.value) : null)}
               className="campo"
             >
-              {puntoVenta !== null && !contexto.puntosVenta.includes(puntoVenta) && (
-                <option value={puntoVenta}>{puntoVenta} (inactivo)</option>
-              )}
+              {puntoVenta !== null && !puntoElegido && <option value={puntoVenta}>{puntoVenta} (inactivo)</option>}
               {contexto.puntosVenta.length === 0 && <option value="">Sin puntos de venta</option>}
-              {contexto.puntosVenta.map((n) => (
-                <option key={n} value={n}>
-                  {String(n).padStart(5, "0")}
+              {contexto.puntosVenta.map((p) => (
+                <option key={p.numero} value={p.numero}>
+                  {String(p.numero).padStart(5, "0")}
+                  {p.electronico ? "" : " (X, sin ARCA)"}
                 </option>
               ))}
             </select>
@@ -378,7 +387,9 @@ export function EditorComprobante({
           descripcion={
             interno
               ? "La nota lleva la letra de este comprobante."
-              : "Un comprobante del sistema anterior (se informa a ARCA con la CUIT del emisor) o un período."
+              : esX
+                ? "Una nota X se genera desde el comprobante X que corrige, o se asocia a un período."
+                : "Un comprobante del sistema anterior (se informa a ARCA con la CUIT del emisor) o un período."
           }
         >
           {interno ? (
@@ -397,27 +408,29 @@ export function EditorComprobante({
             </div>
           ) : (
             <div className="space-y-3 p-4">
-              <fieldset className="flex flex-wrap gap-4 text-sm">
-                <legend className="sr-only">Asociar la nota a</legend>
-                {(
-                  [
-                    ["comprobante", "Comprobante"],
-                    ["periodo", "Período"],
-                  ] as const
-                ).map(([valor, texto]) => (
-                  <label key={valor} className="flex items-center gap-1.5">
-                    <input
-                      type="radio"
-                      name="asociar-a"
-                      value={valor}
-                      checked={asociarA === valor}
-                      onChange={() => setAsociarA(valor)}
-                    />
-                    {texto}
-                  </label>
-                ))}
-              </fieldset>
-              {asociarA === "periodo" ? (
+              {!esX && (
+                <fieldset className="flex flex-wrap gap-4 text-sm">
+                  <legend className="sr-only">Asociar la nota a</legend>
+                  {(
+                    [
+                      ["comprobante", "Comprobante"],
+                      ["periodo", "Período"],
+                    ] as const
+                  ).map(([valor, texto]) => (
+                    <label key={valor} className="flex items-center gap-1.5">
+                      <input
+                        type="radio"
+                        name="asociar-a"
+                        value={valor}
+                        checked={asociarA === valor}
+                        onChange={() => setAsociarA(valor)}
+                      />
+                      {texto}
+                    </label>
+                  ))}
+                </fieldset>
+              )}
+              {porPeriodo ? (
                 <div className="grid gap-3 sm:grid-cols-4">
                   <div>
                     <label className="etiqueta" htmlFor="periodo-desde">
@@ -447,7 +460,7 @@ export function EditorComprobante({
                   </div>
                   <p className="text-xs text-stone-500 sm:col-span-4">
                     ARCA pide que el desde y el hasta sean del mismo mes y que el hasta no sea posterior a la fecha de
-                    la nota. La letra sale de la condición IVA del cliente.
+                    la nota. {esX ? "La nota es X: sin ARCA ni IVA." : "La letra sale de la condición IVA del cliente."}
                   </p>
                 </div>
               ) : (
@@ -518,14 +531,20 @@ export function EditorComprobante({
         </Tarjeta>
       )}
 
-      <TablaItems filas={filas} onCambiar={setFilas} productos={contexto.productos} precios={precios} />
+      <TablaItems
+        filas={filas}
+        onCambiar={setFilas}
+        productos={contexto.productos}
+        precios={precios}
+        sinIva={esX}
+      />
 
       <div className="flex flex-wrap items-center gap-2">
         <button type="submit" disabled={pendiente} className="boton-secundario">
           {pendiente ? "Guardando…" : "Guardar borrador"}
         </button>
         <button type="button" disabled={pendiente} onClick={() => guardar(true)} className="boton-primario">
-          Autorizar en ARCA
+          {esX ? "Emitir comprobante X" : "Autorizar en ARCA"}
         </button>
         {id && (
           <>
@@ -548,14 +567,14 @@ export function EditorComprobante({
         className="m-auto rounded-xl border border-stone-200 p-0 shadow-xl backdrop:bg-stone-900/40"
       >
         <div className="max-w-md p-5">
-          <p className="text-sm font-semibold text-stone-900">Autorizar en ARCA</p>
+          <p className="text-sm font-semibold text-stone-900">{esX ? "Emitir comprobante X" : "Autorizar en ARCA"}</p>
           <p className="mt-2 text-sm text-stone-600">{resumen}</p>
           <div className="mt-4 flex gap-2">
             <button type="button" onClick={cerrarConfirmacion} className="boton-secundario flex-1">
               Cancelar
             </button>
             <button type="button" onClick={autorizar} className="boton-primario flex-1">
-              Autorizar
+              {esX ? "Emitir" : "Autorizar"}
             </button>
           </div>
         </div>
