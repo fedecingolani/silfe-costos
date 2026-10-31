@@ -66,10 +66,15 @@ Supuestos: la X sigue pidiendo condición IVA del cliente y la regla de ±5 día
 X la columna de alícuota queda visible ("no se aplica") porque marca los ítems no gravados.
 Limitación: dos NC X simultáneas sobre la misma factura pueden pasar el control de saldo.
 
-## Siguiente paso
-
 - 30/10: R3-004 corregida (`emitirInterno` sólo acepta `borrador`, con test). R3-002 descartada:
   el editor fuerza período en una nota X sin asociado interno y manda `asociadoManual: null`.
+- 31/10: migración aplicada en local de forma incremental (`supabase migration up`) sin errores.
+  Pruebas SQL OK: rechazos CM002/CM007/CM008/CM009, numeración por clase, `rechazar_cheque`
+  y `convertir_presupuesto` con X, X en `v_comprobante_saldo`. Recorrido en la app OK: alta del
+  9999, factura X por $100, NC X desde la factura, PDF y filtro "Sin ARCA (X)".
+  Detalle menor: con ese filtro el listado sigue mostrando el aviso de homologación.
 
-Probar la migración en una base local, `supabase migration list` +
-`db push`, y abrir PR.
+## Siguiente paso
+
+PR #14 abierto. Falta `supabase migration list` contra el remoto, `db push` y merge (decisión del
+usuario).
