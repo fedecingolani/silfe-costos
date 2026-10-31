@@ -1,5 +1,21 @@
 import { describe, expect, it } from "vitest";
-import { leerFiltros, nombreComprobante, numeroVisible, ordenarListado } from "./listado";
+import { leerFiltros, mostrarAvisoHomologacion, nombreComprobante, numeroVisible, ordenarListado } from "./listado";
+
+describe("mostrarAvisoHomologacion", () => {
+  it("se muestra con el ambiente activo en homologación", () => {
+    expect(mostrarAvisoHomologacion("homologacion", "homologacion")).toBe(true);
+    expect(mostrarAvisoHomologacion("homologacion", "todos")).toBe(true);
+  });
+
+  it("no se muestra con el filtro de comprobantes sin ARCA (X)", () => {
+    expect(mostrarAvisoHomologacion("homologacion", "interno")).toBe(false);
+  });
+
+  it("no se muestra con el ambiente activo en producción", () => {
+    expect(mostrarAvisoHomologacion("produccion", "produccion")).toBe(false);
+    expect(mostrarAvisoHomologacion("produccion", "interno")).toBe(false);
+  });
+});
 
 describe("leerFiltros", () => {
   it("sin parámetros, muestra el ambiente activo y nada más filtrado", () => {

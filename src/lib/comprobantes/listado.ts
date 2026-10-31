@@ -56,6 +56,17 @@ export function leerFiltros(parametros: Parametros, ambienteActivo: AmbienteArca
   };
 }
 
+/**
+ * El aviso de homologación acompaña al ambiente activo. Con el filtro de
+ * comprobantes sin ARCA (X) no va: esos no pasan por ningún ambiente.
+ */
+export function mostrarAvisoHomologacion(
+  ambienteActivo: AmbienteArca,
+  ambienteFiltro: FiltrosListado["ambiente"],
+): boolean {
+  return ambienteActivo === "homologacion" && ambienteFiltro !== "interno";
+}
+
 /** Borradores arriba; después por fecha y alta, del más nuevo al más viejo. */
 export function ordenarListado<T extends { estado: EstadoComprobante; fecha: string; creado_en: string }>(
   filas: readonly T[],
