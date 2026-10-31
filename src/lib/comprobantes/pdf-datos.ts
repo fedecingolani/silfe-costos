@@ -13,6 +13,7 @@ import {
   type Comprobante,
   type ComprobanteItem,
   type IvaAutorizado,
+  type LetraComprobante,
 } from "@/lib/tipos";
 import { periodoDeFila, textoAsociado, textoPeriodo } from "./asociados";
 import { calcularTotales, tasaDeFila } from "./calculo";
@@ -145,6 +146,12 @@ export type DatosPdfComprobante = {
    * QR, y con "válido hasta" (dd/mm/aaaa). null en un comprobante.
    */
   presupuesto: { validoHasta: string } | null;
+  /**
+   * Comprobante X de un punto de venta no electrónico: recuadro "X" sin
+   * código, leyenda "Documento no válido como factura", sin CAE ni QR, y sin
+   * columnas ni totales de IVA. Ausente o false en los demás.
+   */
+  sinArca?: boolean;
 };
 
 const TITULOS: Record<ClaseComprobante, string> = {
@@ -199,13 +206,19 @@ export type ImprimibleSegun = Pick<
 export type PuedeImprimir = { ok: true } | { ok: false; status: 409; motivo: string };
 
 /**
- * El PDF completo es sólo para comprobantes autorizados de un punto de
- * venta electrónico, con CAE, y con la CUIT del emisor cargada (va en el QR).
+ * El PDF completo es para comprobantes autorizados de un punto de venta
+ * electrónico, con CAE, y con la CUIT del emisor cargada (va en el QR). Un
+ * comprobante X (punto de venta no electrónico) se imprime sin CAE ni QR:
+ * alcanza con que esté autorizado y numerado.
  * Única regla: la usan la ruta del PDF y el botón del detalle.
  */
 export function puedeImprimir(c: ImprimibleSegun): PuedeImprimir {
   const no = (motivo: string): PuedeImprimir => ({ ok: false, status: 409, motivo });
   if (c.estado !== "autorizado") return no("Sólo se imprime un comprobante autorizado.");
+  if (c.letra === "X") {
+    if (c.numero === null) return no("Al comprobante le falta el número.");
+    return { ok: true };
+  }
   if (!c.puntoVentaElectronico) {
     return no("El comprobante es de un punto de venta no electrónico: se imprime en el formulario preimpreso.");
   }
@@ -222,12 +235,14 @@ const TOLERANCIA = 0.005;
 /**
  * IVA por alícuota de un comprobante: el autorizado (iva_detalle, lo que
  * se envió a ARCA) o, en los anteriores a guardarlo, el recalculado de los
- * ítems. Avisa si la suma no da el IVA guardado del comprobante.
+ * ítems. Avisa si la suma no da el IVA guardado del comprobante. Un
+ * comprobante X no lleva IVA: la alícuota de sus ítems se ignora.
  */
 export function ivaDelComprobante(
-  c: Pick<FilaComprobantePdf, "iva" | "iva_detalle">,
+  c: Pick<FilaComprobantePdf, "iva" | "iva_detalle"> & { letra?: LetraComprobante | null },
   items: readonly Pick<FilaItemPdf, "cantidad" | "precio_unitario" | "descuento_pct" | "gravado" | "alicuota_iva">[],
 ): { alicuotas: IvaAutorizado[]; origen: "autorizado" | "recalculado"; inconsistencia: string | null } {
+  if (c.letra === "X") return { alicuotas: [], origen: "autorizado", inconsistencia: null };
   const guardado = Array.isArray(c.iva_detalle) ? c.iva_detalle : null;
   const alicuotas: IvaAutorizado[] =
     guardado?.map((a) => ({
@@ -266,8 +281,8 @@ export function emisorDelPdf(emisor: FilaEmisorPdf | null): DatosPdfComprobante[
   };
 }
 
-/** Renglones de la tabla, ya formateados. */
-export function itemsDelPdf(items: readonly FilaItemPdf[]): ItemPdf[] {
+/** Renglones de la tabla, ya formateados. Sin IVA (comprobante X), el importe con IVA es el importe. */
+export function itemsDelPdf(items: readonly FilaItemPdf[], sinIva = false): ItemPdf[] {
   return items.map((i) => ({
     codigo: i.codigo ?? "",
     articulo: i.descripcion,
@@ -277,8 +292,8 @@ export function itemsDelPdf(items: readonly FilaItemPdf[]): ItemPdf[] {
     descuento: importeFmt.format(Number(i.descuento_pct)),
     precioConDescuento: precioFmt.format((Number(i.precio_unitario) * (100 - Number(i.descuento_pct))) / 100),
     importe: formatearImporte(Number(i.importe)),
-    alicuota: i.gravado === false ? "No grav." : `${alicuotaFmt.format(Number(i.alicuota_iva))}%`,
-    importeConIva: formatearImporte(Number(i.importe) + Number(i.iva)),
+    alicuota: sinIva ? "" : i.gravado === false ? "No grav." : `${alicuotaFmt.format(Number(i.alicuota_iva))}%`,
+    importeConIva: formatearImporte(Number(i.importe) + (sinIva ? 0 : Number(i.iva))),
   }));
 }
 
@@ -294,6 +309,8 @@ export function ivaDelPie(alicuotas: readonly IvaAutorizado[]): DatosPdfComproba
 /** Comprobante asociado para el PDF: tipo, punto de venta, número y fecha. */
 export type AsociadoPdf = {
   tipo_arca: number | string | null;
+  /** Letra guardada: la única referencia de un asociado X (sin tipo de ARCA). */
+  letra?: LetraComprobante | null;
   punto_venta: number | string | null;
   numero: number | string | null;
   fecha: string | null;
@@ -301,7 +318,8 @@ export type AsociadoPdf = {
 
 /**
  * Arma los datos del PDF. Supone un comprobante que pasó puedeImprimir
- * (si falta algo, queda vacío en lugar de fallar).
+ * (si falta algo, queda vacío en lugar de fallar). Un comprobante X sale sin
+ * código de ARCA, CAE, QR ni IVA, aunque el emisor no esté cargado.
  */
 export function armarDatosPdf({
   comprobante: c,
@@ -311,10 +329,11 @@ export function armarDatosPdf({
 }: {
   comprobante: FilaComprobantePdf;
   items: readonly FilaItemPdf[];
-  emisor: FilaEmisorPdf;
+  emisor: FilaEmisorPdf | null;
   asociados?: readonly AsociadoPdf[];
 }): DatosPdfComprobante {
   const letra = c.letra ?? "";
+  const sinArca = c.letra === "X";
   const numero = c.letra && c.numero !== null ? formatearNumero(c.letra, Number(c.punto_venta), Number(c.numero)) : "";
   const docTipo = c.receptor_doc_tipo ?? 99;
   const docNro = c.receptor_doc_nro ?? "0";
@@ -325,7 +344,7 @@ export function armarDatosPdf({
   return {
     titulo: TITULOS[c.clase],
     letra,
-    codigoArca: c.tipo_arca ? String(c.tipo_arca).padStart(3, "0") : "",
+    codigoArca: !sinArca && c.tipo_arca ? String(c.tipo_arca).padStart(3, "0") : "",
     numero,
     fecha: fechaCorta(c.fecha),
     emisor: emisorDelPdf(emisor),
@@ -340,31 +359,34 @@ export function armarDatosPdf({
     provinciaDestino: c.receptor_provincia ?? "",
     fechaVencimientoPago: fechaCorta(c.fecha_vencimiento_pago),
     formaPago: FORMAS_PAGO[c.condicion_pago],
-    items: itemsDelPdf(items),
-    ivaPorAlicuota: ivaDelPie(iva.alicuotas),
+    items: itemsDelPdf(items, sinArca),
+    ivaPorAlicuota: sinArca ? [] : ivaDelPie(iva.alicuotas),
     bruto: formatearImporte(Number(c.neto)),
     noGravado: formatearImporte(Number(c.no_gravado ?? 0)),
     impuestos: formatearImporte(Number(c.iva)),
     total: `$ ${formatearImporte(Number(c.total))}`,
-    cae: c.cae ?? "",
-    caeVencimiento: fechaCorta(c.cae_vencimiento),
-    qrUrl: urlQrArca({
-      fecha: c.fecha,
-      cuitEmisor: (emisor.cuit ?? "").replace(/\D/g, ""),
-      puntoVenta: Number(c.punto_venta),
-      tipoArca: c.tipo_arca ?? 0,
-      numero: Number(c.numero ?? 0),
-      total: Number(c.total),
-      docTipo,
-      docNro: docNro.replace(/\D/g, "") || "0",
-      cae: c.cae ?? "0",
-    }),
-    homologacion: c.ambiente === "homologacion",
+    cae: sinArca ? "" : (c.cae ?? ""),
+    caeVencimiento: sinArca ? "" : fechaCorta(c.cae_vencimiento),
+    qrUrl: sinArca
+      ? ""
+      : urlQrArca({
+          fecha: c.fecha,
+          cuitEmisor: (emisor?.cuit ?? "").replace(/\D/g, ""),
+          puntoVenta: Number(c.punto_venta),
+          tipoArca: c.tipo_arca ?? 0,
+          numero: Number(c.numero ?? 0),
+          total: Number(c.total),
+          docTipo,
+          docNro: docNro.replace(/\D/g, "") || "0",
+          cae: c.cae ?? "0",
+        }),
+    homologacion: !sinArca && c.ambiente === "homologacion",
     nombreArchivo: `${NOMBRES_CLASE_COMPROBANTE[c.clase]} ${numero}`.trim(),
     asociados: c.clase === "factura" ? [] : asociados.map(textoAsociado),
     periodoAsociado: periodo ? textoPeriodo(periodo) : null,
     inconsistencias: iva.inconsistencia ? [`${numero}: ${iva.inconsistencia}`] : [],
     presupuesto: null,
+    sinArca,
   };
 }
 

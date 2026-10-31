@@ -34,8 +34,15 @@ function supabaseFalso(responder: (c: Consulta) => Respuesta) {
       return builder;
     },
   };
+  const llamadas: [string, unknown][] = [];
+  Object.assign(cliente, {
+    async rpc(nombre: string, parametros: unknown) {
+      llamadas.push([nombre, parametros]);
+      return responder({ tabla: `rpc:${nombre}`, pasos: [["rpc", parametros]] });
+    },
+  });
   const repositorio = repositorioComprobantes(cliente as unknown as Parameters<typeof repositorioComprobantes>[0]);
-  return { repositorio, consultas };
+  return { repositorio, consultas, llamadas };
 }
 
 const paso = (c: Consulta, metodo: string) => c.pasos.find((p) => p[0] === metodo);
@@ -228,5 +235,18 @@ describe("repositorioComprobantes: saldo bajo el bloqueo", () => {
     const { repositorio, consultas } = supabaseFalso(base({ filasAsociado: [MANUAL] }));
     expect(await repositorio.saldoNotaCredito(ID)).toBeNull();
     expect(consultas.map((c) => c.tabla)).toEqual(["comprobante_asociado"]);
+  });
+});
+
+describe("repositorioComprobantes: comprobante X", () => {
+  it("autorizarInterno llama a autorizar_comprobante_interno y devuelve el número", async () => {
+    const { repositorio, llamadas } = supabaseFalso(() => ok("12"));
+    expect(await repositorio.autorizarInterno(ID)).toBe(12);
+    expect(llamadas).toEqual([["autorizar_comprobante_interno", { p_id: ID }]]);
+  });
+
+  it("un error de la base llega con su código", async () => {
+    const { repositorio } = supabaseFalso(() => ({ data: null, error: { code: "CM008", message: "letra" } }));
+    await expect(repositorio.autorizarInterno(ID)).rejects.toMatchObject({ codigo: "CM008" });
   });
 });

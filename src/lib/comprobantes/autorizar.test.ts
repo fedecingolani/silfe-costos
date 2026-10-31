@@ -87,6 +87,9 @@ function escenario(opciones: {
   consulta?: Awaited<ReturnType<ServiciosArca["consultar"]>> | Error;
   autenticar?: Error;
   guardarFalla?: Error;
+  /** Número que asigna autorizar_comprobante_interno (comprobante X). */
+  numeroInterno?: number;
+  internoFalla?: Error;
   /** Saldo que lee el repositorio con el bloqueo tomado (por defecto, el de la carga). */
   saldoBajoBloqueo?: DatosAutorizacion["saldoNotaCredito"];
 }) {
@@ -146,6 +149,12 @@ function escenario(opciones: {
       eventos.push("saldo");
       expect(estado.bloqueoTomado).toBe(true);
       return opciones.saldoBajoBloqueo !== undefined ? opciones.saldoBajoBloqueo : datos.saldoNotaCredito;
+    },
+    async autorizarInterno() {
+      eventos.push("interno");
+      if (opciones.internoFalla) throw opciones.internoFalla;
+      fila.estado = "autorizado";
+      return opciones.numeroInterno ?? 1;
     },
     async volverABorrador() {
       eventos.push("borrador");
@@ -545,17 +554,6 @@ describe("autorizar: validaciones y casos que no llegan a ARCA", () => {
     expect(resultado.error).toBe("La fecha del comprobante tiene que estar entre el 11/10/2026 y el 21/10/2026.");
   });
 
-  it("los puntos de venta no electrónicos todavía no se emiten", async () => {
-    const datos = datosBase();
-    datos.puntoVentaElectronico = false;
-    datos.comprobante.ambiente = null;
-    const { deps, eventos } = escenario({ datos });
-    expect(await autorizar(ID, deps)).toEqual({
-      error: "La emisión en puntos de venta no electrónicos todavía no está disponible.",
-    });
-    expect(eventos).toEqual(["cargar"]);
-  });
-
   it("no autoriza dos veces", async () => {
     const datos = datosBase();
     datos.comprobante.estado = "autorizado";
@@ -715,5 +713,91 @@ describe("autorizar: notas de crédito y débito", () => {
     const factura = escenario({});
     await autorizar(ID, factura.deps);
     expect(factura.eventos).not.toContain("saldo");
+  });
+});
+
+describe("autorizar: punto de venta no electrónico (X)", () => {
+  const datosX = (): DatosAutorizacion => {
+    const datos = datosBase();
+    datos.puntoVentaElectronico = false;
+    datos.credencial = null;
+    datos.cuitEmisor = null;
+    Object.assign(datos.comprobante, { puntoVenta: 9999, ambiente: null, letra: "X" });
+    return datos;
+  };
+
+  it("recalcula sin IVA, guarda y numera con autorizar_comprobante_interno, sin tocar ARCA", async () => {
+    const { deps, eventos, estado, solicitudes } = escenario({ datos: datosX(), numeroInterno: 12 });
+    const resultado = await autorizar(ID, deps);
+
+    expect(resultado).toEqual({ ok: "Comprobante X-09999-00000012 emitido.", estado: "autorizado" });
+    expect(eventos).toEqual(["cargar", "guardar", "interno"]);
+    expect(solicitudes).toEqual([]);
+    expect(estado.recalculado).toMatchObject({
+      letra: "X",
+      tipoArca: null,
+      neto: 1100,
+      noGravado: 0,
+      iva: 0,
+      total: 1100,
+      // i1 tenía importe 0; i2 tenía IVA 10.5: los dos pasan a IVA 0.
+      items: [
+        { id: "i1", importe: 1000, iva: 0 },
+        { id: "i2", importe: 100, iva: 0 },
+      ],
+    });
+  });
+
+  it("un producto de $100 + 21% se emite por $100", async () => {
+    const datos = datosX();
+    datos.items = [{ id: "i1", cantidad: 1, precioUnitario: 100, descuentoPct: 0, alicuotaIva: 21, importe: 100, iva: 21 }];
+    const { deps, estado } = escenario({ datos });
+    await autorizar(ID, deps);
+    expect(estado.recalculado).toMatchObject({ neto: 100, iva: 0, total: 100, items: [{ id: "i1", importe: 100, iva: 0 }] });
+  });
+
+  it("un rechazado no se emite ni se guarda: autorizar_comprobante_interno sólo acepta borradores", async () => {
+    const datos = datosX();
+    datos.comprobante.estado = "rechazado";
+    const { deps, eventos } = escenario({ datos });
+    const resultado = await autorizar(ID, deps);
+
+    expect(resultado).toEqual({ error: "Sólo se emite un borrador.", estado: "rechazado" });
+    expect(eventos).toEqual(["cargar"]);
+  });
+
+  it("no exige CUIT al cliente", async () => {
+    const datos = datosX();
+    datos.cliente.cuit = null;
+    const { deps, estado } = escenario({ datos });
+    expect((await autorizar(ID, deps)).estado).toBe("autorizado");
+    expect(estado.recalculado?.receptor).toMatchObject({ docTipo: 99, docNro: "0" });
+  });
+
+  it("con errores de validación no guarda ni numera", async () => {
+    const datos = datosX();
+    datos.items = [];
+    const { deps, eventos } = escenario({ datos });
+    expect((await autorizar(ID, deps)).error).toMatch(/Agregá al menos un ítem/);
+    expect(eventos).toEqual(["cargar"]);
+  });
+
+  it("una nota de crédito X no supera el saldo de sus asociados", async () => {
+    const datos = datosX();
+    datos.comprobante.clase = "nota_credito";
+    datos.saldoNotaCredito = { saldo: 500, asociado: "X-09999-00000003" };
+    const { deps, eventos } = escenario({ datos });
+    expect((await autorizar(ID, deps)).error).toMatch(/X-09999-00000003/);
+    expect(eventos).toEqual(["cargar"]);
+  });
+
+  it("traduce el error de la base al numerar", async () => {
+    const { deps } = escenario({
+      datos: datosX(),
+      internoFalla: new ErrorBaseDatos("CM008", "letra"),
+    });
+    expect(await autorizar(ID, deps)).toEqual({
+      error: "La letra no corresponde al punto de venta: en uno electrónico va A o B, y en uno no electrónico va X.",
+    });
   });
 });

@@ -4,7 +4,8 @@
  * condición de pago, fecha de hoy, los ítems copiados (para ajustar
  * cantidades o precios) y el comprobante de origen como asociado. La letra
  * es la del origen (ARCA exige la misma); el ambiente lo fija la base con
- * el del asociado (guardar_borrador_comprobante).
+ * el del asociado (guardar_borrador_comprobante). Desde un X la nota es X:
+ * en un punto de venta no electrónico, sin código de ARCA ni IVA.
  */
 import { NOMBRES_CLASE_COMPROBANTE, type ClaseComprobante, type EstadoComprobante, type LetraComprobante } from "@/lib/tipos";
 import { notasPermitidas, type AsociadoGuardado } from "./asociados";
@@ -25,15 +26,39 @@ export type OrigenNota = {
 
 export type NotaArmada = { cabecera: CabeceraGuardada; items: ItemGuardado[]; asociados: AsociadoGuardado[] };
 
+/** Punto de venta activo (punto_venta.activo). */
+export type PuntoVentaActivo = { numero: number; electronico: boolean };
+
 /**
- * @param puntosActivos puntos de venta electrónicos activos, de menor a mayor.
+ * Punto de venta para un comprobante nuevo copiado de otro: el mismo si
+ * sigue activo y es del tipo que corresponde (no electrónico para un X,
+ * electrónico para A o B); si no, el activo de ese tipo de número más bajo.
+ */
+export function puntoVentaPara(
+  actual: number,
+  esX: boolean,
+  activos: readonly PuntoVentaActivo[],
+): { puntoVenta: number } | { error: string } {
+  const delTipo = activos
+    .filter((p) => p.electronico === !esX)
+    .map((p) => Number(p.numero))
+    .sort((a, b) => a - b);
+  if (delTipo.includes(Number(actual))) return { puntoVenta: Number(actual) };
+  if (delTipo.length === 0) {
+    return { error: `No hay ningún punto de venta ${esX ? "no electrónico" : "electrónico"} activo.` };
+  }
+  return { puntoVenta: delTipo[0] };
+}
+
+/**
+ * @param puntosActivos puntos de venta activos (electrónicos y no electrónicos).
  */
 export function armarNota(
   origen: OrigenNota,
   items: readonly ItemGuardado[],
   clase: ClaseComprobante,
   hoy: string,
-  puntosActivos: readonly number[],
+  puntosActivos: readonly PuntoVentaActivo[],
 ): NotaArmada | { error: string } {
   if (origen.estado !== "autorizado" || !origen.letra) {
     return { error: "Sólo se generan notas de crédito o débito desde un comprobante autorizado." };
@@ -45,10 +70,12 @@ export function armarNota(
         `${NOMBRES_CLASE_COMPROBANTE[clase].toLowerCase()}.`,
     };
   }
-  const puntoVenta = puntosActivos.includes(Number(origen.punto_venta)) ? Number(origen.punto_venta) : puntosActivos[0];
-  if (puntoVenta === undefined) return { error: "No hay ningún punto de venta electrónico activo." };
+  const esX = origen.letra === "X";
+  const punto = puntoVentaPara(origen.punto_venta, esX, puntosActivos);
+  if ("error" in punto) return punto;
 
-  const copiados = items.map((i) => ({ ...i }));
+  // Un X no lleva IVA: cada ítem va con IVA 0 (la base lo exige, CM009).
+  const copiados = items.map((i) => (esX ? { ...i, iva: 0 } : { ...i }));
   const totales = calcularTotales(
     copiados.map((i) => ({
       cantidad: Number(i.cantidad),
@@ -56,11 +83,12 @@ export function armarNota(
       descuentoPct: Number(i.descuento_pct),
       alicuotaIva: tasaDeFila(i),
     })),
+    { sinIva: esX },
   );
 
   return {
     cabecera: {
-      punto_venta: puntoVenta,
+      punto_venta: punto.puntoVenta,
       clase,
       letra: origen.letra,
       tipo_arca: tipoArcaDe(origen.letra, clase),

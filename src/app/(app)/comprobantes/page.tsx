@@ -64,7 +64,9 @@ export default async function ComprobantesPage({
   if (filtros.hasta) consulta = consulta.lte("fecha", filtros.hasta);
   if (filtros.clase) consulta = consulta.eq("clase", filtros.clase);
   if (filtros.estado) consulta = consulta.eq("estado", filtros.estado);
-  if (filtros.ambiente !== "todos") consulta = consulta.eq("ambiente", filtros.ambiente);
+  // Los comprobantes X (puntos de venta no electrónicos) no tienen ambiente de ARCA.
+  if (filtros.ambiente === "interno") consulta = consulta.is("ambiente", null);
+  else if (filtros.ambiente !== "todos") consulta = consulta.eq("ambiente", filtros.ambiente);
 
   const { data, error } = await consulta;
   if (error) return <p className="text-sm text-red-700">Error al cargar los comprobantes: {error.message}</p>;
@@ -165,6 +167,7 @@ export default async function ComprobantesPage({
                 {NOMBRES_AMBIENTE_ARCA[a]}
               </option>
             ))}
+            <option value="interno">Sin ARCA (X)</option>
             <option value="todos">Todos</option>
           </select>
         </div>

@@ -12,6 +12,10 @@
  * Un presupuesto (`datos.presupuesto`) sale con el mismo formato pero sin
  * recuadro de letra ni código, con "Válido hasta" y sin QR, leyenda de ARCA
  * ni CAE.
+ *
+ * Un comprobante X (`datos.sinArca`) tampoco es fiscal: recuadro "X" sin
+ * código, con la leyenda "Documento no válido como factura", sin QR, leyenda
+ * de ARCA ni CAE, y sin columnas ni totales de IVA.
  */
 import { PDFDocument, StandardFonts, degrees, rgb, type PDFFont, type PDFPage } from "pdf-lib";
 import { paginar, type DatosPdfComprobante, type ItemPdf } from "./pdf-datos";
@@ -83,6 +87,11 @@ const COLUMNAS: Columna[] = [
   { titulo: "Impt. c/IVA", ancho: 62.28, alinear: "derecha", campo: "importeConIva" },
 ];
 
+/** Columnas de un comprobante X: sin IVA; su ancho pasa a Artículo y Observaciones. */
+const COLUMNAS_SIN_IVA: Columna[] = COLUMNAS.filter((c) => c.campo !== "alicuota" && c.campo !== "importeConIva").map(
+  (c) => (c.campo === "articulo" ? { ...c, ancho: c.ancho + 60 } : c.campo === "observaciones" ? { ...c, ancho: c.ancho + 40.28 } : c),
+);
+
 /** Arma el texto que la fuente estándar (WinAnsi) puede dibujar: lo que no soporta se cambia por "?". */
 export function crearSaneador(fuente: PDFFont) {
   const soportados = new Set(fuente.getCharacterSet());
@@ -136,6 +145,9 @@ export async function generarPdfComprobante(datos: DatosPdfComprobante, logoPng?
   const negrita = await doc.embedFont(StandardFonts.HelveticaBold);
   const cursiva = await doc.embedFont(StandardFonts.HelveticaOblique);
   const sanear = crearSaneador(normal);
+  const columnas = datos.sinArca ? COLUMNAS_SIN_IVA : COLUMNAS;
+  /** Presupuesto o comprobante X: sin QR, leyenda de ARCA ni CAE. */
+  const noFiscal = datos.presupuesto !== null || datos.sinArca === true;
 
   let logo: Awaited<ReturnType<PDFDocument["embedPng"]>> | null = null;
   if (logoPng) {
@@ -202,8 +214,10 @@ export async function generarPdfComprobante(datos: DatosPdfComprobante, logoPng?
 
     // Centro: letra en un recuadro, código de ARCA y condición de IVA del emisor.
     // Un presupuesto no lleva letra: en su lugar, la aclaración de que no es una factura.
+    // Un comprobante X lleva el recuadro y, en lugar del código, esa misma aclaración.
     const xCentro = ANCHO / 2;
     const yCaja = ARRIBA - LADO_LETRA;
+    let yCondicionIva = yCaja - 22;
     if (datos.presupuesto) {
       escribir(pagina, "Documento no", xCentro, yCaja + 22, negrita, 8, "centro");
       escribir(pagina, "válido como factura", xCentro, yCaja + 12, negrita, 8, "centro");
@@ -217,11 +231,17 @@ export async function generarPdfComprobante(datos: DatosPdfComprobante, logoPng?
         borderWidth: 1.2,
       });
       escribir(pagina, datos.letra, xCentro, yCaja + 12, negrita, 30, "centro");
-      escribir(pagina, datos.codigoArca, xCentro, yCaja - 11, negrita, 9, "centro");
+      if (datos.sinArca) {
+        escribir(pagina, "Documento no válido", xCentro, yCaja - 9, negrita, 6.5, "centro");
+        escribir(pagina, "como factura", xCentro, yCaja - 17, negrita, 6.5, "centro");
+        yCondicionIva = yCaja - 26;
+      } else {
+        escribir(pagina, datos.codigoArca, xCentro, yCaja - 11, negrita, 9, "centro");
+      }
     }
-    escribir(pagina, datos.emisor.condicionIva, xCentro, yCaja - 22, normal, 7, "centro");
+    escribir(pagina, datos.emisor.condicionIva, xCentro, yCondicionIva, normal, 7, "centro");
     pagina.drawLine({
-      start: { x: xCentro, y: yCaja - 28 },
+      start: { x: xCentro, y: yCondicionIva - 6 },
       end: { x: xCentro, y: Y_FIN_ENCABEZADO },
       thickness: 0.6,
       color: NEGRO,
@@ -299,7 +319,7 @@ export async function generarPdfComprobante(datos: DatosPdfComprobante, logoPng?
       color: FONDO,
     });
     let x = MARGEN;
-    for (const columna of COLUMNAS) {
+    for (const columna of columnas) {
       const xTexto =
         columna.alinear === "derecha" ? x + columna.ancho - RELLENO_CELDA : x + RELLENO_CELDA;
       escribir(pagina, columna.titulo, xTexto, Y_CABECERA_TABLA - 10, negrita, 7.5, columna.alinear);
@@ -313,7 +333,7 @@ export async function generarPdfComprobante(datos: DatosPdfComprobante, logoPng?
 
   /** Las columnas de texto se parten en líneas; las de números se achican si no entran. */
   function medir(item: ItemPdf): { celdas: Celda[]; alto: number } {
-    const celdas = COLUMNAS.map((columna): Celda => {
+    const celdas = columnas.map((columna): Celda => {
       const ancho = columna.ancho - RELLENO_CELDA * 2;
       const texto = sanear(item[columna.campo]);
       if (columna.ajustar) {
@@ -331,7 +351,7 @@ export async function generarPdfComprobante(datos: DatosPdfComprobante, logoPng?
 
   function renglon(pagina: PDFPage, celdas: Celda[], yArriba: number) {
     let x = MARGEN;
-    COLUMNAS.forEach((columna, i) => {
+    columnas.forEach((columna, i) => {
       const { lineas, tamano } = celdas[i];
       const xTexto = columna.alinear === "derecha" ? x + columna.ancho - RELLENO_CELDA : x + RELLENO_CELDA;
       lineas.forEach((linea, l) => {
@@ -345,25 +365,28 @@ export async function generarPdfComprobante(datos: DatosPdfComprobante, logoPng?
 
   function pie(pagina: PDFPage) {
     regla(pagina, Y_REGLA_PIE);
-    escribir(
-      pagina,
-      datos.ivaPorAlicuota.map((a) => `${a.etiqueta}: ${a.importe}`).join("     "),
-      MARGEN,
-      Y_IVA,
-      normal,
-      8,
-    );
+    // Un comprobante X no lleva IVA: ni la línea por alícuota ni "Impuestos".
+    if (!datos.sinArca) {
+      escribir(
+        pagina,
+        datos.ivaPorAlicuota.map((a) => `${a.etiqueta}: ${a.importe}`).join("     "),
+        MARGEN,
+        Y_IVA,
+        normal,
+        8,
+      );
+    }
 
     pagina.drawRectangle({ x: MARGEN, y: Y_BANDA, width: DERECHA - MARGEN, height: ALTO_BANDA, color: FONDO });
     const yBanda = Y_BANDA + 6;
     etiquetaValor(pagina, "Bruto:", datos.bruto, MARGEN + 6, yBanda, 9);
     etiquetaValor(pagina, "No gravado:", datos.noGravado, MARGEN + 130, yBanda, 9);
-    etiquetaValor(pagina, "Impuestos:", datos.impuestos, MARGEN + 265, yBanda, 9);
+    if (!datos.sinArca) etiquetaValor(pagina, "Impuestos:", datos.impuestos, MARGEN + 265, yBanda, 9);
     const total = `Total: ${datos.total}`;
     escribir(pagina, total, DERECHA - 6, yBanda - 0.5, negrita, 10.5, "derecha");
 
-    // Un presupuesto no es fiscal: sin QR, leyenda de ARCA ni CAE.
-    if (datos.presupuesto) return;
+    // Un presupuesto o un comprobante X no es fiscal: sin QR, leyenda de ARCA ni CAE.
+    if (noFiscal) return;
 
     // QR vectorial: cada tramo horizontal de módulos oscuros es un rectángulo.
     const matriz = matrizQr(datos.qrUrl);

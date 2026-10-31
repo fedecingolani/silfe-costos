@@ -42,6 +42,10 @@ describe("leerFiltros", () => {
     ).toEqual({ desde: "", hasta: "", cliente: "", clase: "", estado: "", ambiente: "homologacion" });
   });
 
+  it("acepta el filtro de comprobantes sin ARCA (X)", () => {
+    expect(leerFiltros({ ambiente: "interno" }, "produccion").ambiente).toBe("interno");
+  });
+
   it("toma el primer valor si un parámetro viene repetido", () => {
     expect(leerFiltros({ estado: ["borrador", "autorizado"] }, "produccion").estado).toBe("borrador");
   });

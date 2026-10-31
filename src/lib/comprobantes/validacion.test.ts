@@ -31,6 +31,11 @@ describe("validarParaAutorizar", () => {
     expect(errores).toEqual(["Para un comprobante A el cliente necesita una CUIT válida."]);
   });
 
+  it("no exige CUIT para letra X, aunque el cliente sea Responsable Inscripto", () => {
+    const receptor = { ...valido.receptor, cuit: null };
+    expect(validarParaAutorizar({ ...valido, letra: "X", receptor }, HOY)).toEqual([]);
+  });
+
   it("no exige CUIT para letra B", () => {
     const receptor = { razonSocial: "Juan Pérez", condicionIva: "Consumidor Final" as const, cuit: null };
     expect(validarParaAutorizar({ ...valido, receptor }, HOY)).toEqual([]);

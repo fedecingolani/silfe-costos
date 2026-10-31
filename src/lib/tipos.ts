@@ -508,7 +508,11 @@ export const NOMBRES_CLASE_COMPROBANTE: Record<ClaseComprobante, string> = {
   nota_debito: "Nota de débito",
 };
 
-export type LetraComprobante = "A" | "B";
+/** A y B en puntos de venta electrónicos; X en los no electrónicos (sin ARCA ni IVA). */
+export type LetraComprobante = "A" | "B" | "X";
+
+/** Letras que se autorizan en ARCA (tienen código de comprobante). */
+export type LetraArca = Exclude<LetraComprobante, "X">;
 
 /** Códigos de ARCA: A = 1 / 2 / 3, B = 6 / 7 / 8 (factura / nota de débito / nota de crédito). */
 export type TipoComprobanteArca = 1 | 2 | 3 | 6 | 7 | 8;

@@ -11,7 +11,9 @@ import { ALICUOTAS_IVA, NO_GRAVADO } from "@/lib/tipos";
 /**
  * Tarjeta "Ítems" de un editor de ventas: renglones con buscador de
  * productos, precio propuesto por la lista, importes en vivo y totales.
- * Controlada: los renglones viven en el editor.
+ * Controlada: los renglones viven en el editor. Con `sinIva` (comprobante
+ * X) no se muestra ni se suma IVA: total = neto + no gravado. La alícuota
+ * se sigue eligiendo porque separa lo gravado de lo no gravado.
  */
 export function TablaItems({
   filas,
@@ -19,6 +21,7 @@ export function TablaItems({
   productos,
   precios,
   soloLectura = false,
+  sinIva = false,
 }: {
   filas: FilaItem[];
   /** Recibe una función que arma los renglones nuevos a partir de los actuales (vale el setState). */
@@ -28,10 +31,13 @@ export function TablaItems({
   /** Precio final (sin IVA) por producto de la lista elegida. */
   precios: ReadonlyMap<string, number>;
   soloLectura?: boolean;
+  /** Comprobante X: sin IVA. */
+  sinIva?: boolean;
 }) {
   const productosPorId = useMemo(() => new Map(productos.map((p) => [p.id, p])), [productos]);
   const calculables = filas.map(itemParaCalcular);
-  const totales = calcularTotales(calculables.filter((c) => c !== null));
+  // Sin IVA no hay IVA por alícuota: el pie muestra neto, no gravado y total.
+  const totales = calcularTotales(calculables.filter((c) => c !== null), { sinIva });
 
   const cambiarFila = (clave: string, cambios: Partial<FilaItem>) =>
     onCambiar((actuales) => actuales.map((f) => (f.clave === clave ? { ...f, ...cambios } : f)));
@@ -63,17 +69,17 @@ export function TablaItems({
               <th className="w-24">Cantidad</th>
               <th className="w-32">Precio</th>
               <th className="w-20">% dto</th>
-              <th className="w-24">IVA %</th>
+              <th className="w-24">{sinIva ? "Alícuota (no se aplica)" : "IVA %"}</th>
               <th className="text-right">Importe</th>
-              <th className="text-right">IVA</th>
-              <th className="text-right">Total</th>
+              {!sinIva && <th className="text-right">IVA</th>}
+              {!sinIva && <th className="text-right">Total</th>}
               <th />
             </tr>
           </thead>
           <tbody>
-            {filas.length === 0 && <Vacio mensaje="Agregá al menos un ítem." colSpan={9} />}
+            {filas.length === 0 && <Vacio mensaje="Agregá al menos un ítem." colSpan={sinIva ? 7 : 9} />}
             {filas.map((f, i) => {
-              const calculado = calculables[i] ? calcularItem(calculables[i]) : null;
+              const calculado = calculables[i] ? calcularItem(calculables[i], { sinIva }) : null;
               const producto = f.productoId ? productosPorId.get(f.productoId) : undefined;
               return (
                 <tr key={f.clave} className="align-top">
@@ -217,10 +223,14 @@ export function TablaItems({
                     )}
                   </td>
                   <td className="text-right tabular-nums">{calculado ? pesos(calculado.importe) : "—"}</td>
-                  <td className="text-right tabular-nums">{calculado ? pesos(calculado.iva) : "—"}</td>
-                  <td className="text-right tabular-nums">
-                    {calculado ? pesos(calculado.importe + calculado.iva) : "—"}
-                  </td>
+                  {!sinIva && (
+                    <>
+                      <td className="text-right tabular-nums">{calculado ? pesos(calculado.iva) : "—"}</td>
+                      <td className="text-right tabular-nums">
+                        {calculado ? pesos(calculado.importe + calculado.iva) : "—"}
+                      </td>
+                    </>
+                  )}
                   <td>
                     {!soloLectura && (
                       <button

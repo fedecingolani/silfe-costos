@@ -14,6 +14,9 @@
  * - Un renglón no gravado no lleva IVA: suma en noGravado (ImpTotConc), no
  *   en el neto gravado (ImpNeto) ni en el IVA por alícuota.
  * - total = neto + noGravado + iva.
+ * - Comprobante X (opción sinIva): no suma IVA. Los precios se toman tal
+ *   cual, el IVA de cada renglón es 0, no hay IVA por alícuota y
+ *   total = neto + noGravado. La alícuota se sigue validando porque se guarda.
  */
 import { NO_GRAVADO, type AlicuotaIva } from "@/lib/tipos";
 
@@ -26,6 +29,11 @@ export type ItemACalcular = {
   descuentoPct: number;
   /** En %: 0, 2.5, 5, 10.5, 21 o 27; o "no_gravado". */
   alicuotaIva: number | typeof NO_GRAVADO;
+};
+
+export type OpcionesCalculo = {
+  /** Comprobante X: sin IVA (ver arriba). */
+  sinIva?: boolean;
 };
 
 export type IvaPorAlicuota = { id: number; alicuota: AlicuotaIva; base: number; importe: number };
@@ -85,13 +93,13 @@ function ivaEnCentavos(baseCentavos: bigint, alicuota: number): bigint {
   return dividirRedondeando(baseCentavos * escalar(alicuota, 2), 10000n);
 }
 
-export function calcularItem(item: ItemACalcular): { importe: number; iva: number } {
+export function calcularItem(item: ItemACalcular, opciones: OpcionesCalculo = {}): { importe: number; iva: number } {
   const importe = importeEnCentavos(item);
-  if (item.alicuotaIva === NO_GRAVADO) return { importe: aPesos(importe), iva: 0 };
+  if (item.alicuotaIva === NO_GRAVADO || opciones.sinIva) return { importe: aPesos(importe), iva: 0 };
   return { importe: aPesos(importe), iva: aPesos(ivaEnCentavos(importe, item.alicuotaIva)) };
 }
 
-export function calcularTotales(items: readonly ItemACalcular[]): Totales {
+export function calcularTotales(items: readonly ItemACalcular[], opciones: OpcionesCalculo = {}): Totales {
   const bases = new Map<number, bigint>();
   let noGravado = 0n;
   for (const item of items) {
@@ -109,8 +117,9 @@ export function calcularTotales(items: readonly ItemACalcular[]): Totales {
   let iva = 0n;
   const ivaPorAlicuota: IvaPorAlicuota[] = [];
   for (const [alicuota, base] of bases) {
-    const importe = ivaEnCentavos(base, alicuota);
     neto += base;
+    if (opciones.sinIva) continue;
+    const importe = ivaEnCentavos(base, alicuota);
     iva += importe;
     ivaPorAlicuota.push({
       id: ID_ALICUOTA.get(alicuota)!,
