@@ -8,6 +8,7 @@ import {
   NOMBRES_ESTADO,
   TONO_ESTADO,
   leerFiltros,
+  mostrarAvisoHomologacion,
   nombreComprobante,
   numeroVisible,
   ordenarListado,
@@ -99,7 +100,7 @@ export default async function ComprobantesPage({
         }
       />
 
-      {ambienteActivo === "homologacion" && (
+      {mostrarAvisoHomologacion(ambienteActivo, filtros.ambiente) && (
         <div role="status" className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
           Homologación: los comprobantes no tienen validez fiscal.
         </div>
