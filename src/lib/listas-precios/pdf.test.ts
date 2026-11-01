@@ -85,7 +85,7 @@ describe("generarPdf", () => {
 
   it("imprime el pie con el texto destacado y el contacto", async () => {
     const { texto } = await leer(await generarPdf(datosDeReferencia));
-    expect(texto).toContain("SIL – FE 30 AÑOS");
+    expect(texto).toContain("EJEMPLO – 30 AÑOS");
     expect(texto).toContain("Ventas: (0299) 555-1234");
     expect(texto).toContain("Cipolletti, Río Negro");
   });
@@ -94,7 +94,7 @@ describe("generarPdf", () => {
     const { texto } = await leer(
       await generarPdf({ ...datosDeReferencia, textoDestacado: null, contacto: null }),
     );
-    expect(texto).not.toContain("SIL – FE");
+    expect(texto).not.toContain("EJEMPLO – 30");
     expect(texto).not.toContain("Ventas:");
   });
 
@@ -126,7 +126,7 @@ describe("generarPdf", () => {
       expect(posicion, linea).toBeGreaterThan(anterior);
       anterior = posicion;
     }
-    expect(paginas.at(-1)).toContain("SIL – FE 30 AÑOS");
+    expect(paginas.at(-1)).toContain("EJEMPLO – 30 AÑOS");
   });
 
   it("corta las palabras más largas que la columna de la descripción", async () => {

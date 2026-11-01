@@ -176,7 +176,7 @@ describe("armarDatosPdf", () => {
     expect(datos.numero).toBe("A-00007-00000361");
     expect(datos.fecha).toBe("16/10/2026");
     expect(datos.emisor).toEqual({
-      razonSocial: "SILFE S.A.",
+      razonSocial: "EMPRESA DE EJEMPLO S.A.",
       domicilio: "Ruta 22 Km 1200, General Roca, Río Negro",
       condicionIva: "Responsable Inscripto",
       cuit: "30-71234567-1",

@@ -59,7 +59,7 @@ de Cloudflare.
 | T2 | Configuración → Empresa: página, acciones con validación, menú, tests | delegada (writer) | [x] |
 | T3 | Logo de los PDF desde la base; carga unificada; borrar `logo-silfe.png`; tests | delegada (writer) | [x] |
 | T4 | Nombre, logo y color de marca en la app (layout, login, `globals.css`) | delegada (writer) | [x] |
-| T5 | Guía de ARCA, fixtures y docs genéricos | delegada (writer) | [ ] |
+| T5 | Guía de ARCA, fixtures y docs genéricos | delegada (writer) | [~] |
 
 Ruta: cada tarea toca dos o más archivos no triviales, así que se delega a un writer por tarea,
 de a uno.
@@ -107,3 +107,11 @@ con su commit; la estrategia de PR (uno solo o encadenados) se decide antes de a
   línea sólo con un hex válido. Se usó oklab en lugar de oklch: mismo resultado sin el tono
   indefinido del blanco y el negro. El login queda sólo con el nombre del producto.
   `npm run build` OK. Sin verificación visual en el navegador.
+- T5 (parcial): guía de ARCA con `empresa.key`/`empresa.csr`/`CN=empresa`/alias `empresa`;
+  fixtures y tests con «EMPRESA DE EJEMPLO S.A.», `ventas@ejemplo.com.ar`, «EJEMPLO – 30 AÑOS» y
+  CN `empresahomo` en `wsaa.test.ts`; las URL `https://silfe.test` se fueron con T3. README
+  (tabla `empresa` y «Puesta en marcha de una empresa nueva») y AGENTS.md actualizados.
+  Pendiente: `rg -i silfe src` todavía encuentra `src/lib/clientes/validaciones.test.ts`
+  (alias de ejemplo) y el titular por defecto `silfeerphomo` de `src/lib/arca/certificados-prueba.ts`,
+  que `src/lib/arca/certificado.test.ts` compara; esos dos tests están fuera de la superficie
+  autorizada, así que el default quedó como estaba para no romper el test.

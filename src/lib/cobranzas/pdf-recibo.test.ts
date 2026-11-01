@@ -50,7 +50,7 @@ describe("generarPdfRecibo", () => {
       "RECIBO",
       "R-00001-00000042",
       "18/10/2026",
-      "SILFE S.A.",
+      "EMPRESA DE EJEMPLO S.A.",
       "30-71234567-1",
       "Frutícola del Valle S.R.L.",
       "30-69876543-2",

@@ -50,7 +50,7 @@ const item = {
   precio_final: 100,
 };
 
-const parametros = { lista_texto_destacado: "SIL – FE", lista_contacto: "Ventas" };
+const parametros = { lista_texto_destacado: "EJEMPLO – 30 AÑOS", lista_contacto: "Ventas" };
 
 function respuestasOk(cambios: Record<string, Respuesta> = {}) {
   return {
@@ -85,7 +85,7 @@ describe("cargarDatosDescarga", () => {
     expect(resultado.nombre).toBe("Diciembre 2023");
     expect(resultado.datos).toMatchObject({
       titulo: "LISTA DE PRECIOS DICIEMBRE 2023",
-      textoDestacado: "SIL – FE",
+      textoDestacado: "EJEMPLO – 30 AÑOS",
       contacto: "Ventas",
       creadoEn: "2023-12-01T12:00:00+00:00",
     });

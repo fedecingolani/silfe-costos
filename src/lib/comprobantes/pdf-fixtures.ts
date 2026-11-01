@@ -6,7 +6,7 @@ import type { FilaComprobantePdf, FilaEmisorPdf, FilaItemPdf } from "./pdf-datos
 
 export const EMISOR_EJEMPLO: FilaEmisorPdf = {
   cuit: "30712345671",
-  razon_social: "SILFE S.A.",
+  razon_social: "EMPRESA DE EJEMPLO S.A.",
   condicion_iva: "Responsable Inscripto",
   domicilio_comercial: "Ruta 22 Km 1200, General Roca, Río Negro",
   ingresos_brutos: "30-71234567-1",

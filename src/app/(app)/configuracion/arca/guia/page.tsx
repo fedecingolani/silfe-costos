@@ -70,28 +70,29 @@ export default function GuiaCredencialesArcaPage() {
 
         <Paso numero={1} titulo="Generar la clave privada y el pedido de certificado (CSR)">
           <p>Abrí una terminal en una carpeta segura y generá la clave privada:</p>
-          <Codigo>openssl genrsa -out silfe.key 2048</Codigo>
+          <Codigo>openssl genrsa -out empresa.key 2048</Codigo>
           <p>
             Después generá el pedido de certificado. Reemplazá la razón social y la CUIT (sin guiones) por las de la
-            empresa; el nombre <code>silfe</code> es libre y sirve para identificar el certificado:
+            empresa. El nombre <code>empresa</code> de los archivos y del certificado es un ejemplo: podés usar el
+            que quieras para identificarlo.
           </p>
           <Codigo>
-            {`openssl req -new -key silfe.key \\
-  -subj "/C=AR/O=RAZON SOCIAL SA/CN=silfe/serialNumber=CUIT 30123456789" \\
-  -out silfe.csr`}
+            {`openssl req -new -key empresa.key \\
+  -subj "/C=AR/O=RAZON SOCIAL SA/CN=empresa/serialNumber=CUIT 30123456789" \\
+  -out empresa.csr`}
           </Codigo>
           <Nota>
             En Windows con Git Bash, anteponé <code>MSYS_NO_PATHCONV=1</code> al comando. Si no, Git Bash toma el
             texto que empieza con <code>/C=AR</code> como una ruta de archivo, lo cambia y el pedido sale mal.
           </Nota>
           <Codigo>
-            {`MSYS_NO_PATHCONV=1 openssl req -new -key silfe.key \\
-  -subj "/C=AR/O=RAZON SOCIAL SA/CN=silfe/serialNumber=CUIT 30123456789" \\
-  -out silfe.csr`}
+            {`MSYS_NO_PATHCONV=1 openssl req -new -key empresa.key \\
+  -subj "/C=AR/O=RAZON SOCIAL SA/CN=empresa/serialNumber=CUIT 30123456789" \\
+  -out empresa.csr`}
           </Codigo>
           <p>
-            Quedan dos archivos: <Ruta>silfe.key</Ruta> (guardalo, se sube en esta aplicación) y{" "}
-            <Ruta>silfe.csr</Ruta> (es el que se pega en ARCA).
+            Quedan dos archivos: <Ruta>empresa.key</Ruta> (guardalo, se sube en esta aplicación) y{" "}
+            <Ruta>empresa.csr</Ruta> (es el que se pega en ARCA).
           </p>
           <Nota>
             La CUIT del pedido tiene que ser la misma que la del emisor configurado en ARCA. Si no coinciden, la
@@ -109,12 +110,12 @@ export default function GuiaCredencialesArcaPage() {
             </li>
             <li>
               Entrá a <Ruta>WSASS</Ruta> y elegí <Ruta>Nuevo certificado</Ruta>. Poné un nombre simbólico (por ejemplo{" "}
-              <code>silfe</code>) y pegá el contenido completo de <Ruta>silfe.csr</Ruta>, incluidas las líneas{" "}
+              <code>empresa</code>) y pegá el contenido completo de <Ruta>empresa.csr</Ruta>, incluidas las líneas{" "}
               <code>BEGIN</code> y <code>END</code>.
             </li>
             <li>
               Al confirmar, ARCA muestra el certificado. Copialo completo en un archivo de texto y guardalo como{" "}
-              <Ruta>silfe-homologacion.crt</Ruta>.
+              <Ruta>empresa-homologacion.crt</Ruta>.
             </li>
             <li>
               Todavía en WSASS, elegí <Ruta>Crear autorización a servicio</Ruta>: seleccioná el nombre simbólico del
@@ -135,11 +136,11 @@ export default function GuiaCredencialesArcaPage() {
             </li>
             <li>
               Entrá a <Ruta>Administración de Certificados Digitales</Ruta>, elegí la CUIT y tocá{" "}
-              <Ruta>Agregar alias</Ruta>. Poné un alias (por ejemplo <code>silfe</code>) y subí el archivo{" "}
-              <Ruta>silfe.csr</Ruta>.
+              <Ruta>Agregar alias</Ruta>. Poné un alias (por ejemplo <code>empresa</code>) y subí el archivo{" "}
+              <Ruta>empresa.csr</Ruta>.
             </li>
             <li>
-              Entrá al alias recién creado y descargá el certificado. Guardalo como <Ruta>silfe-produccion.crt</Ruta>.
+              Entrá al alias recién creado y descargá el certificado. Guardalo como <Ruta>empresa-produccion.crt</Ruta>.
             </li>
           </ol>
         </Paso>
@@ -156,7 +157,7 @@ export default function GuiaCredencialesArcaPage() {
             </li>
             <li>
               En representante, tocá <Ruta>Buscar</Ruta>, elegí <Ruta>Computador fiscal</Ruta> y seleccioná el alias
-              del certificado (<code>silfe</code>).
+              del certificado (<code>empresa</code>).
             </li>
             <li>Confirmá. La relación queda activa en unos minutos.</li>
           </ol>

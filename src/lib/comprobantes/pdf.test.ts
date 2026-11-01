@@ -68,7 +68,7 @@ describe("generarPdfComprobante", () => {
       "A-00007-00000361",
       "16/10/2026",
       "30-71234567-1",
-      "SILFE S.A.",
+      "EMPRESA DE EJEMPLO S.A.",
       "Frutícola del Valle S.R.L.",
       "Pesos Argentinos",
       "Cuenta Corriente",
