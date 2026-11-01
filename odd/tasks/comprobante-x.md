@@ -1,7 +1,7 @@
 # Comprobantes X en punto de venta sin ARCA — SPEC
 
-> Estado: **en implementación** (decisiones tomadas el 30/10/2026).
-> Rama: `feat/comprobante-x` (sale de `feat/pdf-precio-con-descuento`, que también toca el PDF).
+> Estado: **en producción** desde el 31/10/2026 (decisiones tomadas el 30/10/2026).
+> Rama: `feat/comprobante-x`, mergeada en `main` por el PR #14.
 
 ## Objetivo
 
@@ -74,11 +74,18 @@ Limitación: dos NC X simultáneas sobre la misma factura pueden pasar el contro
   9999, factura X por $100, NC X desde la factura, PDF y filtro "Sin ARCA (X)".
   Detalle menor: con ese filtro el listado sigue mostrando el aviso de homologación.
 
-## Siguiente paso
-
 - 31/10: migración aplicada en el remoto (`supabase db push`, sólo `20261030000003`). Verificado:
   historial local = remoto, RPC con grant a `authenticated` y no a `anon`, checks e índices
   creados, el comprobante existente intacto.
+- 31/10: PR #14 mergeado (`1d632f8`) y Worker `silfe-costos` deployado (versión `6b799713`). El
+  build apunta al Supabase remoto; `/login` responde 200.
 
-PR #14 abierto. Falta merge y deploy al Worker, y dar de alta el punto de venta 9999 sin ARCA en
-Configuración > ARCA (decisión del usuario).
+Orden usado: migración → merge → deploy. La app anterior funciona con la migración nueva, pero la
+app nueva necesita `autorizar_comprobante_interno`.
+
+## Siguiente paso
+
+- Dar de alta el punto de venta 9999 sin ARCA en Configuración > ARCA de producción y emitir una
+  primera X de prueba (a cargo del usuario).
+- Detalle visual pendiente: con el filtro "Sin ARCA (X)" el listado sigue mostrando el aviso de
+  homologación del ambiente activo.
