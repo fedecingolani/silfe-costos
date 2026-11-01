@@ -58,7 +58,7 @@ de Cloudflare.
 | T1 | Migración `empresa` + RLS + pgTAP | delegada (writer: SQL, tests) | [x] |
 | T2 | Configuración → Empresa: página, acciones con validación, menú, tests | delegada (writer) | [x] |
 | T3 | Logo de los PDF desde la base; carga unificada; borrar `logo-silfe.png`; tests | delegada (writer) | [x] |
-| T4 | Nombre, logo y color de marca en la app (layout, login, `globals.css`) | delegada (writer) | [ ] |
+| T4 | Nombre, logo y color de marca en la app (layout, login, `globals.css`) | delegada (writer) | [x] |
 | T5 | Guía de ARCA, fixtures y docs genéricos | delegada (writer) | [ ] |
 
 Ruta: cada tarea toca dos o más archivos no triviales, así que se delega a un writer por tarea,
@@ -98,3 +98,12 @@ con su commit; la estrategia de PR (uno solo o encadenados) se decide antes de a
   los tests usan PNG y JPEG de 1x1 (`logo-fixtures.ts`). RED observado en `logo.test.ts`.
   Pendiente: `OpcionesDescarga.url` de listas queda opcional y sin uso porque su llamador
   (`listas-precios/[id]/descarga.ts`) está fuera de la superficie autorizada.
+- T4: el layout de la app muestra logo (vía `/empresa/logo?v=<actualizado_en>`, `private,
+  immutable`, 404 sin logo) y nombre (fantasía, si no razón social de ARCA, si no sólo
+  «Charoli Gestión»); el encabezado móvil, el nombre o el del producto. `leerIdentidadEmpresa`
+  (`identidad-servidor.ts`, `cache` de React, nunca falla) y helpers puros en `identidad.ts`
+  (RED observado, 6 tests). La escala `marca-*` sale de `--marca-base` con `color-mix(in oklab)`
+  en `@theme inline` (así cada utilidad resuelve la base del elemento); el layout la define en
+  línea sólo con un hex válido. Se usó oklab en lugar de oklch: mismo resultado sin el tono
+  indefinido del blanco y el negro. El login queda sólo con el nombre del producto.
+  `npm run build` OK. Sin verificación visual en el navegador.

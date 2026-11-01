@@ -1,20 +1,29 @@
 @import "tailwindcss";
 
-@theme {
-  --color-marca-50: #f2f7f3;
-  --color-marca-100: #dfeae1;
-  --color-marca-200: #c0d6c5;
-  --color-marca-300: #96b99f;
-  --color-marca-400: #6a9776;
-  --color-marca-500: #4a7a58;
-  --color-marca-600: #386145;
-  --color-marca-700: #2d4d38;
-  --color-marca-800: #263e2f;
-  --color-marca-900: #203328;
+/*
+ * Escala de marca derivada de un solo color, --marca-base (el color de
+ * Configuración → Empresa, que el layout de la app define en línea). Las
+ * mezclas en oklab con blanco y negro reproducen la escala verde original
+ * cuando la base es #4a7a58. `inline` hace que cada utilidad lleve la mezcla
+ * y la resuelva con el --marca-base del elemento, no con el de :root.
+ */
+@theme inline {
+  --color-marca-50: color-mix(in oklab, var(--marca-base) 6%, white);
+  --color-marca-100: color-mix(in oklab, var(--marca-base) 16%, white);
+  --color-marca-200: color-mix(in oklab, var(--marca-base) 31%, white);
+  --color-marca-300: color-mix(in oklab, var(--marca-base) 53%, white);
+  --color-marca-400: color-mix(in oklab, var(--marca-base) 79%, white);
+  --color-marca-500: var(--marca-base);
+  --color-marca-600: color-mix(in oklab, var(--marca-base) 85%, black);
+  --color-marca-700: color-mix(in oklab, var(--marca-base) 73%, black);
+  --color-marca-800: color-mix(in oklab, var(--marca-base) 63%, black);
+  --color-marca-900: color-mix(in oklab, var(--marca-base) 56%, black);
 }
 
 :root {
   color-scheme: light;
+  /* Verde por defecto, si la empresa no tiene color de marca. */
+  --marca-base: #4a7a58;
 }
 
 body {
