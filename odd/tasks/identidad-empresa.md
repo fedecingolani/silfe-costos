@@ -59,7 +59,7 @@ de Cloudflare.
 | T2 | Configuración → Empresa: página, acciones con validación, menú, tests | delegada (writer) | [x] |
 | T3 | Logo de los PDF desde la base; carga unificada; borrar `logo-silfe.png`; tests | delegada (writer) | [x] |
 | T4 | Nombre, logo y color de marca en la app (layout, login, `globals.css`) | delegada (writer) | [x] |
-| T5 | Guía de ARCA, fixtures y docs genéricos | delegada (writer) | [~] |
+| T5 | Guía de ARCA, fixtures y docs genéricos | delegada (writer) | [x] |
 
 Ruta: cada tarea toca dos o más archivos no triviales, así que se delega a un writer por tarea,
 de a uno.
@@ -115,3 +115,7 @@ con su commit; la estrategia de PR (uno solo o encadenados) se decide antes de a
   (alias de ejemplo) y el titular por defecto `silfeerphomo` de `src/lib/arca/certificados-prueba.ts`,
   que `src/lib/arca/certificado.test.ts` compara; esos dos tests están fuera de la superficie
   autorizada, así que el default quedó como estaba para no romper el test.
+- T5 (cierre, inline): `empresahomo` en `certificados-prueba.ts` y su test, alias de ejemplo en
+  `validaciones.test.ts`, placeholder y comentario "EJEMPLO – 30 AÑOS", y se quitó la opción
+  `url` sin uso de la descarga de listas. `rg -i silfe src public` vacío. typecheck y eslint
+  limpios; vitest 59 archivos, 795 tests en verde.

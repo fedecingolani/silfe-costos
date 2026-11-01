@@ -10,11 +10,11 @@ export type ItemListaDescarga = Pick<
 export type DatosListaDescarga = {
   titulo: string;
   items: ItemListaDescarga[];
-  /** Texto grande y centrado del pie (ej. "SIL – FE 30 AÑOS"). null: no se imprime. */
+  /** Texto grande y centrado del pie (ej. "EJEMPLO – 30 AÑOS"). null: no se imprime. */
   textoDestacado: string | null;
   /** Datos de contacto del pie, en varias líneas. null: no se imprime. */
   contacto: string | null;
-  /** Bytes del logo en PNG. null: la lista sale sin logo. */
+  /** Bytes del logo (PNG o JPEG). null: la lista sale sin logo. */
   logo: Uint8Array | null;
   /** Fecha de creación de la lista (ISO): fija las fechas del PDF para que la misma lista dé los mismos bytes. */
   creadoEn: string;
