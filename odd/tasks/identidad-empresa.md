@@ -56,7 +56,7 @@ de Cloudflare.
 | ID | Tarea | Ruta | Estado |
 | --- | --- | --- | --- |
 | T1 | Migración `empresa` + RLS + pgTAP | delegada (writer: SQL, tests) | [x] |
-| T2 | Configuración → Empresa: página, acciones con validación, menú, tests | delegada (writer) | [ ] |
+| T2 | Configuración → Empresa: página, acciones con validación, menú, tests | delegada (writer) | [x] |
 | T3 | Logo de los PDF desde la base; carga unificada; borrar `logo-silfe.png`; tests | delegada (writer) | [ ] |
 | T4 | Nombre, logo y color de marca en la app (layout, login, `globals.css`) | delegada (writer) | [ ] |
 | T5 | Guía de ARCA, fixtures y docs genéricos | delegada (writer) | [ ] |
@@ -87,3 +87,7 @@ con su commit; la estrategia de PR (uno solo o encadenados) se decide antes de a
 - Fallas previas, ajenas a esta feature: `cobranzas_test.sql` y `comprobantes_test.sql` cortan
   con "El punto de venta 9199/9099 no es electrónico" (fixtures que no contemplan el
   comprobante X). Ya fallaban antes de las migraciones nuevas.
+- T2: Configuración → Empresa (`configuracion/empresa`: página, `acciones.ts` con `guardarEmpresa`,
+  `FormularioEmpresa`) y entrada «Empresa» en el menú. Validación pura en
+  `src/lib/empresa/validacion.ts` (tipo del logo por los bytes iniciales, tope 512 KB, opción
+  «Quitar logo»); `validacion.test.ts` 15/15, RED observado (módulo inexistente) antes de escribirlo.
