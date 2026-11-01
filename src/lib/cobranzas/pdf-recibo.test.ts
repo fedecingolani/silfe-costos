@@ -1,6 +1,7 @@
 import { inflateSync } from "node:zlib";
 import { PDFArray, PDFDocument, PDFName, PDFRawStream, type PDFPage } from "pdf-lib";
 import { describe, expect, it } from "vitest";
+import { JPEG_1X1, PNG_1X1 } from "@/lib/empresa/logo-fixtures";
 import { generarPdfRecibo } from "./pdf-recibo";
 import { armarDatosPdfRecibo } from "./pdf-recibo-datos";
 import { MEDIOS_EJEMPLO, ejemploRecibo, ejemploReciboAnulado } from "./pdf-recibo-fixtures";
@@ -90,5 +91,20 @@ describe("generarPdfRecibo", () => {
       expect(texto).toContain(`Página ${i + 1} de ${paginas.length}`);
       expect(texto.includes("Firma y aclaración")).toBe(i === paginas.length - 1);
     });
+  });
+});
+
+describe("generarPdfRecibo: logo", () => {
+  it.each([
+    ["PNG", PNG_1X1],
+    ["JPEG", JPEG_1X1],
+  ])("incluye el logo %s", async (_tipo, logo) => {
+    const bytes = await generarPdfRecibo(armarDatosPdfRecibo(ejemploRecibo()), logo);
+    expect(Buffer.from(bytes).toString("latin1")).toContain("/Image");
+  });
+
+  it("sale sin logo si los bytes no son una imagen", async () => {
+    const bytes = await generarPdfRecibo(armarDatosPdfRecibo(ejemploRecibo()), new Uint8Array([1, 2, 3]));
+    expect(Buffer.from(bytes).toString("latin1")).not.toContain("/Image");
   });
 });

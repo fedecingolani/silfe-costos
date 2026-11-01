@@ -1,10 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { cargarPdfComprobante, respuestaPdf } from "./pdf-descarga";
+import { PNG_1X1, PNG_1X1_BASE64 } from "@/lib/empresa/logo-fixtures";
 import { COMPROBANTE_EJEMPLO, EMISOR_EJEMPLO, ITEM_EJEMPLO } from "./pdf-fixtures";
 
 const ID = COMPROBANTE_EJEMPLO.id;
-const URL_PEDIDO = `https://silfe.test/comprobantes/${ID}/pdf`;
 
 type Respuesta = { data: unknown; error: { message: string } | null };
 
@@ -39,12 +39,10 @@ const BASE = {
   punto_venta: { data: { electronico: true }, error: null },
 };
 
-const sinLogo = vi.fn(async () => new Response("no", { status: 404 }));
-
 describe("cargarPdfComprobante", () => {
   it("da 404 sin consultar si el id no es un uuid", async () => {
     const { cliente, consultas } = clienteStub(BASE);
-    const r = await cargarPdfComprobante({ id: "x", url: URL_PEDIDO, cliente, fetch: sinLogo });
+    const r = await cargarPdfComprobante({ id: "x", cliente });
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.respuesta.status).toBe(404);
     expect(consultas).toHaveLength(0);
@@ -52,27 +50,27 @@ describe("cargarPdfComprobante", () => {
 
   it("da 404 si el comprobante no existe", async () => {
     const { cliente } = clienteStub({ ...BASE, comprobante: { data: null, error: null } });
-    const r = await cargarPdfComprobante({ id: ID, url: URL_PEDIDO, cliente, fetch: sinLogo });
+    const r = await cargarPdfComprobante({ id: ID, cliente });
     if (r.ok) throw new Error("esperaba error");
     expect(r.respuesta.status).toBe(404);
   });
 
   it("da 409 con un texto legible si no está autorizado o el punto de venta no es electrónico", async () => {
     const borrador = clienteStub({ ...BASE, comprobante: { data: { ...COMPROBANTE_EJEMPLO, estado: "borrador" }, error: null } });
-    const r1 = await cargarPdfComprobante({ id: ID, url: URL_PEDIDO, cliente: borrador.cliente, fetch: sinLogo });
+    const r1 = await cargarPdfComprobante({ id: ID, cliente: borrador.cliente });
     if (r1.ok) throw new Error("esperaba error");
     expect(r1.respuesta.status).toBe(409);
     expect(await r1.respuesta.text()).toMatch(/autorizado/);
 
     const manual = clienteStub({ ...BASE, punto_venta: { data: { electronico: false }, error: null } });
-    const r2 = await cargarPdfComprobante({ id: ID, url: URL_PEDIDO, cliente: manual.cliente, fetch: sinLogo });
+    const r2 = await cargarPdfComprobante({ id: ID, cliente: manual.cliente });
     if (r2.ok) throw new Error("esperaba error");
     expect(r2.respuesta.status).toBe(409);
   });
 
   it("arma los datos con columnas explícitas y sin leer las credenciales", async () => {
     const { cliente, consultas } = clienteStub(BASE);
-    const r = await cargarPdfComprobante({ id: ID, url: URL_PEDIDO, cliente, fetch: sinLogo });
+    const r = await cargarPdfComprobante({ id: ID, cliente });
     if (!r.ok) throw new Error(await r.respuesta.text());
     expect(r.datos.numero).toBe("A-00007-00000361");
     expect(r.logo).toBeNull();
@@ -84,7 +82,7 @@ describe("cargarPdfComprobante", () => {
     const aviso = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     const distinto = { ...COMPROBANTE_EJEMPLO, iva_detalle: [{ id: 5, alicuota: 21, base: 1400000, importe: 1 }] };
     const { cliente } = clienteStub({ ...BASE, comprobante: { data: distinto, error: null } });
-    const r = await cargarPdfComprobante({ id: ID, url: URL_PEDIDO, cliente, fetch: sinLogo });
+    const r = await cargarPdfComprobante({ id: ID, cliente });
     expect(r.ok).toBe(true);
     expect(aviso.mock.calls.some((c) => String(c[0]).includes("IVA"))).toBe(true);
     aviso.mockRestore();
@@ -100,20 +98,31 @@ describe("cargarPdfComprobante", () => {
         error: null,
       },
     });
-    const r = await cargarPdfComprobante({ id: ID, url: URL_PEDIDO, cliente, fetch: sinLogo });
+    const r = await cargarPdfComprobante({ id: ID, cliente });
     if (!r.ok) throw new Error(await r.respuesta.text());
     expect(r.datos.asociados).toEqual(["A-00007-00000150 del 09/01/2026"]);
     expect(consultas.find((c) => c.tabla === "comprobante_asociado")?.columnas).not.toContain("*");
   });
 
-  it("pide el logo al mismo origen", async () => {
-    const png = new Uint8Array([137, 80, 78, 71]);
-    const conLogo = vi.fn(async () => new Response(png));
-    const { cliente } = clienteStub(BASE);
-    const r = await cargarPdfComprobante({ id: ID, url: URL_PEDIDO, cliente, fetch: conLogo });
+  it("lee el logo de la empresa, sólo sus columnas", async () => {
+    const { cliente, consultas } = clienteStub({
+      ...BASE,
+      empresa: { data: { logo_base64: PNG_1X1_BASE64, logo_tipo: "image/png" }, error: null },
+    });
+    const r = await cargarPdfComprobante({ id: ID, cliente });
     if (!r.ok) throw new Error("esperaba ok");
-    expect(r.logo).toEqual(png);
-    expect(String((conLogo.mock.calls[0] as unknown[])[0])).toBe("https://silfe.test/logo-silfe.png");
+    expect(r.logo).toEqual(PNG_1X1);
+    expect(consultas.find((c) => c.tabla === "empresa")?.columnas).toBe("logo_base64, logo_tipo");
+  });
+
+  it("sale sin logo si falla la lectura del logo", async () => {
+    const aviso = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { cliente } = clienteStub({ ...BASE, empresa: { data: null, error: { message: "fallo de red" } } });
+    const r = await cargarPdfComprobante({ id: ID, cliente });
+    if (!r.ok) throw new Error("esperaba ok");
+    expect(r.logo).toBeNull();
+    expect(aviso).toHaveBeenCalled();
+    aviso.mockRestore();
   });
 });
 

@@ -5,10 +5,9 @@
  * arca_credencial.
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { MS_LOGO } from "@/lib/listas-precios/cargar-descarga";
 import { esUuid } from "@/lib/listas-precios/uuid";
 import { COLUMNAS_EMISOR_PDF, type FilaEmisorPdf } from "@/lib/comprobantes/pdf-datos";
-import { cargarLogo } from "@/lib/comprobantes/pdf-descarga";
+import { leerLogoEmpresa } from "@/lib/empresa/logo";
 import {
   COLUMNAS_CLIENTE_RECIBO_PDF,
   COLUMNAS_IMPUTACION_RECIBO_PDF,
@@ -22,8 +21,6 @@ import {
   type FilaMedioReciboPdf,
   type FilaReciboPdf,
 } from "./pdf-recibo-datos";
-
-type Fetch = (url: string | URL | Request, init?: RequestInit) => Promise<Response>;
 
 export type ResultadoPdfRecibo =
   | { ok: true; datos: DatosPdfRecibo; logo: Uint8Array | null }
@@ -41,18 +38,11 @@ function respuestaError(mensaje: string, status: number): ResultadoPdfRecibo {
 
 export async function cargarPdfRecibo({
   id,
-  url,
   cliente,
-  fetch: fetchLogo = fetch,
-  msLogo = MS_LOGO,
 }: {
   id: string;
-  /** URL del pedido: el logo se pide al mismo origen. */
-  url: string;
   /** Cliente de Supabase con la sesión del usuario. */
   cliente: SupabaseClient;
-  fetch?: Fetch;
-  msLogo?: number;
 }): Promise<ResultadoPdfRecibo> {
   if (!esUuid(id)) return respuestaError("El recibo no existe.", 404);
 
@@ -73,7 +63,7 @@ export async function cargarPdfRecibo({
   if (error) return respuestaError(`Error al cargar los datos del recibo: ${error.message}`, 500);
   if (!clienteRes.data) return respuestaError("No se encontró el cliente del recibo.", 500);
 
-  const logo = await cargarLogo(url, fetchLogo, msLogo);
+  const logo = (await leerLogoEmpresa(cliente))?.bytes ?? null;
   const datos = armarDatosPdfRecibo({
     recibo: r,
     cliente: clienteRes.data as unknown as FilaClienteReciboPdf,

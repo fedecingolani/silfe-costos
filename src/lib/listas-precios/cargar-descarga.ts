@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { leerLogoEmpresa } from "@/lib/empresa/logo";
 import type { ListaPrecio, ListaPrecioItem, ParametroCosteo } from "@/lib/tipos";
 import { dispositionAdjunto } from "./nombre-archivo";
 import type { DatosListaDescarga } from "./tipos";
@@ -8,20 +9,13 @@ export type ResultadoDescarga =
   | { ok: true; nombre: string; datos: DatosListaDescarga }
   | { ok: false; respuesta: Response };
 
-/** Tiempo máximo para traer el logo; pasado ese tiempo la lista sale sin logo. */
-export const MS_LOGO = 3000;
-
-type Fetch = (url: string | URL | Request, init?: RequestInit) => Promise<Response>;
-
 export type OpcionesDescarga = {
   id: string;
-  /** URL del pedido: el logo se pide al mismo origen. */
-  url: string;
+  /** URL del pedido. Sin uso desde que el logo se lee de la base; se quita junto con su llamador. */
+  url?: string;
   conLogo: boolean;
   /** Cliente de Supabase con la sesión del usuario. */
   cliente: SupabaseClient;
-  fetch?: Fetch;
-  msLogo?: number;
 };
 
 function respuestaError(mensaje: string, status: number): ResultadoDescarga {
@@ -34,38 +28,19 @@ function respuestaError(mensaje: string, status: number): ResultadoDescarga {
   };
 }
 
-/** Logo de public/. Nunca falla: si no llega a tiempo o no se puede leer, la lista sale sin logo. */
-async function cargarLogo(url: string, fetchLogo: Fetch, ms: number): Promise<Uint8Array | null> {
-  try {
-    const signal = AbortSignal.timeout(ms);
-    const respuesta = await fetchLogo(new URL("/logo-silfe.png", url), { signal });
-    if (!respuesta.ok) {
-      console.warn(`No se pudo traer el logo de la lista: respuesta ${respuesta.status}`);
-      return null;
-    }
-    return new Uint8Array(await respuesta.arrayBuffer());
-  } catch (error) {
-    console.warn("No se pudo traer el logo de la lista:", error);
-    return null;
-  }
-}
-
 /**
  * Carga la lista, sus ítems en orden y el pie configurado. Un id que no es
- * un uuid da 404 sin consultar. El logo se pide en paralelo con las
- * consultas, con un tiempo máximo; si falla, la lista sale sin logo.
+ * un uuid da 404 sin consultar. El logo se lee de `empresa` en paralelo con
+ * las consultas; si falla, la lista sale sin logo.
  */
 export async function cargarDatosDescarga({
   id,
-  url,
   conLogo,
   cliente,
-  fetch: fetchLogo = fetch,
-  msLogo = MS_LOGO,
 }: OpcionesDescarga): Promise<ResultadoDescarga> {
   if (!esUuid(id)) return respuestaError("La lista de precios no existe.", 404);
 
-  const logo = conLogo ? cargarLogo(url, fetchLogo, msLogo) : Promise.resolve(null);
+  const logo = conLogo ? leerLogoEmpresa(cliente).then((l) => l?.bytes ?? null) : Promise.resolve(null);
 
   const [lista, items, parametros] = await Promise.all([
     cliente.from("lista_precio").select("*").eq("id", id).maybeSingle(),

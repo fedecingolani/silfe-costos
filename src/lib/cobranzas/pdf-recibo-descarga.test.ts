@@ -1,6 +1,7 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { EMISOR_EJEMPLO } from "@/lib/comprobantes/pdf-fixtures";
+import { JPEG_1X1, JPEG_1X1_BASE64 } from "@/lib/empresa/logo-fixtures";
 import { cargarPdfRecibo } from "./pdf-recibo-descarga";
 import {
   CLIENTE_RECIBO_EJEMPLO,
@@ -10,7 +11,6 @@ import {
 } from "./pdf-recibo-fixtures";
 
 const ID = RECIBO_EJEMPLO.id;
-const URL_PEDIDO = `https://silfe.test/cobranzas/${ID}/pdf`;
 
 type Respuesta = { data: unknown; error: { message: string } | null };
 
@@ -43,12 +43,10 @@ const BASE: Record<string, Respuesta> = {
   arca_emisor: { data: EMISOR_EJEMPLO, error: null },
 };
 
-const sinLogo = vi.fn(async () => new Response("no", { status: 404 }));
-
 describe("cargarPdfRecibo", () => {
   it("da 404 sin consultar si el id no es un uuid", async () => {
     const { cliente, consultas } = clienteStub(BASE);
-    const r = await cargarPdfRecibo({ id: "x", url: URL_PEDIDO, cliente, fetch: sinLogo });
+    const r = await cargarPdfRecibo({ id: "x", cliente });
     if (r.ok) throw new Error("esperaba error");
     expect(r.respuesta.status).toBe(404);
     expect(consultas).toHaveLength(0);
@@ -56,7 +54,7 @@ describe("cargarPdfRecibo", () => {
 
   it("da 404 si el recibo no existe", async () => {
     const { cliente } = clienteStub({ ...BASE, recibo: { data: null, error: null } });
-    const r = await cargarPdfRecibo({ id: ID, url: URL_PEDIDO, cliente, fetch: sinLogo });
+    const r = await cargarPdfRecibo({ id: ID, cliente });
     if (r.ok) throw new Error("esperaba error");
     expect(r.respuesta.status).toBe(404);
   });
@@ -66,7 +64,7 @@ describe("cargarPdfRecibo", () => {
       ...BASE,
       recibo: { data: { ...RECIBO_EJEMPLO, estado: "borrador", cliente_id: "c1" }, error: null },
     });
-    const r = await cargarPdfRecibo({ id: ID, url: URL_PEDIDO, cliente, fetch: sinLogo });
+    const r = await cargarPdfRecibo({ id: ID, cliente });
     if (r.ok) throw new Error("esperaba error");
     expect(r.respuesta.status).toBe(409);
     expect(await r.respuesta.text()).toBe("Un recibo en borrador no se imprime: emitilo primero.");
@@ -75,20 +73,37 @@ describe("cargarPdfRecibo", () => {
 
   it("da 500 con el mensaje si falla una consulta", async () => {
     const { cliente } = clienteStub({ ...BASE, recibo_medio: { data: null, error: { message: "sin permiso" } } });
-    const r = await cargarPdfRecibo({ id: ID, url: URL_PEDIDO, cliente, fetch: sinLogo });
+    const r = await cargarPdfRecibo({ id: ID, cliente });
     if (r.ok) throw new Error("esperaba error");
     expect(r.respuesta.status).toBe(500);
     expect(await r.respuesta.text()).toContain("sin permiso");
   });
 
-  it("arma los datos con columnas explícitas (nunca *) y sin logo si no llega", async () => {
+  it("arma los datos con columnas explícitas (nunca *) y sin logo si no hay uno cargado", async () => {
     const { cliente, consultas } = clienteStub(BASE);
-    const r = await cargarPdfRecibo({ id: ID, url: URL_PEDIDO, cliente, fetch: sinLogo });
+    const r = await cargarPdfRecibo({ id: ID, cliente });
     if (!r.ok) throw new Error("esperaba datos");
     expect(r.logo).toBeNull();
     expect(r.datos.nombreArchivo).toBe("Recibo R-00001-00000042");
     expect(r.datos.imputaciones).toHaveLength(2);
     for (const c of consultas) expect(c.columnas).not.toContain("*");
-    expect(consultas.map((c) => c.tabla).sort()).toEqual(["arca_emisor", "cliente", "imputacion", "recibo", "recibo_medio"]);
+    expect(consultas.map((c) => c.tabla).sort()).toEqual([
+      "arca_emisor",
+      "cliente",
+      "empresa",
+      "imputacion",
+      "recibo",
+      "recibo_medio",
+    ]);
+  });
+
+  it("lee el logo de la empresa", async () => {
+    const { cliente } = clienteStub({
+      ...BASE,
+      empresa: { data: { logo_base64: JPEG_1X1_BASE64, logo_tipo: "image/jpeg" }, error: null },
+    });
+    const r = await cargarPdfRecibo({ id: ID, cliente });
+    if (!r.ok) throw new Error("esperaba datos");
+    expect(r.logo).toEqual(JPEG_1X1);
   });
 });

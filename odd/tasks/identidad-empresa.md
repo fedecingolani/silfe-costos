@@ -57,7 +57,7 @@ de Cloudflare.
 | --- | --- | --- | --- |
 | T1 | Migración `empresa` + RLS + pgTAP | delegada (writer: SQL, tests) | [x] |
 | T2 | Configuración → Empresa: página, acciones con validación, menú, tests | delegada (writer) | [x] |
-| T3 | Logo de los PDF desde la base; carga unificada; borrar `logo-silfe.png`; tests | delegada (writer) | [ ] |
+| T3 | Logo de los PDF desde la base; carga unificada; borrar `logo-silfe.png`; tests | delegada (writer) | [x] |
 | T4 | Nombre, logo y color de marca en la app (layout, login, `globals.css`) | delegada (writer) | [ ] |
 | T5 | Guía de ARCA, fixtures y docs genéricos | delegada (writer) | [ ] |
 
@@ -91,3 +91,10 @@ con su commit; la estrategia de PR (uno solo o encadenados) se decide antes de a
   `FormularioEmpresa`) y entrada «Empresa» en el menú. Validación pura en
   `src/lib/empresa/validacion.ts` (tipo del logo por los bytes iniciales, tope 512 KB, opción
   «Quitar logo»); `validacion.test.ts` 15/15, RED observado (módulo inexistente) antes de escribirlo.
+- T3: los PDF (comprobante, presupuesto, recibo y lista) leen el logo de `empresa` con
+  `leerLogoEmpresa` (`src/lib/empresa/logo.ts`, nunca falla: null y `console.warn`) y lo incrustan
+  como PNG o JPEG según sus bytes con `incrustarLogo` (`pdf-logo.ts`). Se quitaron las dos
+  `cargarLogo` por HTTP, `MS_LOGO`, los parámetros `fetch`/`msLogo`/`url` y `public/logo-silfe.png`;
+  los tests usan PNG y JPEG de 1x1 (`logo-fixtures.ts`). RED observado en `logo.test.ts`.
+  Pendiente: `OpcionesDescarga.url` de listas queda opcional y sin uso porque su llamador
+  (`listas-precios/[id]/descarga.ts`) está fuera de la superficie autorizada.

@@ -11,6 +11,7 @@
  * principio. Función pura: los bytes del logo llegan como parámetro.
  */
 import { PDFDocument, StandardFonts, degrees, rgb, type PDFFont, type PDFPage, type RGB } from "pdf-lib";
+import { incrustarLogo } from "@/lib/empresa/pdf-logo";
 import { crearSaneador, partirEnLineas, recortar } from "@/lib/comprobantes/pdf";
 import { paginar } from "@/lib/comprobantes/pdf-datos";
 import type { DatosPdfRecibo } from "./pdf-recibo-datos";
@@ -84,7 +85,7 @@ type Renglon =
   | { tipo: "fila"; columnas: Columna[]; celdas: { lineas: string[]; tamano: number }[]; alto: number }
   | { tipo: "espacio"; alto: number };
 
-export async function generarPdfRecibo(datos: DatosPdfRecibo, logoPng?: Uint8Array | null): Promise<Uint8Array> {
+export async function generarPdfRecibo(datos: DatosPdfRecibo, logoBytes?: Uint8Array | null): Promise<Uint8Array> {
   const doc = await PDFDocument.create();
   doc.setTitle(datos.nombreArchivo);
   doc.setCreator("Charoli Gestión");
@@ -94,14 +95,8 @@ export async function generarPdfRecibo(datos: DatosPdfRecibo, logoPng?: Uint8Arr
   const negrita = await doc.embedFont(StandardFonts.HelveticaBold);
   const sanear = crearSaneador(normal);
 
-  let logo: Awaited<ReturnType<PDFDocument["embedPng"]>> | null = null;
-  if (logoPng) {
-    try {
-      logo = await doc.embedPng(logoPng);
-    } catch {
-      // Logo ilegible: el recibo sale sin logo.
-    }
-  }
+  // Logo PNG o JPEG; si no se puede leer, el recibo sale sin logo.
+  const logo = await incrustarLogo(doc, logoBytes);
 
   function escribir(
     pagina: PDFPage,

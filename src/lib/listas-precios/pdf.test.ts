@@ -1,7 +1,7 @@
-import { readFileSync } from "node:fs";
 import { inflateSync } from "node:zlib";
 import { PDFArray, PDFDocument, PDFName, PDFRawStream, StandardFonts, type PDFPage } from "pdf-lib";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { JPEG_1X1, PNG_1X1 } from "@/lib/empresa/logo-fixtures";
 import { generarPdf } from "./pdf";
 import { datosDeReferencia, itemsDeReferencia } from "./fixtures";
 import type { ItemListaDescarga } from "./tipos";
@@ -205,11 +205,16 @@ describe("generarPdf", () => {
     expect(doc.getModificationDate()?.toISOString()).toBe("2023-12-01T12:00:00.000Z");
   });
 
-  it("incluye el logo cuando se lo pasa", async () => {
-    const logo = new Uint8Array(readFileSync("public/logo-silfe.png"));
+  it.each([
+    ["PNG", PNG_1X1, "/FlateDecode"],
+    ["JPEG", JPEG_1X1, "/DCTDecode"],
+  ])("incluye el logo %s cuando se lo pasa", async (_tipo, logo, filtro) => {
     const sinLogo = await generarPdf(datosDeReferencia);
     const conLogo = await generarPdf({ ...datosDeReferencia, logo });
-    expect(conLogo.length).toBeGreaterThan(sinLogo.length + 1000);
+    expect(Buffer.from(sinLogo).toString("latin1")).not.toContain("/Image");
+    const crudo = Buffer.from(conLogo).toString("latin1");
+    expect(crudo).toContain("/Image");
+    expect(crudo).toContain(filtro);
     const { texto } = await leer(conLogo);
     expect(texto).toContain("LISTA DE PRECIOS DICIEMBRE 2023");
   });

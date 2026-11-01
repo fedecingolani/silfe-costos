@@ -18,6 +18,7 @@
  * de ARCA ni CAE, y sin columnas ni totales de IVA.
  */
 import { PDFDocument, StandardFonts, degrees, rgb, type PDFFont, type PDFPage } from "pdf-lib";
+import { incrustarLogo } from "@/lib/empresa/pdf-logo";
 import { paginar, type DatosPdfComprobante, type ItemPdf } from "./pdf-datos";
 import { ZONA_SILENCIO, matrizQr } from "./qr-matriz";
 
@@ -135,7 +136,7 @@ export function recortar(lineas: string[], maximo: number): string[] {
   return resto;
 }
 
-export async function generarPdfComprobante(datos: DatosPdfComprobante, logoPng?: Uint8Array | null): Promise<Uint8Array> {
+export async function generarPdfComprobante(datos: DatosPdfComprobante, logoBytes?: Uint8Array | null): Promise<Uint8Array> {
   const doc = await PDFDocument.create();
   doc.setTitle(datos.nombreArchivo);
   doc.setCreator("Charoli Gestión");
@@ -149,14 +150,8 @@ export async function generarPdfComprobante(datos: DatosPdfComprobante, logoPng?
   /** Presupuesto o comprobante X: sin QR, leyenda de ARCA ni CAE. */
   const noFiscal = datos.presupuesto !== null || datos.sinArca === true;
 
-  let logo: Awaited<ReturnType<PDFDocument["embedPng"]>> | null = null;
-  if (logoPng) {
-    try {
-      logo = await doc.embedPng(logoPng);
-    } catch {
-      // Logo ilegible: el comprobante sale sin logo.
-    }
-  }
+  // Logo PNG o JPEG; si no se puede leer, el comprobante sale sin logo.
+  const logo = await incrustarLogo(doc, logoBytes);
 
   /** Escribe en la línea base y dada. */
   function escribir(
