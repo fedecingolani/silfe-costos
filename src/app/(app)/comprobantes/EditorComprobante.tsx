@@ -31,7 +31,7 @@ import {
 } from "@/lib/tipos";
 import {
   autorizarComprobante,
-  borrarBorrador,
+  borrarComprobante,
   duplicarComprobante,
   guardarBorrador,
   preciosDeLista,
@@ -269,7 +269,7 @@ export function EditorComprobante({
   function borrar() {
     if (!id || !confirm("¿Borrar este borrador? No se puede deshacer.")) return;
     iniciar(async () => {
-      const resultado = await borrarBorrador(id);
+      const resultado = await borrarComprobante(id);
       if (resultado?.error) setMensaje({ error: resultado.error });
     });
   }

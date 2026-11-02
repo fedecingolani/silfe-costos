@@ -3,7 +3,13 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { NOMBRES_CLASE_COMPROBANTE, type ClaseComprobante } from "@/lib/tipos";
-import { autorizarComprobante, duplicarComprobante, generarNota, type EstadoAccionComprobante } from "../acciones";
+import {
+  autorizarComprobante,
+  borrarComprobante,
+  duplicarComprobante,
+  generarNota,
+  type EstadoAccionComprobante,
+} from "../acciones";
 
 /**
  * Botones del detalle: "Verificar con ARCA" (sólo en verificación, corre la
@@ -11,18 +17,22 @@ import { autorizarComprobante, duplicarComprobante, generarNota, type EstadoAcci
  * puedeImprimir, la misma regla que la ruta del PDF; si no se puede, el
  * motivo queda en el título del botón deshabilitado) y "Generar nota de
  * crédito / débito" (las de `notas`: notasPermitidas), que crea el borrador
- * de la nota y abre el editor.
+ * de la nota y abre el editor. "Borrar" (sólo en un X emitido: borrable)
+ * pide confirmación; si la base lo impide (comprobantes que dependen de él),
+ * el motivo queda abajo, y si lo borra vuelve al listado.
  */
 export function AccionesDetalle({
   id,
   verificando,
   pdf,
   notas,
+  borrable,
 }: {
   id: string;
   verificando: boolean;
   pdf: { ok: true } | { ok: false; motivo: string };
   notas: ClaseComprobante[];
+  borrable: boolean;
 }) {
   const router = useRouter();
   const [pendiente, iniciar] = useTransition();
@@ -45,6 +55,14 @@ export function AccionesDetalle({
       const r = await duplicarComprobante(id);
       if (r?.error) setResultado(r);
     });
+
+  const borrar = () => {
+    if (!confirm("¿Borrar este comprobante X? Sus imputaciones automáticas se deshacen. No se puede deshacer.")) return;
+    iniciar(async () => {
+      const r = await borrarComprobante(id);
+      if (r?.error) setResultado(r);
+    });
+  };
 
   return (
     <div className="space-y-2">
@@ -76,6 +94,11 @@ export function AccionesDetalle({
             Generar {NOMBRES_CLASE_COMPROBANTE[clase].toLowerCase()}
           </button>
         ))}
+        {borrable && (
+          <button type="button" disabled={pendiente} onClick={borrar} className="boton-peligro ml-auto">
+            Borrar
+          </button>
+        )}
       </div>
       {resultado?.error && (
         <div role="alert" className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">

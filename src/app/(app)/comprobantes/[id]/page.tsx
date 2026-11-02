@@ -329,7 +329,7 @@ export default async function ComprobantePage({ params }: { params: Promise<{ id
           verificando
             ? "Enviado a ARCA sin confirmar el resultado."
             : esX
-              ? "Comprobante X emitido sin ARCA: no es un documento fiscal y no se modifica. Para corregirlo, emití una nota de crédito X."
+              ? "Comprobante X emitido sin ARCA: no es un documento fiscal y no se modifica. Para corregirlo, borralo (si no tiene cobranzas ni notas asociadas) o emití una nota de crédito X."
               : "Autorizado en ARCA: es un documento fiscal y no se modifica. Para corregirlo, emití una nota de crédito."
         }
         acciones={<Pastilla tono={TONO_ESTADO[c.estado]}>{NOMBRES_ESTADO[c.estado]}</Pastilla>}
@@ -357,6 +357,7 @@ export default async function ComprobantePage({ params }: { params: Promise<{ id
           verificando={verificando}
           pdf={imprimible.ok ? { ok: true } : { ok: false, motivo: imprimible.motivo }}
           notas={notasPermitidas(c)}
+          borrable={c.estado === "autorizado" && esX}
         />
       </div>
 

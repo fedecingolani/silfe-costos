@@ -468,11 +468,16 @@ const MENSAJES_GUARDADO: Record<string, string> = {
   "23503": "El cliente, la lista de precios o el punto de venta ya no existen. Recargá la página.",
 };
 
-/** Mensaje legible de un error de la base al guardar o borrar un borrador. */
+/** Mensaje legible de un error de la base al guardar o borrar un comprobante. */
 export function mensajeErrorGuardado(error: { code?: string; message: string }): string {
   // CM007 (asociado inválido): el mensaje de la base ya es legible y dice qué asociado.
   // CB020: es la ND de un cheque rechazado (no se borra ni cambia de cliente); el mensaje dice qué cheque.
-  if (error.code === "CM007" || error.code === "CB020") return error.message;
+  // CM010: un X emitido con comprobantes que dependen de él; el mensaje dice cuáles.
+  if (error.code === "CM007" || error.code === "CB020" || error.code === "CM010") return error.message;
+  // Al borrar, la clave foránea de otra tabla que todavía apunta al comprobante.
+  if (error.code === "23503" && error.message.startsWith("update or delete on table")) {
+    return "El comprobante tiene comprobantes asociados: no se puede borrar.";
+  }
   return (error.code && MENSAJES_GUARDADO[error.code]) || `No se pudo guardar el comprobante: ${error.message}`;
 }
 
