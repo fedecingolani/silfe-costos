@@ -119,3 +119,15 @@ con su commit; la estrategia de PR (uno solo o encadenados) se decide antes de a
   `validaciones.test.ts`, placeholder y comentario "EJEMPLO – 30 AÑOS", y se quitó la opción
   `url` sin uso de la descarga de listas. `rg -i silfe src public` vacío. typecheck y eslint
   limpios; vitest 59 archivos, 795 tests en verde.
+- Prueba en navegador (local): Configuración → Empresa vacía funciona; al guardar nombre y color,
+  el menú muestra el nombre y la app cambia de color sin recargar; `/empresa/logo` da 404 sin
+  logo; sin errores en consola ni en el servidor. La carga de un logo real solo está cubierta
+  por tests unitarios.
+- Revisión nativa (riesgo medio, lente de confiabilidad): aprobada y confirmada. Observaciones
+  informativas: falta test de `guardarEmpresa` y de la ruta `/empresa/logo`, y la aserción de
+  "sin logo" en `cargar-descarga.test.ts` es débil.
+
+## Próximo paso
+
+Decidir la estrategia de PR (rama de ~1600 líneas) y, opcionalmente, cubrir con tests la acción
+`guardarEmpresa` y la ruta del logo.
