@@ -1,12 +1,17 @@
 import Link from "next/link";
+import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { Encabezado, Pastilla, Tarjeta, Vacio } from "@/components/ui";
+import { RecordarFiltros } from "./RecordarFiltros";
 import { fecha, pesos } from "@/lib/formato";
 import { filtroBusquedaClientes } from "@/lib/clientes/busqueda";
 import { NOMBRES_ESTADO_PAGO, TONO_ESTADO_PAGO, enLotes, mapaSaldos } from "@/lib/cobranzas/estado-pago";
 import {
+  COOKIE_FILTROS,
   NOMBRES_ESTADO,
   TONO_ESTADO,
+  consultaFiltros,
   leerFiltros,
   mostrarAvisoHomologacion,
   nombreComprobante,
@@ -39,6 +44,13 @@ export default async function ComprobantesPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const parametros = await searchParams;
+  // Sin parámetros (se volvió desde las migas o el menú): se aplican los
+  // últimos filtros usados en la sesión.
+  if (Object.keys(parametros).length === 0) {
+    const guardados = (await cookies()).get(COOKIE_FILTROS)?.value;
+    const guardada = guardados ? consultaFiltros(leerFiltros(Object.fromEntries(new URLSearchParams(guardados)))) : "";
+    if (guardada) redirect(`/comprobantes?${guardada}`);
+  }
   const supabase = await createClient();
   const { data: emisor, error: errorEmisor } = await supabase
     .from("arca_emisor")
@@ -47,7 +59,8 @@ export default async function ComprobantesPage({
     .maybeSingle();
   if (errorEmisor) return <p className="text-sm text-red-700">Error al cargar el emisor: {errorEmisor.message}</p>;
   const ambienteActivo = (emisor?.ambiente ?? "homologacion") as AmbienteArca;
-  const filtros = leerFiltros(parametros, ambienteActivo);
+  const filtros = leerFiltros(parametros);
+  const consultaUrl = consultaFiltros(filtros);
 
   // El cliente se busca con la misma lógica que el listado de clientes; el
   // inner join deja sólo los comprobantes de los clientes que coinciden.
@@ -84,12 +97,11 @@ export default async function ComprobantesPage({
   const errorSaldos = lotes.find((l) => l.error)?.error;
   if (errorSaldos) return <p className="text-sm text-red-700">Error al cargar el estado de pago: {errorSaldos.message}</p>;
   const saldos = mapaSaldos(lotes.flatMap((l) => l.data ?? []));
-  const hayFiltros =
-    Boolean(filtros.desde || filtros.hasta || filtros.cliente || filtros.clase || filtros.estado) ||
-    filtros.ambiente !== ambienteActivo;
+  const hayFiltros = consultaUrl !== "";
 
   return (
     <>
+      <RecordarFiltros consulta={consultaUrl} />
       <Encabezado
         titulo="Comprobantes"
         descripcion="Facturas y notas de débito y crédito. Los borradores se editan; los autorizados en ARCA no se modifican más."
@@ -163,21 +175,22 @@ export default async function ComprobantesPage({
             Ambiente
           </label>
           <select id="filtro-ambiente" name="ambiente" defaultValue={filtros.ambiente} className="campo">
+            <option value="todos">Todos</option>
             {AMBIENTES_ARCA.map((a) => (
               <option key={a} value={a}>
                 {NOMBRES_AMBIENTE_ARCA[a]}
               </option>
             ))}
             <option value="interno">Sin ARCA (X)</option>
-            <option value="todos">Todos</option>
           </select>
         </div>
         <div className="flex items-end gap-2 sm:col-span-12">
           <button type="submit" className="boton-primario">
             Filtrar
           </button>
+          {/* Con un parámetro, para que no se restauren los filtros guardados. */}
           {hayFiltros && (
-            <Link href="/comprobantes" className="boton-secundario">
+            <Link href="/comprobantes?ambiente=todos" className="boton-secundario">
               Limpiar
             </Link>
           )}

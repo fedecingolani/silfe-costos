@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { leerFiltros, mostrarAvisoHomologacion, nombreComprobante, numeroVisible, ordenarListado } from "./listado";
+import { consultaFiltros, leerFiltros, mostrarAvisoHomologacion, nombreComprobante, numeroVisible, ordenarListado } from "./listado";
 
 describe("mostrarAvisoHomologacion", () => {
   it("se muestra con el ambiente activo en homologación", () => {
@@ -18,14 +18,14 @@ describe("mostrarAvisoHomologacion", () => {
 });
 
 describe("leerFiltros", () => {
-  it("sin parámetros, muestra el ambiente activo y nada más filtrado", () => {
-    expect(leerFiltros({}, "produccion")).toEqual({
+  it("sin parámetros, no filtra nada (todos los ambientes)", () => {
+    expect(leerFiltros({})).toEqual({
       desde: "",
       hasta: "",
       cliente: "",
       clase: "",
       estado: "",
-      ambiente: "produccion",
+      ambiente: "todos",
     });
   });
 
@@ -38,9 +38,8 @@ describe("leerFiltros", () => {
           cliente: "  frutícola ",
           clase: "nota_debito",
           estado: "rechazado",
-          ambiente: "todos",
+          ambiente: "produccion",
         },
-        "produccion",
       ),
     ).toEqual({
       desde: "2026-10-01",
@@ -48,22 +47,35 @@ describe("leerFiltros", () => {
       cliente: "frutícola",
       clase: "nota_debito",
       estado: "rechazado",
-      ambiente: "todos",
+      ambiente: "produccion",
     });
   });
 
   it("ignora valores que no son de la lista o fechas inválidas", () => {
     expect(
-      leerFiltros({ desde: "ayer", hasta: "2026-02-30", clase: "remito", estado: "x", ambiente: "test" }, "homologacion"),
-    ).toEqual({ desde: "", hasta: "", cliente: "", clase: "", estado: "", ambiente: "homologacion" });
+      leerFiltros({ desde: "ayer", hasta: "2026-02-30", clase: "remito", estado: "x", ambiente: "test" }),
+    ).toEqual({ desde: "", hasta: "", cliente: "", clase: "", estado: "", ambiente: "todos" });
   });
 
   it("acepta el filtro de comprobantes sin ARCA (X)", () => {
-    expect(leerFiltros({ ambiente: "interno" }, "produccion").ambiente).toBe("interno");
+    expect(leerFiltros({ ambiente: "interno" }).ambiente).toBe("interno");
   });
 
   it("toma el primer valor si un parámetro viene repetido", () => {
-    expect(leerFiltros({ estado: ["borrador", "autorizado"] }, "produccion").estado).toBe("borrador");
+    expect(leerFiltros({ estado: ["borrador", "autorizado"] }).estado).toBe("borrador");
+  });
+});
+
+describe("consultaFiltros", () => {
+  it("sin filtros devuelve una consulta vacía", () => {
+    expect(consultaFiltros(leerFiltros({}))).toBe("");
+  });
+
+  it("incluye sólo los filtros aplicados y vuelve a leerse igual", () => {
+    const filtros = leerFiltros({ desde: "2026-10-01", cliente: "frutícola", ambiente: "produccion" });
+    const consulta = consultaFiltros(filtros);
+    expect(consulta).toBe("desde=2026-10-01&cliente=frut%C3%ADcola&ambiente=produccion");
+    expect(leerFiltros(Object.fromEntries(new URLSearchParams(consulta)))).toEqual(filtros);
   });
 });
 
