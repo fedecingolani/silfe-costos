@@ -137,3 +137,9 @@ con su commit; la estrategia de PR (uno solo o encadenados) se decide antes de a
 Decidir la estrategia de PR (rama de ~1600 líneas) y, opcionalmente, cubrir con tests la acción
 `guardarEmpresa` y la ruta del logo.
 - PR abierto: https://github.com/fedecingolani/silfe-costos/pull/19 (sin checks de CI configurados).
+- Mergeado (PR #19, `0406823`) y desplegado: migraciones `20261101000001` y `20261101000002`
+  aplicadas en producción con `supabase db push --remote --include-all --yes` (la `20261102000001`
+  ya estaba aplicada). Worker `silfe-costos` versión `ff062b86`. Humo: `/login` 200 con
+  "Charoli Gestión", `/empresa/logo` sin sesión redirige al login y `/logo-silfe.png` da 404.
+- Pendiente del usuario: cargar logo, nombre y color de SILFE en Configuración → Empresa.
+- Ojo con el CLI de Supabase v3: `db push` sin `--remote` apunta al stack local.
