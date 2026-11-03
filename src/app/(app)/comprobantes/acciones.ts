@@ -199,18 +199,25 @@ export async function guardarBorrador(id: string | null, datos: string): Promise
   return { ok: "Borrador guardado.", id: nuevoId, resumen };
 }
 
-/** Borra un borrador o un rechazado (los ítems se van en cascada) y vuelve al listado. */
-export async function borrarBorrador(id: string): Promise<EstadoAccionComprobante> {
+/**
+ * Borra un borrador, un rechazado o un X emitido (los ítems se van en
+ * cascada) y vuelve al listado. Un X emitido sólo se borra si no tiene
+ * comprobantes que dependan de él (lo controla la base: CM010); sus
+ * imputaciones automáticas se deshacen y el saldo vuelve a quedar a favor.
+ */
+export async function borrarComprobante(id: string): Promise<EstadoAccionComprobante> {
   if (!UUID.test(id)) return { error: "Comprobante inválido." };
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("comprobante")
     .delete()
     .eq("id", id)
-    .in("estado", ["borrador", "rechazado"])
+    .or("estado.in.(borrador,rechazado),and(estado.eq.autorizado,letra.eq.X)")
     .select("id");
   if (error) return { error: mensajeErrorGuardado(error) };
-  if ((data ?? []).length !== 1) return { error: "Sólo se pueden borrar borradores y rechazados." };
+  if ((data ?? []).length !== 1) {
+    return { error: "Sólo se pueden borrar borradores, rechazados y comprobantes X emitidos." };
+  }
   revalidatePath(RUTA);
   redirect(RUTA);
 }

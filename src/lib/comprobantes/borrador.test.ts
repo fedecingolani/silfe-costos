@@ -290,6 +290,19 @@ describe("mensajeErrorGuardado", () => {
     expect(mensajeErrorGuardado({ code: "CB020", message })).toBe(message);
   });
 
+  it("muestra tal cual qué bloquea el borrado de un X emitido", () => {
+    const message = "El comprobante tiene notas asociadas: no se puede borrar. Borrá antes esas notas.";
+    expect(mensajeErrorGuardado({ code: "CM010", message })).toBe(message);
+  });
+
+  it("al borrar, una clave foránea que lo impide dice que tiene comprobantes asociados", () => {
+    const message =
+      'update or delete on table "comprobante" violates foreign key constraint "remito_comprobante_id_fkey" on table "remito"';
+    expect(mensajeErrorGuardado({ code: "23503", message })).toBe(
+      "El comprobante tiene comprobantes asociados: no se puede borrar.",
+    );
+  });
+
   it("deja el resto con el mensaje de la base", () => {
     expect(mensajeErrorGuardado({ code: "XX000", message: "algo" })).toBe("No se pudo guardar el comprobante: algo");
   });
