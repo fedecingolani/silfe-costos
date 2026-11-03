@@ -9,7 +9,7 @@ import {
   paginar,
   puedeImprimir,
 } from "./pdf-datos";
-import { COMPROBANTE_EJEMPLO, EMISOR_EJEMPLO, ITEM_EJEMPLO, ejemploConItems, ejemploX } from "./pdf-fixtures";
+import { COMPROBANTE_EJEMPLO, EMISOR_EJEMPLO, IDENTIDAD_EJEMPLO, ITEM_EJEMPLO, ejemploConItems, ejemploX } from "./pdf-fixtures";
 
 describe("formatos", () => {
   it("formatea importes con punto de miles y coma decimal", () => {
@@ -182,7 +182,21 @@ describe("armarDatosPdf", () => {
       cuit: "30-71234567-1",
       ingresosBrutos: "30-71234567-1",
       inicioActividades: "01/03/2005",
+      nombreFantasia: "",
+      contacto: "",
     });
+  });
+
+  it("lleva el nombre de fantasía y el contacto de la empresa si se pasan", () => {
+    const conIdentidad = armarDatosPdf({
+      comprobante: COMPROBANTE_EJEMPLO,
+      items: [ITEM_EJEMPLO],
+      emisor: EMISOR_EJEMPLO,
+      identidad: IDENTIDAD_EJEMPLO,
+    });
+    expect(conIdentidad.emisor.nombreFantasia).toBe("SIL - FE");
+    expect(conIdentidad.emisor.contacto).toBe("Tel. 0298 444-5555 · ventas@ejemplo.com.ar · www.ejemplo.com.ar");
+    expect(conIdentidad.emisor.razonSocial).toBe("EMPRESA DE EJEMPLO S.A.");
   });
 
   it("usa la copia del receptor guardada en el comprobante", () => {

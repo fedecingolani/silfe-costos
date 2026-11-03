@@ -162,4 +162,6 @@ contacto en Parámetros). Rama `feat/pdf-encabezado-empresa`.
 
 | ID | Tarea | Ruta | Estado |
 | --- | --- | --- | --- |
-| T6 | Nombre de fantasía y contacto en el encabezado de comprobante, presupuesto y recibo | delegada (writer: datos, generadores, tests) | [ ] |
+| T6 | Nombre de fantasía y contacto en el encabezado de comprobante, presupuesto y recibo | delegada (writer: datos, generadores, tests) | [x] |
+
+Progreso T6: una sola lectura de `empresa` por PDF (`leerEmpresaPdf`: logo + identidad, nunca falla) y un bloque izquierdo compartido (`dibujarBloqueEmisor`) en comprobante, presupuesto y recibo; nombre y contacto se achican o se cortan con "…" sin invadir el centro, y sin identidad el encabezado queda idéntico (test de posiciones).

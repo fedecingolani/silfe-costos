@@ -5,11 +5,14 @@
  * PDF de los comprobantes.
  */
 import {
+  emisorDelPdf,
   fechaCorta,
   formatearCuit,
   formatearImporte,
+  type DatosPdfComprobante,
   type FilaEmisorPdf,
 } from "@/lib/comprobantes/pdf-datos";
+import type { IdentidadPdf } from "@/lib/empresa/pdf-empresa";
 import { nombreComprobante, numeroVisible } from "@/lib/comprobantes/listado";
 import {
   NOMBRES_MEDIO_PAGO,
@@ -92,14 +95,7 @@ export type ImputacionPdf = { comprobante: string; fecha: string; importe: strin
 export type DatosPdfRecibo = {
   numero: string;
   fecha: string;
-  emisor: {
-    razonSocial: string;
-    domicilio: string;
-    condicionIva: string;
-    cuit: string;
-    ingresosBrutos: string;
-    inicioActividades: string;
-  };
+  emisor: DatosPdfComprobante["emisor"];
   cliente: { razonSocial: string; cuit: string; domicilio: string; condicionIva: string };
   /** "Recibimos de … la suma de pesos … ($ 1.234,56)". */
   recibimos: string;
@@ -178,12 +174,15 @@ export function armarDatosPdfRecibo({
   medios,
   imputaciones,
   emisor,
+  identidad,
 }: {
   recibo: FilaReciboPdf;
   cliente: FilaClienteReciboPdf;
   medios: readonly FilaMedioReciboPdf[];
   imputaciones: readonly FilaImputacionReciboPdf[];
   emisor: FilaEmisorPdf | null;
+  /** Nombre de fantasía y contacto de la empresa; sin ellos, el encabezado no los lleva. */
+  identidad?: IdentidadPdf;
 }): DatosPdfRecibo {
   const total = Number(recibo.total);
   const imputado = sumarPesos(imputaciones.map((i) => Number(i.importe)));
@@ -192,14 +191,7 @@ export function armarDatosPdfRecibo({
   return {
     numero,
     fecha: fechaCorta(recibo.fecha),
-    emisor: {
-      razonSocial: emisor?.razon_social ?? "",
-      domicilio: emisor?.domicilio_comercial ?? "",
-      condicionIva: emisor?.condicion_iva ?? "",
-      cuit: emisor?.cuit ? formatearCuit(emisor.cuit) : "",
-      ingresosBrutos: emisor?.ingresos_brutos ?? "",
-      inicioActividades: fechaCorta(emisor?.inicio_actividades),
-    },
+    emisor: emisorDelPdf(emisor, identidad),
     cliente: {
       razonSocial: cliente.razon_social,
       cuit: cliente.cuit ? formatearCuit(cliente.cuit) : "",

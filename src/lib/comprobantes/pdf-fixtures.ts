@@ -2,7 +2,20 @@
  * Filas de ejemplo para los tests del PDF y para generar PDFs de muestra.
  * Datos ficticios: no corresponden a comprobantes reales.
  */
+import { identidadDelPdf, type FilaEmpresaPdf } from "@/lib/empresa/pdf-empresa";
 import type { FilaComprobantePdf, FilaEmisorPdf, FilaItemPdf } from "./pdf-datos";
+
+/** Fila de `empresa` sin logo: nombre de fantasía y todo el contacto. */
+export const EMPRESA_EJEMPLO: FilaEmpresaPdf = {
+  logo_base64: null,
+  logo_tipo: null,
+  nombre_fantasia: "SIL - FE",
+  telefono: "0298 444-5555",
+  email: "ventas@ejemplo.com.ar",
+  web: "www.ejemplo.com.ar",
+};
+
+export const IDENTIDAD_EJEMPLO = identidadDelPdf(EMPRESA_EJEMPLO);
 
 export const EMISOR_EJEMPLO: FilaEmisorPdf = {
   cuit: "30712345671",

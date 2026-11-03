@@ -12,7 +12,7 @@
  */
 import { PDFDocument, StandardFonts, degrees, rgb, type PDFFont, type PDFPage, type RGB } from "pdf-lib";
 import { incrustarLogo } from "@/lib/empresa/pdf-logo";
-import { crearSaneador, partirEnLineas, recortar } from "@/lib/comprobantes/pdf";
+import { crearSaneador, dibujarBloqueEmisor, partirEnLineas, recortar } from "@/lib/comprobantes/pdf";
 import { paginar } from "@/lib/comprobantes/pdf-datos";
 import type { DatosPdfRecibo } from "./pdf-recibo-datos";
 
@@ -25,8 +25,6 @@ const ARRIBA = ALTO - MARGEN;
 const ANCHO_UTIL = DERECHA - MARGEN;
 
 // Encabezado
-const ANCHO_LOGO = 130;
-const ALTO_LOGO = 48;
 const LADO_LETRA = 44;
 const X_DATOS = 368;
 const X_VALOR = 432;
@@ -126,28 +124,8 @@ export async function generarPdfRecibo(datos: DatosPdfRecibo, logoBytes?: Uint8A
   // ----- Encabezado y cliente (en todas las páginas) -------------------------
 
   function encabezado(pagina: PDFPage) {
-    let y = ARRIBA;
-    if (logo) {
-      const escala = Math.min(ANCHO_LOGO / logo.width, ALTO_LOGO / logo.height);
-      const alto = logo.height * escala;
-      pagina.drawImage(logo, { x: MARGEN, y: y - alto, width: logo.width * escala, height: alto });
-      y -= alto + 12;
-    } else {
-      y -= 12;
-    }
-    const anchoIzquierda = ANCHO / 2 - LADO_LETRA / 2 - 10 - MARGEN;
-    etiquetaValor(pagina, "Razón Social:", datos.emisor.razonSocial, MARGEN, y);
-    y -= 11;
-    const etiquetaDomicilio = "Domicilio:";
-    const xDomicilio = MARGEN + negrita.widthOfTextAtSize(etiquetaDomicilio, 8) + 3;
-    escribir(pagina, etiquetaDomicilio, MARGEN, y, negrita, 8);
-    for (const linea of recortar(
-      partirEnLineas(sanear(datos.emisor.domicilio), normal, 8, MARGEN + anchoIzquierda - xDomicilio),
-      3,
-    )) {
-      escribir(pagina, linea, xDomicilio, y, normal, 8);
-      y -= 10;
-    }
+    // Izquierda: logo, nombre de fantasía, razón social, domicilio y contacto, como en los comprobantes.
+    dibujarBloqueEmisor(pagina, { logo, emisor: datos.emisor, normal, negrita, sanear });
 
     // Centro: "X" en un recuadro (documento no fiscal) y la condición de IVA del emisor.
     const xCentro = ANCHO / 2;

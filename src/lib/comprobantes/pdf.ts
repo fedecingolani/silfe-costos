@@ -17,7 +17,7 @@
  * código, con la leyenda "Documento no válido como factura", sin QR, leyenda
  * de ARCA ni CAE, y sin columnas ni totales de IVA.
  */
-import { PDFDocument, StandardFonts, degrees, rgb, type PDFFont, type PDFPage } from "pdf-lib";
+import { PDFDocument, StandardFonts, degrees, rgb, type PDFFont, type PDFImage, type PDFPage } from "pdf-lib";
 import { incrustarLogo } from "@/lib/empresa/pdf-logo";
 import { paginar, type DatosPdfComprobante, type ItemPdf } from "./pdf-datos";
 import { ZONA_SILENCIO, matrizQr } from "./qr-matriz";
@@ -33,6 +33,12 @@ const ARRIBA = ALTO - MARGEN;
 const ANCHO_LOGO = 130;
 const ALTO_LOGO = 48;
 const LADO_LETRA = 44;
+/** Ancho del nombre de fantasía y del contacto: no llegan a la letra ni a la condición de IVA del centro. */
+const ANCHO_IDENTIDAD = ANCHO / 2 - 50 - MARGEN;
+const TAMANO_NOMBRE = 12;
+const TAMANO_MINIMO_NOMBRE = 9;
+const TAMANO_CONTACTO = 7;
+const TAMANO_MINIMO_CONTACTO = 6;
 const X_DATOS = 368;
 const X_VALOR = 432;
 const Y_FIN_ENCABEZADO = 694;
@@ -136,6 +142,83 @@ export function recortar(lineas: string[], maximo: number): string[] {
   return resto;
 }
 
+/**
+ * Un texto en una sola línea que entra en el ancho: se achica hasta el
+ * tamaño mínimo y, si igual no entra, se corta con "…".
+ */
+function enUnaLinea(texto: string, fuente: PDFFont, maximo: number, minimo: number, ancho: number) {
+  let tamano = maximo;
+  while (tamano > minimo && fuente.widthOfTextAtSize(texto, tamano) > ancho) tamano -= 0.5;
+  const lineas = partirEnLineas(texto, fuente, tamano, ancho);
+  if (lineas.length === 1) return { texto: lineas[0], tamano };
+  // Se deja lugar para el "…", más ancho que la letra que reemplaza.
+  const sinElipsis = ancho - fuente.widthOfTextAtSize("…", tamano);
+  return { texto: recortar(partirEnLineas(texto, fuente, tamano, sinElipsis), 1)[0], tamano };
+}
+
+/**
+ * Bloque izquierdo del encabezado: logo, nombre de fantasía (en negrita y
+ * más grande), razón social, domicilio y contacto (en letra chica). El
+ * nombre y el contacto se omiten si están vacíos: sin ellos, el bloque queda
+ * como siempre.
+ */
+export function dibujarBloqueEmisor(
+  pagina: PDFPage,
+  {
+    logo,
+    emisor,
+    normal,
+    negrita,
+    sanear,
+  }: {
+    logo: PDFImage | null;
+    emisor: DatosPdfComprobante["emisor"];
+    normal: PDFFont;
+    negrita: PDFFont;
+    sanear: (texto: string) => string;
+  },
+) {
+  function escribir(texto: string, x: number, y: number, fuente: PDFFont, tamano: number, color = NEGRO) {
+    pagina.drawText(sanear(texto), { x, y, size: tamano, font: fuente, color });
+  }
+
+  let y = ARRIBA;
+  if (logo) {
+    const escala = Math.min(ANCHO_LOGO / logo.width, ALTO_LOGO / logo.height);
+    const alto = logo.height * escala;
+    pagina.drawImage(logo, { x: MARGEN, y: y - alto, width: logo.width * escala, height: alto });
+    y -= alto + 12;
+  } else {
+    y -= 12;
+  }
+  const nombre = sanear(emisor.nombreFantasia.trim());
+  if (nombre) {
+    const linea = enUnaLinea(nombre, negrita, TAMANO_NOMBRE, TAMANO_MINIMO_NOMBRE, ANCHO_IDENTIDAD);
+    escribir(linea.texto, MARGEN, y, negrita, linea.tamano);
+    y -= linea.tamano + 2;
+  }
+  const anchoIzquierda = ANCHO / 2 - LADO_LETRA / 2 - 10 - MARGEN;
+  const etiquetaRazonSocial = "Razón Social:";
+  escribir(etiquetaRazonSocial, MARGEN, y, negrita, 8);
+  escribir(emisor.razonSocial, MARGEN + negrita.widthOfTextAtSize(sanear(etiquetaRazonSocial), 8) + 3, y, normal, 8);
+  y -= 11;
+  const etiquetaDomicilio = "Domicilio:";
+  const xDomicilio = MARGEN + negrita.widthOfTextAtSize(etiquetaDomicilio, 8) + 3;
+  escribir(etiquetaDomicilio, MARGEN, y, negrita, 8);
+  for (const linea of recortar(
+    partirEnLineas(sanear(emisor.domicilio), normal, 8, MARGEN + anchoIzquierda - xDomicilio),
+    3,
+  )) {
+    escribir(linea, xDomicilio, y, normal, 8);
+    y -= 10;
+  }
+  const contacto = sanear(emisor.contacto.trim());
+  if (contacto) {
+    const linea = enUnaLinea(contacto, normal, TAMANO_CONTACTO, TAMANO_MINIMO_CONTACTO, ANCHO_IDENTIDAD);
+    escribir(linea.texto, MARGEN, y, normal, linea.tamano, GRIS);
+  }
+}
+
 export async function generarPdfComprobante(datos: DatosPdfComprobante, logoBytes?: Uint8Array | null): Promise<Uint8Array> {
   const doc = await PDFDocument.create();
   doc.setTitle(datos.nombreArchivo);
@@ -183,29 +266,8 @@ export async function generarPdfComprobante(datos: DatosPdfComprobante, logoByte
   // ----- Encabezado y receptor (en todas las páginas) ------------------------
 
   function encabezado(pagina: PDFPage) {
-    // Izquierda: logo, razón social y domicilio del emisor.
-    let y = ARRIBA;
-    if (logo) {
-      const escala = Math.min(ANCHO_LOGO / logo.width, ALTO_LOGO / logo.height);
-      const alto = logo.height * escala;
-      pagina.drawImage(logo, { x: MARGEN, y: y - alto, width: logo.width * escala, height: alto });
-      y -= alto + 12;
-    } else {
-      y -= 12;
-    }
-    const anchoIzquierda = ANCHO / 2 - LADO_LETRA / 2 - 10 - MARGEN;
-    etiquetaValor(pagina, "Razón Social:", datos.emisor.razonSocial, MARGEN, y);
-    y -= 11;
-    const etiquetaDomicilio = "Domicilio:";
-    const xDomicilio = MARGEN + negrita.widthOfTextAtSize(etiquetaDomicilio, 8) + 3;
-    escribir(pagina, etiquetaDomicilio, MARGEN, y, negrita, 8);
-    for (const linea of recortar(
-      partirEnLineas(sanear(datos.emisor.domicilio), normal, 8, MARGEN + anchoIzquierda - xDomicilio),
-      3,
-    )) {
-      escribir(pagina, linea, xDomicilio, y, normal, 8);
-      y -= 10;
-    }
+    // Izquierda: logo, nombre de fantasía, razón social, domicilio y contacto.
+    dibujarBloqueEmisor(pagina, { logo, emisor: datos.emisor, normal, negrita, sanear });
 
     // Centro: letra en un recuadro, código de ARCA y condición de IVA del emisor.
     // Un presupuesto no lleva letra: en su lugar, la aclaración de que no es una factura.

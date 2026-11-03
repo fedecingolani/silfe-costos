@@ -1,13 +1,13 @@
 /**
  * Carga lo que necesita el PDF de un recibo: el recibo, su cliente, sus
  * medios (con los cheques), sus imputaciones (con los comprobantes), los
- * datos del emisor y el logo. Sólo columnas explícitas; nunca nada de
- * arca_credencial.
+ * datos del emisor y el logo, el nombre de fantasía y el contacto de la
+ * empresa. Sólo columnas explícitas; nunca nada de arca_credencial.
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { esUuid } from "@/lib/listas-precios/uuid";
 import { COLUMNAS_EMISOR_PDF, type FilaEmisorPdf } from "@/lib/comprobantes/pdf-datos";
-import { leerLogoEmpresa } from "@/lib/empresa/logo";
+import { leerEmpresaPdf } from "@/lib/empresa/pdf-empresa";
 import {
   COLUMNAS_CLIENTE_RECIBO_PDF,
   COLUMNAS_IMPUTACION_RECIBO_PDF,
@@ -63,13 +63,14 @@ export async function cargarPdfRecibo({
   if (error) return respuestaError(`Error al cargar los datos del recibo: ${error.message}`, 500);
   if (!clienteRes.data) return respuestaError("No se encontró el cliente del recibo.", 500);
 
-  const logo = (await leerLogoEmpresa(cliente))?.bytes ?? null;
+  const { logo, identidad } = await leerEmpresaPdf(cliente);
   const datos = armarDatosPdfRecibo({
     recibo: r,
     cliente: clienteRes.data as unknown as FilaClienteReciboPdf,
     medios: (medios.data ?? []) as unknown as FilaMedioReciboPdf[],
     imputaciones: (imputaciones.data ?? []) as unknown as FilaImputacionReciboPdf[],
     emisor: (emisor.data ?? null) as FilaEmisorPdf | null,
+    identidad,
   });
   return { ok: true, datos, logo };
 }
