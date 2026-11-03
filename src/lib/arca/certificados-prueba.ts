@@ -34,7 +34,7 @@ export function generarParPrueba(nombreClave = "principal", opciones: OpcionesCe
   cert.validity.notBefore = opciones.desde ?? new Date("2026-01-01T00:00:00Z");
   cert.validity.notAfter = opciones.hasta ?? new Date("2028-01-01T00:00:00Z");
   cert.setSubject([
-    { name: "commonName", value: opciones.titular ?? "silfeerphomo" },
+    { name: "commonName", value: opciones.titular ?? "empresahomo" },
     { type: "2.5.4.5", value: `CUIT ${opciones.cuit ?? "23334771229"}` },
   ]);
   cert.setIssuer([

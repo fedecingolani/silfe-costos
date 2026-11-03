@@ -4,7 +4,6 @@
  * columnas explícitas; nunca nada de arca_credencial.
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { cargarLogo } from "@/lib/comprobantes/pdf-descarga";
 import {
   COLUMNAS_EMISOR_PDF,
   COLUMNAS_ITEM_PDF,
@@ -12,7 +11,7 @@ import {
   type FilaEmisorPdf,
   type FilaItemPdf,
 } from "@/lib/comprobantes/pdf-datos";
-import { MS_LOGO } from "@/lib/listas-precios/cargar-descarga";
+import { leerLogoEmpresa } from "@/lib/empresa/logo";
 import { esUuid } from "@/lib/listas-precios/uuid";
 import {
   COLUMNAS_CLIENTE_PDF,
@@ -38,18 +37,11 @@ function respuestaError(mensaje: string, status: number): ResultadoPdfPresupuest
 
 export async function cargarPdfPresupuesto({
   id,
-  url,
   cliente: supabase,
-  fetch: fetchLogo = fetch,
-  msLogo = MS_LOGO,
 }: {
   id: string;
-  /** URL del pedido: el logo se pide al mismo origen. */
-  url: string;
   /** Cliente de Supabase con la sesión del usuario. */
   cliente: SupabaseClient;
-  fetch?: (url: string | URL | Request, init?: RequestInit) => Promise<Response>;
-  msLogo?: number;
 }): Promise<ResultadoPdfPresupuesto> {
   if (!esUuid(id)) return respuestaError("El presupuesto no existe.", 404);
 
@@ -67,7 +59,7 @@ export async function cargarPdfPresupuesto({
   const cliente = await supabase.from("cliente").select(COLUMNAS_CLIENTE_PDF).eq("id", p.cliente_id).maybeSingle();
   if (cliente.error) return respuestaError(`Error al cargar el cliente: ${cliente.error.message}`, 500);
 
-  const logo = await cargarLogo(url, fetchLogo, msLogo);
+  const logo = (await leerLogoEmpresa(supabase))?.bytes ?? null;
   const datos = armarDatosPdfPresupuesto({
     presupuesto: p,
     cliente: cliente.data as ClientePdfPresupuesto | null,

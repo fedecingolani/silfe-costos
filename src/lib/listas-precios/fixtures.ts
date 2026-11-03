@@ -55,8 +55,8 @@ export const itemsDeReferencia: ItemListaDescarga[] = [
 export const datosDeReferencia: DatosListaDescarga = {
   titulo: "LISTA DE PRECIOS DICIEMBRE 2023",
   items: itemsDeReferencia,
-  textoDestacado: "SIL – FE 30 AÑOS",
-  contacto: "Ventas: (0299) 555-1234\nventas@silfe.com.ar\nCipolletti, Río Negro",
+  textoDestacado: "EJEMPLO – 30 AÑOS",
+  contacto: "Ventas: (0299) 555-1234\nventas@ejemplo.com.ar\nCipolletti, Río Negro",
   logo: null,
   creadoEn: "2023-12-01T12:00:00+00:00",
 };

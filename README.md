@@ -69,6 +69,7 @@ solo a todos los productos que dependen de él.
 | `categoria_mano_obra` | Costo horario por categoría de operario + cargas sociales |
 | `producto_proceso` | Procesos aplicados a un producto, por tiempo o por monto fijo |
 | `parametro_costeo` | Gastos generales y margen (fila única) |
+| `empresa` | Identidad de la empresa: nombre de fantasía, color de marca, contacto y logo (fila única) |
 
 Vistas de cálculo: `v_materia_prima_costo`, `v_proceso_costo`, `v_subgrupo_costo`,
 `v_componente_detalle`, `v_producto_costo`, `v_explosion_materiales`, `v_uso_materia_prima`.
@@ -111,6 +112,17 @@ supabase db push
 
 Los datos de ejemplo están en `supabase/seed.sql` y se pueden volver a correr: son idempotentes
 por código.
+
+### Puesta en marcha de una empresa nueva
+
+Cada empresa tiene su propia instancia; sus datos se cargan desde la app, sin tocar código:
+
+1. **Configuración → ARCA**: datos fiscales del emisor (CUIT, razón social, condición frente
+   al IVA, domicilio), puntos de venta y credenciales.
+2. **Configuración → Empresa** (`/configuracion/empresa`): nombre de fantasía, color de marca,
+   contacto y logo (PNG o JPEG de hasta 512 KB). El logo se guarda en la tabla `empresa` y se
+   imprime en los PDF; el nombre, el logo y el color se muestran en el menú. Sin nombre de
+   fantasía se usa la razón social de ARCA; sin logo los PDF salen sin logo.
 
 ## ARCA (factura electrónica)
 

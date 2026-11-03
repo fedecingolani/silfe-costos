@@ -1,6 +1,7 @@
 import { inflateSync } from "node:zlib";
 import { PDFArray, PDFDocument, PDFName, PDFRawStream, type PDFPage } from "pdf-lib";
 import { describe, expect, it } from "vitest";
+import { JPEG_1X1, PNG_1X1 } from "@/lib/empresa/logo-fixtures";
 import { generarPdfComprobante } from "./pdf";
 import { armarDatosPdfPresupuesto } from "@/lib/presupuestos/pdf-datos";
 import { armarDatosPdf } from "./pdf-datos";
@@ -67,7 +68,7 @@ describe("generarPdfComprobante", () => {
       "A-00007-00000361",
       "16/10/2026",
       "30-71234567-1",
-      "SILFE S.A.",
+      "EMPRESA DE EJEMPLO S.A.",
       "Frutícola del Valle S.R.L.",
       "Pesos Argentinos",
       "Cuenta Corriente",
@@ -110,7 +111,15 @@ describe("generarPdfComprobante", () => {
     expect(Buffer.from(bytes).toString("latin1")).not.toContain("/Image");
   });
 
-  it("sale sin logo si los bytes no son un PNG", async () => {
+  it.each([
+    ["PNG", PNG_1X1],
+    ["JPEG", JPEG_1X1],
+  ])("incluye el logo %s", async (_tipo, logo) => {
+    const bytes = await generarPdfComprobante(armarDatosPdf(ejemploConItems(1)), logo);
+    expect(Buffer.from(bytes).toString("latin1")).toContain("/Image");
+  });
+
+  it("sale sin logo si los bytes no son una imagen", async () => {
     const bytes = await generarPdfComprobante(armarDatosPdf(ejemploConItems(1)), new Uint8Array([1, 2, 3]));
     expect((await PDFDocument.load(bytes)).getPageCount()).toBe(1);
   });

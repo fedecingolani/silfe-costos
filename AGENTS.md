@@ -10,7 +10,7 @@ Toda la lógica de cálculo vive en **vistas de Postgres** (no en el código de 
 
 ## Producto e instancias
 
-El producto se llama **Charoli Gestión** (identificador técnico `charoli-gestion`). Se despliega **una instancia por empresa**: cada empresa tiene su propio proyecto de Supabase y su propio worker. No es multi-tenant: no agregues `empresa_id` a las tablas. Los datos de la empresa (razón social, logo, CUIT, colores) son configuración, no código; no escribas el nombre de una empresa en el código.
+El producto se llama **Charoli Gestión** (identificador técnico `charoli-gestion`). Se despliega **una instancia por empresa**: cada empresa tiene su propio proyecto de Supabase y su propio worker. No es multi-tenant: no agregues `empresa_id` a las tablas. Los datos de la empresa son configuración, no código; no escribas el nombre de una empresa en el código ni en `public/`. Los fiscales (razón social, CUIT, domicilio) están en `arca_emisor` y se editan en Configuración → ARCA; la identidad (nombre de fantasía, color de marca, contacto y logo) está en la tabla `empresa` y se edita en Configuración → Empresa. El logo se guarda en la base (base64), no en `public/`: los PDF lo leen de ahí y el menú lo pide a `/empresa/logo`.
 
 Nombres que todavía no cambiaron, a propósito: el worker de Cloudflare sigue siendo `silfe-costos` (renombrarlo crea otro worker con otra URL) y el proyecto remoto de Supabase también se llama `silfe-costos`.
 
@@ -36,7 +36,8 @@ src/
 │   ├── login/             # única ruta pública
 │   └── (app)/              # todo lo demás, requiere sesión
 │       ├── clientes/
-│       ├── configuracion/
+│       ├── configuracion/      # parámetros, arca/ y empresa/ (identidad de la empresa)
+│       ├── empresa/logo/       # sirve el logo de la tabla empresa (con sesión)
 │       ├── mano-obra/
 │       ├── materias-primas/
 │       ├── procesos/
@@ -46,6 +47,7 @@ src/
 ├── components/             # Modal, ModalError, nav, ui compartidos
 └── lib/
     ├── tipos.ts            # tipos TS compartidos (centralizado, no hay carpeta types/)
+    ├── empresa/            # validación, logo (lectura y PDF) e identidad para el menú
     └── supabase/           # client.ts (browser) y server.ts (SSR/cookies)
 ```
 

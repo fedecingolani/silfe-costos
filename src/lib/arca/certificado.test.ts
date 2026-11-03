@@ -10,7 +10,7 @@ describe("analizarCertificado", () => {
   it("lee titular, CUIT, emisor y vencimiento", () => {
     const datos = analizarCertificado(par.certificadoPem);
     expect(datos).toEqual({
-      titular: "silfeerphomo",
+      titular: "empresahomo",
       cuit: "23334771229",
       emisor: "Computadores Test",
       vence: new Date("2028-01-01T00:00:00Z"),

@@ -1,4 +1,5 @@
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from "pdf-lib";
+import { incrustarLogo } from "@/lib/empresa/pdf-logo";
 import { armarRenglones, type Renglon } from "./renglones";
 import type { DatosListaDescarga } from "./tipos";
 
@@ -118,21 +119,17 @@ export async function generarPdf(datos: DatosListaDescarga): Promise<Uint8Array>
     return ancho;
   }
 
-  // Logo centrado arriba. Si los bytes no son un PNG válido, la lista sale sin logo.
-  if (datos.logo) {
-    try {
-      const logo = await doc.embedPng(datos.logo);
-      const alto = (logo.height / logo.width) * ANCHO_LOGO;
-      pagina.drawImage(logo, {
-        x: (ANCHO_PAGINA - ANCHO_LOGO) / 2,
-        y: y - alto,
-        width: ANCHO_LOGO,
-        height: alto,
-      });
-      y -= alto + 20;
-    } catch {
-      // Logo ilegible: se sigue sin logo.
-    }
+  // Logo centrado arriba, PNG o JPEG. Si no se puede leer, la lista sale sin logo.
+  const logo = await incrustarLogo(doc, datos.logo);
+  if (logo) {
+    const alto = (logo.height / logo.width) * ANCHO_LOGO;
+    pagina.drawImage(logo, {
+      x: (ANCHO_PAGINA - ANCHO_LOGO) / 2,
+      y: y - alto,
+      width: ANCHO_LOGO,
+      height: alto,
+    });
+    y -= alto + 20;
   }
 
   // Título centrado, en negrita y subrayado.

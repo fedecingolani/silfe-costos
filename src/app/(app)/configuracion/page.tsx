@@ -71,7 +71,7 @@ export default async function ConfiguracionPage() {
               <input
                 name="lista_texto_destacado"
                 defaultValue={p?.lista_texto_destacado ?? ""}
-                placeholder="SIL – FE 30 AÑOS"
+                placeholder="EJEMPLO – 30 AÑOS"
                 className="campo"
               />
               <p className="mt-1 text-xs text-stone-500">Va grande y centrado, debajo de los precios.</p>

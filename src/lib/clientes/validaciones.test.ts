@@ -145,9 +145,9 @@ describe("validarCvu", () => {
 
 describe("validarAlias", () => {
   it("acepta letras, números, punto y guion, de 6 a 20 caracteres", () => {
-    expect(validarAlias(" silfe.cosecha-01 ")).toEqual({
+    expect(validarAlias(" empresa.cosecha-01 ")).toEqual({
       valido: true,
-      normalizado: "silfe.cosecha-01",
+      normalizado: "empresa.cosecha-01",
       mensaje: null,
     });
     expect(validarAlias("abcdef").valido).toBe(true);
@@ -160,8 +160,8 @@ describe("validarAlias", () => {
   });
 
   it("rechaza espacios y otros caracteres", () => {
-    expect(validarAlias("silfe cosecha").valido).toBe(false);
-    expect(validarAlias("silfe_cosecha").valido).toBe(false);
+    expect(validarAlias("empresa cosecha").valido).toBe(false);
+    expect(validarAlias("empresa_cosecha").valido).toBe(false);
     expect(validarAlias("cosecha.ñandú").valido).toBe(false);
   });
 

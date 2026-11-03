@@ -4,7 +4,7 @@
  * logo. Sólo columnas explícitas; nunca nada de arca_credencial.
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { MS_LOGO } from "@/lib/listas-precios/cargar-descarga";
+import { leerLogoEmpresa } from "@/lib/empresa/logo";
 import { esUuid } from "@/lib/listas-precios/uuid";
 import { datosAsociado, leerAsociados } from "./asociados-carga";
 import {
@@ -20,20 +20,14 @@ import {
   type FilaItemPdf,
 } from "./pdf-datos";
 
-type Fetch = (url: string | URL | Request, init?: RequestInit) => Promise<Response>;
-
 export type ResultadoPdf =
   | { ok: true; datos: DatosPdfComprobante; logo: Uint8Array | null }
   | { ok: false; respuesta: Response };
 
 export type OpcionesPdf = {
   id: string;
-  /** URL del pedido: el logo se pide al mismo origen. */
-  url: string;
   /** Cliente de Supabase con la sesión del usuario. */
   cliente: SupabaseClient;
-  fetch?: Fetch;
-  msLogo?: number;
 };
 
 function respuestaError(mensaje: string, status: number): ResultadoPdf {
@@ -46,30 +40,9 @@ function respuestaError(mensaje: string, status: number): ResultadoPdf {
   };
 }
 
-/**
- * Logo de public/, el mismo que usan las listas de precios. Nunca falla: si
- * no llega a tiempo o no se puede leer, el comprobante sale sin logo.
- */
-export async function cargarLogo(url: string, fetchLogo: Fetch, ms: number): Promise<Uint8Array | null> {
-  try {
-    const respuesta = await fetchLogo(new URL("/logo-silfe.png", url), { signal: AbortSignal.timeout(ms) });
-    if (!respuesta.ok) {
-      console.warn(`No se pudo traer el logo del comprobante: respuesta ${respuesta.status}`);
-      return null;
-    }
-    return new Uint8Array(await respuesta.arrayBuffer());
-  } catch (error) {
-    console.warn("No se pudo traer el logo del comprobante:", error);
-    return null;
-  }
-}
-
 export async function cargarPdfComprobante({
   id,
-  url,
   cliente,
-  fetch: fetchLogo = fetch,
-  msLogo = MS_LOGO,
 }: OpcionesPdf): Promise<ResultadoPdf> {
   if (!esUuid(id)) return respuestaError("El comprobante no existe.", 404);
 
@@ -102,7 +75,7 @@ export async function cargarPdfComprobante({
   const asociados = c.clase === "factura" ? [] : await leerAsociados(cliente, id);
   if (typeof asociados === "string") return respuestaError(asociados, 500);
 
-  const logo = await cargarLogo(url, fetchLogo, msLogo);
+  const logo = (await leerLogoEmpresa(cliente))?.bytes ?? null;
   const datos = armarDatosPdf({
     comprobante: c,
     items: (items.data ?? []) as unknown as FilaItemPdf[],

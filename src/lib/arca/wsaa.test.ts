@@ -17,7 +17,7 @@ const TICKET_XML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <loginTicketResponse version="1.0">
     <header>
         <source>CN=wsaahomo, O=AFIP, C=AR, SERIALNUMBER=CUIT 33693450239</source>
-        <destination>SERIALNUMBER=CUIT 23334771229, CN=silfeerphomo</destination>
+        <destination>SERIALNUMBER=CUIT 23334771229, CN=empresahomo</destination>
         <uniqueId>1453264537</uniqueId>
         <generationTime>2026-10-15T09:00:00.123-03:00</generationTime>
         <expirationTime>2026-10-15T21:00:00.123-03:00</expirationTime>

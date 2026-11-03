@@ -44,6 +44,7 @@ const SECCIONES: { titulo: string; items: { href: string; texto: string }[] }[] 
     items: [
       { href: "/unidades", texto: "Unidades" },
       { href: "/configuracion", texto: "Parámetros" },
+      { href: "/configuracion/empresa", texto: "Empresa" },
       { href: "/configuracion/arca", texto: "ARCA" },
     ],
   },
