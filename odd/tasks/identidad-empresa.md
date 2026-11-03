@@ -136,3 +136,4 @@ con su commit; la estrategia de PR (uno solo o encadenados) se decide antes de a
 
 Decidir la estrategia de PR (rama de ~1600 líneas) y, opcionalmente, cubrir con tests la acción
 `guardarEmpresa` y la ruta del logo.
+- PR abierto: https://github.com/fedecingolani/silfe-costos/pull/19 (sin checks de CI configurados).
