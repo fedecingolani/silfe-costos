@@ -126,6 +126,11 @@ con su commit; la estrategia de PR (uno solo o encadenados) se decide antes de a
 - Revisión nativa (riesgo medio, lente de confiabilidad): aprobada y confirmada. Observaciones
   informativas: falta test de `guardarEmpresa` y de la ruta `/empresa/logo`, y la aserción de
   "sin logo" en `cargar-descarga.test.ts` es débil.
+- Tests de la revisión: `acciones.test.ts` (9: datos normalizados con `.eq("id", true)` y
+  `revalidatePath("/", "layout")`, datos inválidos, 0 filas, error de Supabase, PNG en base64,
+  «quitar logo», logo no PNG/JPEG y de más de 512 KB) y `route.test.ts` (3: 404 sin logo, 200 con
+  tipo, bytes, cache inmutable y `nosniff`, 404 ante error de Supabase); la aserción de "sin logo"
+  de `cargar-descarga.test.ts` ahora exige `ok` primero. Mutaciones observadas en los tres archivos.
 
 ## Próximo paso
 

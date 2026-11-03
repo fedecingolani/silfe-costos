@@ -103,7 +103,9 @@ describe("cargarDatosDescarga", () => {
     const { cliente, consultas } = clienteStub(respuestasOk());
     const resultado = await cargarDatosDescarga({ id: ID, conLogo: false, cliente });
     expect(consultas).not.toContain("empresa");
-    expect(resultado.ok && resultado.datos.logo).toBeNull();
+    expect(resultado.ok).toBe(true);
+    if (!resultado.ok) return;
+    expect(resultado.datos.logo).toBeNull();
   });
 
   it("da 404 si la lista no existe", async () => {
