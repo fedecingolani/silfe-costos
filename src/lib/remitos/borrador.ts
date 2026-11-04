@@ -101,6 +101,12 @@ function sumaDeImportes(items: readonly { importe: number }[]): number {
   );
 }
 
+/** Id opcional de un select: vacío o ausente es null; un id válido, el id; otra cosa, undefined (error). */
+function idOpcional(valor: unknown): string | null | undefined {
+  if (valor === undefined || valor === null || valor === "") return null;
+  return esUuid(valor) ? (valor as string) : undefined;
+}
+
 /**
  * Valida lo enviado por la pantalla y arma la cabecera y los ítems para
  * guardar_remito. Ítems, importes, totales y vencimiento del cobro siguen
@@ -135,8 +141,11 @@ export function armarRemito(
   const vencimientoEnviado = typeof enviado.fechaVencimientoPago === "string" ? enviado.fechaVencimientoPago : "";
   if (fecha && condicionPago) errores.push(...erroresVencimiento(condicionPago, fecha, vencimientoEnviado));
 
-  const listaPrecioId = esUuid(enviado.listaPrecioId) ? enviado.listaPrecioId : null;
-  const transporteId = esUuid(enviado.transporteId) ? enviado.transporteId : null;
+  // Vacío es "sin lista" / "sin transporte"; otro valor que no sea un id es un error, no un vacío.
+  const listaPrecioId = idOpcional(enviado.listaPrecioId);
+  if (listaPrecioId === undefined) errores.push("La lista de precios elegida no es válida.");
+  const transporteId = idOpcional(enviado.transporteId);
+  if (transporteId === undefined) errores.push("El transporte elegido no es válido.");
 
   if (enviado.items.length === 0) errores.push("Agregá al menos un ítem.");
   const { items, errores: erroresItems } = armarItems(enviado.items, contexto.productos);
@@ -148,6 +157,12 @@ export function armarRemito(
   const valorEnviado = typeof enviado.valorDeclarado === "string" ? enviado.valorDeclarado : "";
   const valorDeclarado = leerValorDeclarado(valorEnviado, sumaDeImportes(items));
   if (valorDeclarado === null) errores.push(MENSAJE_VALOR_DECLARADO_INVALIDO);
+
+  // Los bultos se asocian por posición: si armarItems no devolvió un ítem por
+  // renglón, no se guarda nada antes que guardar bultos en el ítem equivocado.
+  if (errores.length === 0 && items.length !== enviado.items.length) {
+    errores.push("Los ítems del remito no son válidos.");
+  }
 
   if (errores.length > 0) return { errores };
 
@@ -161,8 +176,8 @@ export function armarRemito(
         fecha: fecha!,
         fecha_vencimiento_pago: vencimientoPara(condicionPago!, fecha!, vencimientoEnviado),
         condicion_pago: condicionPago!,
-        lista_precio_id: listaPrecioId,
-        transporte_id: transporteId,
+        lista_precio_id: listaPrecioId ?? null,
+        transporte_id: transporteId ?? null,
         domicilio_entrega: texto(enviado.domicilioEntrega),
         observaciones: texto(enviado.observaciones),
         valor_declarado: valorDeclarado!,

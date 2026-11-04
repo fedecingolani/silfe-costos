@@ -17,6 +17,11 @@ describe("mensajeErrorRemito", () => {
     );
   });
 
+  it("una pista o un código que coincide con una clave heredada de Object no rompe el mensaje", () => {
+    expect(mensajeErrorRemito({ message: "x", hint: "constructor" })).toBe("No se pudo guardar el remito: x");
+    expect(mensajeErrorRemito({ code: "toString", message: "x" })).toBe("No se pudo guardar el remito: x");
+  });
+
   it("si sólo llega la pista (hint), la usa", () => {
     expect(mensajeErrorRemito({ message: "x", hint: "remito_anulado_inmutable" })).toBe(
       "El remito está anulado: no se puede modificar.",

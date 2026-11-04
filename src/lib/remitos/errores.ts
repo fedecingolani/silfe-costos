@@ -61,9 +61,7 @@ export function mensajeErrorRemito(error: ErrorBase, accion = "guardar el remito
   }
   // Al facturar, los triggers del comprobante (CMxxx) pueden rechazar el borrador: su mensaje ya es legible.
   if (error.code?.startsWith("CM")) return `No se pudo ${accion}: ${error.message}`;
-  return (
-    (error.code && PROPIOS[error.code]) ||
-    (error.hint && PROPIOS[error.hint]) ||
-    `No se pudo ${accion}: ${error.message}`
-  );
+  // Object.hasOwn: una pista como "constructor" no tiene que encontrar lo heredado de Object.
+  const propio = (clave: string | null | undefined) => (clave && Object.hasOwn(PROPIOS, clave) ? PROPIOS[clave] : undefined);
+  return propio(error.code) ?? propio(error.hint) ?? `No se pudo ${accion}: ${error.message}`;
 }

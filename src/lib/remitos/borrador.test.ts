@@ -177,6 +177,15 @@ describe("armarRemito", () => {
     });
   });
 
+  it("rechaza un transporte o una lista de precios mal formados en vez de guardarlos vacíos", () => {
+    expect(armarRemito(enviado({ transporteId: "no-es-un-id" }), contexto)).toEqual({
+      errores: ["El transporte elegido no es válido."],
+    });
+    expect(armarRemito(enviado({ listaPrecioId: "no-es-un-id" }), contexto)).toEqual({
+      errores: ["La lista de precios elegida no es válida."],
+    });
+  });
+
   it("pide al menos un ítem", () => {
     expect(armarRemito(enviado({ items: [] }), contexto)).toEqual({ errores: ["Agregá al menos un ítem."] });
   });
