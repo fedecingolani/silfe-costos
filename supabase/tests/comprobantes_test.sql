@@ -416,8 +416,8 @@ select throws_ok(
 -- ---------------------------------------------------------------------
 
 insert into comprobante (id, punto_venta, clase, letra, tipo_arca, cliente_id)
-values ('a0000000-0000-0000-0000-000000000004', 9099, 'factura', 'A', 1, 'c0000000-0000-0000-0000-000000000001'),
-       ('a0000000-0000-0000-0000-000000000005', 9099, 'factura', 'A', 1, 'c0000000-0000-0000-0000-000000000001');
+values ('a0000000-0000-0000-0000-000000000004', 9099, 'factura', 'X', null, 'c0000000-0000-0000-0000-000000000001'),
+       ('a0000000-0000-0000-0000-000000000005', 9099, 'factura', 'X', null, 'c0000000-0000-0000-0000-000000000001');
 
 select lives_ok(
   $$update comprobante set estado = 'autorizado', numero = 1 where id = 'a0000000-0000-0000-0000-000000000004'$$,
@@ -646,12 +646,15 @@ select is(
 
 update arca_emisor set ambiente = 'produccion' where id;
 
--- Una nota de crédito ya autorizada (punto de venta no electrónico) para
--- probar que no se asocia una nota de crédito a otra.
-insert into comprobante (id, punto_venta, clase, letra, tipo_arca, cliente_id)
-values ('a0000000-0000-0000-0000-000000000009', 9099, 'nota_credito', 'A', 3,
+-- Una nota de crédito A ya autorizada (otro punto de venta electrónico, en
+-- homologación) para probar que no se asocia una nota de crédito a otra.
+insert into comprobante (id, punto_venta, ambiente, clase, letra, tipo_arca, cliente_id)
+values ('a0000000-0000-0000-0000-000000000009', 9008, 'homologacion', 'nota_credito', 'A', 3,
         'c0000000-0000-0000-0000-000000000001');
-update comprobante set estado = 'autorizado', numero = 1 where id = 'a0000000-0000-0000-0000-000000000009';
+update comprobante set estado = 'verificando', intento_numero = 1 where id = 'a0000000-0000-0000-0000-000000000009';
+update comprobante
+set estado = 'autorizado', numero = 1, cae = '76123456789012', cae_vencimiento = current_date + 10
+where id = 'a0000000-0000-0000-0000-000000000009';
 
 create temp table nota_rpc (id uuid);
 select lives_ok(
@@ -774,14 +777,17 @@ select throws_ok(
   'CM007', null, 'Los asociados de la base son todos del mismo ambiente'
 );
 -- Con p_asociados null, las reglas corren sobre los asociados guardados.
--- Una nota de débito A y una factura B autorizadas (punto de venta no
--- electrónico, sin ambiente).
-insert into comprobante (id, punto_venta, clase, letra, tipo_arca, cliente_id)
-values ('a0000000-0000-0000-0000-000000000010', 9099, 'nota_debito', 'A', 2,
+-- Una nota de débito A y una factura B autorizadas (otro punto de venta
+-- electrónico, en homologación).
+insert into comprobante (id, punto_venta, ambiente, clase, letra, tipo_arca, cliente_id)
+values ('a0000000-0000-0000-0000-000000000010', 9008, 'homologacion', 'nota_debito', 'A', 2,
         'c0000000-0000-0000-0000-000000000001'),
-       ('a0000000-0000-0000-0000-000000000011', 9099, 'factura', 'B', 6,
+       ('a0000000-0000-0000-0000-000000000011', 9008, 'homologacion', 'factura', 'B', 6,
         'c0000000-0000-0000-0000-000000000002');
-update comprobante set estado = 'autorizado', numero = 2
+update comprobante set estado = 'verificando', intento_numero = 2
+where id in ('a0000000-0000-0000-0000-000000000010', 'a0000000-0000-0000-0000-000000000011');
+update comprobante
+set estado = 'autorizado', numero = 2, cae = '76123456789012', cae_vencimiento = current_date + 10
 where id in ('a0000000-0000-0000-0000-000000000010', 'a0000000-0000-0000-0000-000000000011');
 
 select lives_ok(

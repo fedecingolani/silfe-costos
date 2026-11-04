@@ -70,32 +70,32 @@ insert into punto_venta (numero, nombre, electronico) values
   (9107, 'Electrónico cobranzas', true),
   (9199, 'Interno cobranzas', false);
 
-insert into comprobante (id, punto_venta, ambiente, clase, letra, tipo_arca, cliente_id, condicion_pago, total, fecha)
+insert into comprobante (id, punto_venta, ambiente, clase, letra, tipo_arca, cliente_id, condicion_pago, total, neto, fecha)
 values
-  ('cb100000-0000-0000-0000-000000000001', 9199, null, 'factura', 'A', 1,
-   'cb000000-0000-0000-0000-000000000001', 'cuenta_corriente', 60, '2026-10-01'),
-  ('cb100000-0000-0000-0000-000000000002', 9199, null, 'factura', 'A', 1,
-   'cb000000-0000-0000-0000-000000000001', 'cuenta_corriente', 70, '2026-10-02'),
+  ('cb100000-0000-0000-0000-000000000001', 9199, null, 'factura', 'X', null,
+   'cb000000-0000-0000-0000-000000000001', 'cuenta_corriente', 60, 60, '2026-10-01'),
+  ('cb100000-0000-0000-0000-000000000002', 9199, null, 'factura', 'X', null,
+   'cb000000-0000-0000-0000-000000000001', 'cuenta_corriente', 70, 70, '2026-10-02'),
   ('cb100000-0000-0000-0000-000000000003', 9107, 'homologacion', 'factura', 'A', 1,
-   'cb000000-0000-0000-0000-000000000001', 'cuenta_corriente', 999, '2026-10-03'),
-  ('cb100000-0000-0000-0000-000000000004', 9199, null, 'factura', 'A', 1,
-   'cb000000-0000-0000-0000-000000000001', 'cuenta_corriente', 10, '2026-10-04'),
-  ('cb100000-0000-0000-0000-000000000005', 9199, null, 'factura', 'A', 1,
-   'cb000000-0000-0000-0000-000000000002', 'cuenta_corriente', 40, '2026-10-01'),
-  ('cb100000-0000-0000-0000-000000000006', 9199, null, 'nota_credito', 'A', 3,
-   'cb000000-0000-0000-0000-000000000002', 'cuenta_corriente', 25, '2026-10-05'),
+   'cb000000-0000-0000-0000-000000000001', 'cuenta_corriente', 999, 999, '2026-10-03'),
+  ('cb100000-0000-0000-0000-000000000004', 9199, null, 'factura', 'X', null,
+   'cb000000-0000-0000-0000-000000000001', 'cuenta_corriente', 10, 10, '2026-10-04'),
+  ('cb100000-0000-0000-0000-000000000005', 9199, null, 'factura', 'X', null,
+   'cb000000-0000-0000-0000-000000000002', 'cuenta_corriente', 40, 40, '2026-10-01'),
+  ('cb100000-0000-0000-0000-000000000006', 9199, null, 'nota_credito', 'X', null,
+   'cb000000-0000-0000-0000-000000000002', 'cuenta_corriente', 25, 25, '2026-10-05'),
   ('cb100000-0000-0000-0000-000000000007', 9107, 'homologacion', 'nota_credito', 'A', 3,
-   'cb000000-0000-0000-0000-000000000002', 'cuenta_corriente', 5, '2026-10-05'),
-  ('cb100000-0000-0000-0000-000000000008', 9199, null, 'factura', 'A', 1,
-   'cb000000-0000-0000-0000-000000000003', 'cuenta_corriente', 50, '2026-10-01'),
-  ('cb100000-0000-0000-0000-000000000009', 9199, null, 'factura', 'A', 1,
-   'cb000000-0000-0000-0000-000000000003', 'contado', 30, '2026-10-02'),
+   'cb000000-0000-0000-0000-000000000002', 'cuenta_corriente', 5, 5, '2026-10-05'),
+  ('cb100000-0000-0000-0000-000000000008', 9199, null, 'factura', 'X', null,
+   'cb000000-0000-0000-0000-000000000003', 'cuenta_corriente', 50, 50, '2026-10-01'),
+  ('cb100000-0000-0000-0000-000000000009', 9199, null, 'factura', 'X', null,
+   'cb000000-0000-0000-0000-000000000003', 'contado', 30, 30, '2026-10-02'),
   ('cb100000-0000-0000-0000-000000000010', 9107, 'produccion', 'factura', 'A', 1,
-   'cb000000-0000-0000-0000-000000000003', 'cuenta_corriente', 20, '2026-10-03'),
-  ('cb100000-0000-0000-0000-000000000011', 9199, null, 'nota_debito', 'A', 2,
-   'cb000000-0000-0000-0000-000000000003', 'cuenta_corriente', 0, '2026-10-20'),
-  ('cb100000-0000-0000-0000-000000000012', 9199, null, 'nota_debito', 'A', 2,
-   'cb000000-0000-0000-0000-000000000001', 'cuenta_corriente', 0, '2026-10-20');
+   'cb000000-0000-0000-0000-000000000003', 'cuenta_corriente', 20, 20, '2026-10-03'),
+  ('cb100000-0000-0000-0000-000000000011', 9199, null, 'nota_debito', 'X', null,
+   'cb000000-0000-0000-0000-000000000003', 'cuenta_corriente', 0, 0, '2026-10-20'),
+  ('cb100000-0000-0000-0000-000000000012', 9199, null, 'nota_debito', 'X', null,
+   'cb000000-0000-0000-0000-000000000001', 'cuenta_corriente', 0, 0, '2026-10-20');
 
 -- No electrónicos: de borrador a autorizado con su número.
 update comprobante set estado = 'autorizado', numero = 1 where id = 'cb100000-0000-0000-0000-000000000001';
@@ -831,10 +831,10 @@ select is(
 reset role;
 insert into cliente (id, razon_social, condicion_iva) values
   ('cb000000-0000-0000-0000-000000000004', 'Cliente del editor de cobranzas', 'Responsable Inscripto');
-insert into comprobante (id, punto_venta, ambiente, clase, letra, tipo_arca, cliente_id, condicion_pago, total, fecha)
+insert into comprobante (id, punto_venta, ambiente, clase, letra, tipo_arca, cliente_id, condicion_pago, total, neto, fecha)
 values
-  ('cb100000-0000-0000-0000-000000000041', 9199, null, 'factura', 'A', 1,
-   'cb000000-0000-0000-0000-000000000004', 'cuenta_corriente', 50, '2026-10-01');
+  ('cb100000-0000-0000-0000-000000000041', 9199, null, 'factura', 'X', null,
+   'cb000000-0000-0000-0000-000000000004', 'cuenta_corriente', 50, 50, '2026-10-01');
 update comprobante set estado = 'autorizado', numero = 41 where id = 'cb100000-0000-0000-0000-000000000041';
 set local role authenticated;
 
@@ -941,16 +941,16 @@ insert into recibo (id, punto_venta, cliente_id, fecha, total) values
 insert into recibo_medio (recibo_id, tipo, importe) values ('cb200000-0000-0000-0000-000000000051', 'efectivo', 100);
 select emitir_recibo('cb200000-0000-0000-0000-000000000051');
 
-insert into comprobante (id, punto_venta, ambiente, clase, letra, tipo_arca, cliente_id, condicion_pago, total, fecha)
+insert into comprobante (id, punto_venta, ambiente, clase, letra, tipo_arca, cliente_id, condicion_pago, total, neto, fecha)
 values
-  ('cb100000-0000-0000-0000-000000000051', 9199, null, 'factura', 'A', 1,
-   'cb000000-0000-0000-0000-000000000005', 'contado', 30, '2026-10-06'),
+  ('cb100000-0000-0000-0000-000000000051', 9199, null, 'factura', 'X', null,
+   'cb000000-0000-0000-0000-000000000005', 'contado', 30, 30, '2026-10-06'),
   ('cb100000-0000-0000-0000-000000000052', 9107, 'homologacion', 'factura', 'A', 1,
-   'cb000000-0000-0000-0000-000000000005', 'cuenta_corriente', 40, '2026-10-06'),
-  ('cb100000-0000-0000-0000-000000000053', 9199, null, 'factura', 'A', 1,
-   'cb000000-0000-0000-0000-000000000005', 'cuenta_corriente', 70, '2026-10-07'),
+   'cb000000-0000-0000-0000-000000000005', 'cuenta_corriente', 40, 40, '2026-10-06'),
+  ('cb100000-0000-0000-0000-000000000053', 9199, null, 'factura', 'X', null,
+   'cb000000-0000-0000-0000-000000000005', 'cuenta_corriente', 70, 70, '2026-10-07'),
   ('cb100000-0000-0000-0000-000000000054', 9107, 'produccion', 'factura', 'A', 1,
-   'cb000000-0000-0000-0000-000000000005', 'cuenta_corriente', 50, '2026-10-08');
+   'cb000000-0000-0000-0000-000000000005', 'cuenta_corriente', 50, 50, '2026-10-08');
 
 set local role authenticated;
 
@@ -1009,23 +1009,23 @@ select results_eq(
 
 -- C6: notas de crédito.
 reset role;
-insert into comprobante (id, punto_venta, ambiente, clase, letra, tipo_arca, cliente_id, condicion_pago, total, fecha,
+insert into comprobante (id, punto_venta, ambiente, clase, letra, tipo_arca, cliente_id, condicion_pago, total, neto, fecha,
                          periodo_asoc_desde, periodo_asoc_hasta)
 values
-  ('cb100000-0000-0000-0000-000000000061', 9199, null, 'factura', 'A', 1,
-   'cb000000-0000-0000-0000-000000000006', 'cuenta_corriente', 80, '2026-10-01', null, null),
-  ('cb100000-0000-0000-0000-000000000062', 9199, null, 'nota_credito', 'A', 3,
-   'cb000000-0000-0000-0000-000000000006', 'cuenta_corriente', 30, '2026-10-02', null, null),
-  ('cb100000-0000-0000-0000-000000000063', 9199, null, 'nota_credito', 'A', 3,
-   'cb000000-0000-0000-0000-000000000006', 'cuenta_corriente', 60, '2026-10-03', null, null),
-  ('cb100000-0000-0000-0000-000000000064', 9199, null, 'nota_credito', 'A', 3,
-   'cb000000-0000-0000-0000-000000000006', 'cuenta_corriente', 15, '2026-10-04', '2026-10-01', '2026-10-04'),
-  ('cb100000-0000-0000-0000-000000000065', 9199, null, 'factura', 'A', 1,
-   'cb000000-0000-0000-0000-000000000006', 'contado', 20, '2026-10-05', null, null),
-  ('cb100000-0000-0000-0000-000000000066', 9199, null, 'nota_credito', 'A', 3,
-   'cb000000-0000-0000-0000-000000000006', 'cuenta_corriente', 5, '2026-10-06', null, null),
-  ('cb100000-0000-0000-0000-000000000067', 9199, null, 'factura', 'A', 1,
-   'cb000000-0000-0000-0000-000000000006', 'cuenta_corriente', 100, '2026-10-07', null, null);
+  ('cb100000-0000-0000-0000-000000000061', 9199, null, 'factura', 'X', null,
+   'cb000000-0000-0000-0000-000000000006', 'cuenta_corriente', 80, 80, '2026-10-01', null, null),
+  ('cb100000-0000-0000-0000-000000000062', 9199, null, 'nota_credito', 'X', null,
+   'cb000000-0000-0000-0000-000000000006', 'cuenta_corriente', 30, 30, '2026-10-02', null, null),
+  ('cb100000-0000-0000-0000-000000000063', 9199, null, 'nota_credito', 'X', null,
+   'cb000000-0000-0000-0000-000000000006', 'cuenta_corriente', 60, 60, '2026-10-03', null, null),
+  ('cb100000-0000-0000-0000-000000000064', 9199, null, 'nota_credito', 'X', null,
+   'cb000000-0000-0000-0000-000000000006', 'cuenta_corriente', 15, 15, '2026-10-04', '2026-10-01', '2026-10-04'),
+  ('cb100000-0000-0000-0000-000000000065', 9199, null, 'factura', 'X', null,
+   'cb000000-0000-0000-0000-000000000006', 'contado', 20, 20, '2026-10-05', null, null),
+  ('cb100000-0000-0000-0000-000000000066', 9199, null, 'nota_credito', 'X', null,
+   'cb000000-0000-0000-0000-000000000006', 'cuenta_corriente', 5, 5, '2026-10-06', null, null),
+  ('cb100000-0000-0000-0000-000000000067', 9199, null, 'factura', 'X', null,
+   'cb000000-0000-0000-0000-000000000006', 'cuenta_corriente', 100, 100, '2026-10-07', null, null);
 update comprobante set estado = 'autorizado', numero = 61 where id = 'cb100000-0000-0000-0000-000000000061';
 update comprobante set estado = 'autorizado', numero = 65 where id = 'cb100000-0000-0000-0000-000000000065';
 insert into comprobante_asociado (comprobante_id, asociado_id) values
@@ -1103,9 +1103,9 @@ insert into recibo_medio (recibo_id, tipo, importe) values
   ('cb200000-0000-0000-0000-000000000076', 'efectivo', 40);
 select emitir_recibo('cb200000-0000-0000-0000-000000000075');
 select emitir_recibo('cb200000-0000-0000-0000-000000000076');
-insert into comprobante (id, punto_venta, ambiente, clase, letra, tipo_arca, cliente_id, condicion_pago, total, fecha)
-values ('cb100000-0000-0000-0000-000000000075', 9199, null, 'factura', 'A', 1,
-        'cb000000-0000-0000-0000-000000000009', 'cuenta_corriente', 70, '2026-10-03');
+insert into comprobante (id, punto_venta, ambiente, clase, letra, tipo_arca, cliente_id, condicion_pago, total, neto, fecha)
+values ('cb100000-0000-0000-0000-000000000075', 9199, null, 'factura', 'X', null,
+        'cb000000-0000-0000-0000-000000000009', 'cuenta_corriente', 70, 70, '2026-10-03');
 
 create function public.test_fallar_segunda_imputacion() returns trigger language plpgsql as $$
 begin
@@ -1202,11 +1202,13 @@ update arca_emisor set ambiente = 'produccion' where id;
 insert into cliente (id, razon_social, condicion_iva) values
   ('cb000000-0000-0000-0000-000000000007', 'Cliente con cheque rechazado', 'Responsable Inscripto'),
   ('cb000000-0000-0000-0000-000000000008', 'Consumidor con cheque a cuenta', 'Consumidor Final');
-insert into comprobante (id, punto_venta, ambiente, clase, letra, tipo_arca, cliente_id, condicion_pago, total, fecha)
+insert into comprobante (id, punto_venta, ambiente, clase, letra, tipo_arca, cliente_id, condicion_pago, total, neto, fecha)
 values
-  ('cb100000-0000-0000-0000-000000000071', 9199, null, 'factura', 'A', 1,
-   'cb000000-0000-0000-0000-000000000007', 'cuenta_corriente', 100, '2026-10-01');
-update comprobante set estado = 'autorizado', numero = 71 where id = 'cb100000-0000-0000-0000-000000000071';
+  ('cb100000-0000-0000-0000-000000000071', 9107, 'produccion', 'factura', 'A', 1,
+   'cb000000-0000-0000-0000-000000000007', 'cuenta_corriente', 100, 100, '2026-10-01');
+update comprobante set estado = 'verificando', intento_numero = 71 where id = 'cb100000-0000-0000-0000-000000000071';
+update comprobante set estado = 'autorizado', numero = 71, cae = '12345678901234', cae_vencimiento = '2026-12-31'
+where id = 'cb100000-0000-0000-0000-000000000071';
 
 set local role authenticated;
 
@@ -1459,9 +1461,9 @@ reset role;
 
 insert into cliente (id, razon_social, condicion_iva) values
   ('cb000000-0000-0000-0000-000000000011', 'Cliente de contado', 'Responsable Inscripto');
-insert into comprobante (id, punto_venta, ambiente, clase, letra, tipo_arca, cliente_id, condicion_pago, total, fecha)
-values ('cb100000-0000-0000-0000-000000000111', 9199, null, 'factura', 'A', 1,
-        'cb000000-0000-0000-0000-000000000011', 'contado', 45, '2026-10-10');
+insert into comprobante (id, punto_venta, ambiente, clase, letra, tipo_arca, cliente_id, condicion_pago, total, neto, fecha)
+values ('cb100000-0000-0000-0000-000000000111', 9199, null, 'factura', 'X', null,
+        'cb000000-0000-0000-0000-000000000011', 'contado', 45, 45, '2026-10-10');
 update comprobante set estado = 'autorizado', numero = 111 where id = 'cb100000-0000-0000-0000-000000000111';
 insert into recibo (id, punto_venta, cliente_id, fecha, total, comprobante_contado_id) values
   ('cb200000-0000-0000-0000-000000000111', 9, 'cb000000-0000-0000-0000-000000000011', '2026-10-10', 45,
