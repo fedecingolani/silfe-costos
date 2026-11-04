@@ -675,6 +675,117 @@ export type Presupuesto = {
 export type PresupuestoItem = Omit<ComprobanteItem, "comprobante_id"> & { presupuesto_id: string };
 
 // ---------------------------------------------------------------------
+// Remitos de venta
+// ---------------------------------------------------------------------
+
+/** Estados que se guardan en la tabla remito. */
+export const ESTADOS_REMITO_GUARDADO = ["borrador", "emitido", "anulado"] as const;
+
+export type EstadoRemitoGuardado = (typeof ESTADOS_REMITO_GUARDADO)[number];
+
+/**
+ * Estado de un remito tal como se muestra (v_remito_estado.estado): parcial
+ * y facturado se derivan de lo facturado de un emitido, no se guardan.
+ */
+export const ESTADOS_REMITO = ["borrador", "emitido", "parcial", "facturado", "anulado"] as const;
+
+export type EstadoRemito = (typeof ESTADOS_REMITO)[number];
+
+export const NOMBRES_ESTADO_REMITO: Record<EstadoRemito, string> = {
+  borrador: "Borrador",
+  emitido: "Emitido",
+  parcial: "Facturado parcial",
+  facturado: "Facturado",
+  anulado: "Anulado",
+};
+
+/** Fila de remito. Los importes llegan de Postgres como números. */
+export type Remito = {
+  id: string;
+  /** Punto de venta del remito: define su serie de numeración. */
+  punto_venta: number;
+  /** Vacío hasta emitir. Se muestra como R-00001-00000001. */
+  numero: number | null;
+  cliente_id: string;
+  /** yyyy-mm-dd */
+  fecha: string;
+  fecha_vencimiento_pago: string;
+  condicion_pago: CondicionPago;
+  lista_precio_id: string | null;
+  transporte_id: string | null;
+  /** Texto libre; arranca con el domicilio del cliente. */
+  domicilio_entrega: string | null;
+  observaciones: string | null;
+  /** Neto gravado. */
+  neto: number;
+  no_gravado: number;
+  iva: number;
+  /** neto + no_gravado + iva */
+  total: number;
+  /** Se sugiere con la suma de los importes de los ítems y se puede cambiar. */
+  valor_declarado: number;
+  /** Suma de los bultos de los ítems (la mantiene la base). */
+  bultos_total: number;
+  estado: EstadoRemitoGuardado;
+  emitido_en: string | null;
+  anulado_en: string | null;
+  creado_por: string | null;
+  creado_en: string;
+  actualizado_en: string;
+};
+
+/** Fila de remito_item: las mismas columnas que comprobante_item, más los bultos. */
+export type RemitoItem = Omit<ComprobanteItem, "comprobante_id"> & {
+  remito_id: string;
+  /** Entero, 0 o más. */
+  bultos: number;
+};
+
+/** Fila de v_remito_item_pendiente: lo facturado y lo pendiente de cada ítem de remito. */
+export type RemitoItemPendiente = {
+  remito_item_id: string;
+  remito_id: string;
+  cliente_id: string;
+  punto_venta: number;
+  numero: number | null;
+  /** yyyy-mm-dd, del remito. */
+  fecha: string;
+  estado_remito: EstadoRemitoGuardado;
+  orden: number;
+  producto_id: string | null;
+  codigo: string | null;
+  descripcion: string;
+  unidad: string | null;
+  precio_unitario: number;
+  descuento_pct: number;
+  gravado: boolean;
+  alicuota_iva: AlicuotaIva | null;
+  bultos: number;
+  /** 4 decimales. */
+  cantidad: number;
+  /** Suma de los ítems de factura que lo apuntan, borradores incluidos. */
+  facturado: number;
+  /** cantidad − facturado */
+  pendiente: number;
+};
+
+/** Fila de v_remito_estado. */
+export type RemitoEstado = {
+  remito_id: string;
+  cliente_id: string;
+  punto_venta: number;
+  numero: number | null;
+  /** R-00001-00000001, o vacío en un borrador. */
+  numero_texto: string | null;
+  fecha: string;
+  estado_guardado: EstadoRemitoGuardado;
+  estado: EstadoRemito;
+  cantidad: number;
+  facturado: number;
+  pendiente: number;
+};
+
+// ---------------------------------------------------------------------
 // Cobranzas, cartera de cheques y cuenta corriente
 // ---------------------------------------------------------------------
 
