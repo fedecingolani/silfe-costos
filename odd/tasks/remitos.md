@@ -92,10 +92,10 @@ remitos, envío por mail.
 | ID | Tarea | Ruta | Estado | Commit |
 | --- | --- | --- | --- | --- |
 | T1 | DB: `remito`, `remito_item`, estados, triggers de bloqueo, `emitir_remito` con numeración por punto de venta, anulación, RLS aparte (pgTAP en rojo primero) | delegada (writer) | [x] | 6f65156 |
-| T2 | DB: `comprobante_item.remito_item_id`, vista de pendientes por ítem, `facturar_remitos` (mismo cliente, tope de pendiente, candado), estado derivado y desbloqueo al borrar el borrador, `guardar_remito`; más las tres advertencias de las revisiones de T1 (pgTAP) | delegada (writer) | [ ] | |
+| T2 | DB: `comprobante_item.remito_item_id`, vista de pendientes por ítem, `facturar_remitos` (mismo cliente, tope de pendiente, candado), estado derivado y desbloqueo al borrar el borrador, `guardar_remito`; más las tres advertencias de las revisiones de T1 (pgTAP) | delegada (writer) | [x] | 53a8d0a, e52860f |
 | T3 | TS: tipos, cálculo de bultos y valor declarado, validación y armado de la facturación (Vitest) | delegada (writer) | [ ] | |
 | T4 | Pantallas: listado, editor (bultos, transporte, domicilio, valor declarado) y detalle | delegada (writer) | [ ] | |
-| T5 | Pantalla de facturación: cliente → remitos pendientes → cantidades → borrador de factura | delegada (writer) | [ ] | |
+| T5 | Pantalla de facturación: cliente → remitos pendientes → cantidades → borrador de factura; el editor de comprobantes manda `remito_item_id` en cada ítem; error claro si el cliente no tiene condición de IVA | delegada (writer) | [ ] | |
 | T6 | PDF del remito (letra R, bultos, valor declarado, transporte, domicilio de entrega) | delegada (writer) | [ ] | |
 | T7 | Menú (Ventas → Remitos) y recorrido en el navegador | orquestador | [ ] | |
 
@@ -149,6 +149,35 @@ remitos, envío por mail.
   - Para destrabar la revisión se agregaron `.atl/` y `firebase-debug.log` a
     `.git/info/exclude` (sólo local).
 
+- T2 (04/11, `feat/remitos-02-facturacion-db`, 53a8d0a): migración
+  `20261104000003_remitos_facturacion.sql`, tests `remitos_facturacion_test.sql` (96 aserciones).
+  - RED: los estructurales fallaban y la corrida abortaba sin `facturar_remitos`; contra los
+    triggers de T1, 14 de 96 fallaban (las tres advertencias). GREEN: `supabase test db` 937,
+    `npm test` 829, `npm run typecheck` OK.
+  - Las tres advertencias de T1 quedaron resueltas: el trigger controla las invariantes reales
+    al emitir (ítems, punto de venta activo, número = max+1) y al anular (nada facturado); los
+    ítems bloquean el remito padre `for update`; sólo se acepta el `set null` de una lista de
+    precios borrada en un remito anulado o facturado.
+  - Nuevos códigos: RM008 `remito_facturado`, RM009 `facturacion_invalida`, RM010
+    `excede_pendiente`. Trigger `trg_comprobante_remito`: no se cambia cliente ni clase de una
+    factura con ítems vinculados.
+  - `guardar_borrador_comprobante` se reemplazó entero: respeta `remito_item_id` si viene en el
+    JSON del ítem y, si no viene, lo hereda del ítem anterior con el mismo producto y
+    descripción (respaldo para el editor actual). Duplicar y notas nunca lo heredan.
+  - API para T3–T5: `guardar_remito(p_id, p_remito, p_items) returns uuid`,
+    `facturar_remitos(p_items [{remito_item_id, cantidad}], p_punto_venta) returns comprobante`,
+    vistas `v_remito_item_pendiente` y `v_remito_estado` (con `numero_texto` R-00001-00000001).
+  - Revisión nativa (review-04d06d4935c0734d): **aprobada** y acusada. Hallazgos:
+    - R3-001 (cantidad ≤ 0 baja lo facturado): no aplica, `comprobante_item` ya tiene
+      `check (cantidad > 0)`.
+    - R3-002 (`guardar_remito` dejaba un emitido sin ítems): corregido en e52860f con el trigger
+      de restricción diferido `trg_remito_con_items` (migración `20261104000004`), 2 tests nuevos.
+      RED parcial: sin la migración la corrida aborta al nombrar el trigger. Suite: 939 PASS.
+      Evaluación del commit: medio, bajo el presupuesto (58 líneas), queda pendiente en la tanda.
+    - R3-003 (cliente sin condición de IVA deja la letra nula) y R3-004 (herencia del vínculo
+      con ítems repetidos o reordenados): pasan a T5, que valida la condición de IVA y hace que
+      el editor mande `remito_item_id`.
+
 ## Próximo paso
 
-T2 en `feat/remitos-02-facturacion-db`, sobre T1.
+T3 en `feat/remitos-03-logica`, sobre T2.
