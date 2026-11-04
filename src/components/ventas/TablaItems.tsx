@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, type ReactNode } from "react";
 import { Tarjeta, Vacio } from "@/components/ui";
 import { numero, pesos } from "@/lib/formato";
 import { calcularItem, calcularTotales } from "@/lib/comprobantes/calculo";
@@ -14,18 +14,25 @@ import { ALICUOTAS_IVA, NO_GRAVADO } from "@/lib/tipos";
  * Controlada: los renglones viven en el editor. Con `sinIva` (comprobante
  * X) no se muestra ni se suma IVA: total = neto + no gravado. La alícuota
  * se sigue eligiendo porque separa lo gravado de lo no gravado.
+ *
+ * Un editor con renglones propios (p. ej. los bultos del remito) pasa su
+ * tipo de renglón, cómo crear uno vacío (`nuevaFila`) y una columna extra
+ * (`columnaExtra`), que va después de la cantidad. Sin ellos la tabla es la
+ * de siempre.
  */
-export function TablaItems({
+export function TablaItems<F extends FilaItem = FilaItem>({
   filas,
   onCambiar,
   productos,
   precios,
   soloLectura = false,
   sinIva = false,
+  nuevaFila = filaVacia as () => F,
+  columnaExtra,
 }: {
-  filas: FilaItem[];
+  filas: F[];
   /** Recibe una función que arma los renglones nuevos a partir de los actuales (vale el setState). */
-  onCambiar: (actualizar: (actuales: FilaItem[]) => FilaItem[]) => void;
+  onCambiar: (actualizar: (actuales: F[]) => F[]) => void;
   /** Productos activos para el buscador. */
   productos: ProductoVendible[];
   /** Precio final (sin IVA) por producto de la lista elegida. */
@@ -33,14 +40,18 @@ export function TablaItems({
   soloLectura?: boolean;
   /** Comprobante X: sin IVA. */
   sinIva?: boolean;
-}) {
+  /** Columna propia del editor, después de la cantidad. */
+  columnaExtra?: ColumnaExtra<F>;
+} & NuevaFila<F>) {
   const productosPorId = useMemo(() => new Map(productos.map((p) => [p.id, p])), [productos]);
   const calculables = filas.map(itemParaCalcular);
   // Sin IVA no hay IVA por alícuota: el pie muestra neto, no gravado y total.
   const totales = calcularTotales(calculables.filter((c) => c !== null), { sinIva });
+  const columnas = (sinIva ? 7 : 9) + (columnaExtra ? 1 : 0);
 
-  const cambiarFila = (clave: string, cambios: Partial<FilaItem>) =>
-    onCambiar((actuales) => actuales.map((f) => (f.clave === clave ? { ...f, ...cambios } : f)));
+  // Cambia campos del renglón de ventas o, desde la columna extra, los propios; el resto se conserva.
+  const cambiarFila = (clave: string, cambios: Partial<FilaItem> | Partial<F>) =>
+    onCambiar((actuales) => actuales.map((f) => (f.clave === clave ? ({ ...f, ...cambios } as F) : f)));
 
   function elegirProducto(clave: string, producto: ProductoVendible) {
     cambiarFila(clave, cambiosAlElegirProducto(producto, precios));
@@ -54,7 +65,7 @@ export function TablaItems({
         <button
           type="button"
           disabled={soloLectura}
-          onClick={() => onCambiar((f) => [...f, filaVacia()])}
+          onClick={() => onCambiar((f) => [...f, nuevaFila()])}
           className="boton-secundario"
         >
           + Agregar ítem
@@ -67,6 +78,7 @@ export function TablaItems({
             <tr>
               <th className="min-w-72">Producto / descripción</th>
               <th className="w-24">Cantidad</th>
+              {columnaExtra && <th className={columnaExtra.clase}>{columnaExtra.titulo}</th>}
               <th className="w-32">Precio</th>
               <th className="w-20">% dto</th>
               <th className="w-24">{sinIva ? "Alícuota (no se aplica)" : "IVA %"}</th>
@@ -77,7 +89,7 @@ export function TablaItems({
             </tr>
           </thead>
           <tbody>
-            {filas.length === 0 && <Vacio mensaje="Agregá al menos un ítem." colSpan={sinIva ? 7 : 9} />}
+            {filas.length === 0 && <Vacio mensaje="Agregá al menos un ítem." colSpan={columnas} />}
             {filas.map((f, i) => {
               const calculado = calculables[i] ? calcularItem(calculables[i], { sinIva }) : null;
               const producto = f.productoId ? productosPorId.get(f.productoId) : undefined;
@@ -168,6 +180,7 @@ export function TablaItems({
                       aria-label={`Cantidad del ítem ${i + 1}`}
                     />
                   </td>
+                  {columnaExtra && <td>{columnaExtra.celda(f, i, (cambios) => cambiarFila(f.clave, cambios))}</td>}
                   <td>
                     <input
                       inputMode="decimal"
@@ -273,6 +286,19 @@ export function TablaItems({
     </Tarjeta>
   );
 }
+
+/** Columna propia de un editor: título, celda de cada renglón y clase del encabezado. */
+export type ColumnaExtra<F extends FilaItem> = {
+  titulo: string;
+  clase?: string;
+  celda: (fila: F, indice: number, cambiar: (cambios: Partial<F>) => void) => ReactNode;
+};
+
+/**
+ * `nuevaFila` es obligatoria cuando el renglón tiene campos propios: un
+ * renglón vacío de ventas no los trae.
+ */
+type NuevaFila<F extends FilaItem> = FilaItem extends F ? { nuevaFila?: () => F } : { nuevaFila: () => F };
 
 /** Buscador de productos activos por código o nombre (filtra en el navegador). */
 export function BuscadorProducto({
