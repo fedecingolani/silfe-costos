@@ -162,7 +162,7 @@ export default async function RemitoPage({ params }: { params: Promise<{ id: str
       {migas}
       <Encabezado titulo={titulo} descripcion={descripcion} acciones={pastilla} />
 
-      {permisos.puedeFacturar && (
+      {(permisos.puedeFacturar || permisos.puedeImprimir) && (
         <div className="mb-4 flex flex-wrap items-center gap-2">
           <AccionesRemito id={r.id} clienteId={r.cliente_id} estado={estado} />
         </div>

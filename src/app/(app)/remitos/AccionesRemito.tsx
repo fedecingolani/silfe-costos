@@ -10,12 +10,13 @@ import { anularRemito, borrarRemito, emitirRemito, type ResultadoRemito } from "
 import { Confirmacion } from "./Confirmacion";
 
 const AVISO_SIN_GUARDAR = "Guardá los cambios antes de emitir o facturar.";
+const AVISO_PDF_SIN_GUARDAR = "Guardá los cambios antes de imprimir: el PDF sale de lo guardado.";
 
 /**
  * Acciones de un remito según su estado (permisosRemito): emitir, facturar,
- * anular y borrar. Emitir, anular y borrar piden confirmación; los errores
+ * imprimir (PDF), anular y borrar. Emitir, anular y borrar piden confirmación; los errores
  * de la base se muestran en un diálogo. Con cambios sin guardar en el
- * editor no se emite ni se factura (se haría sobre lo guardado).
+ * editor no se emite, ni se factura, ni se imprime (se haría sobre lo guardado).
  */
 export function AccionesRemito({
   id,
@@ -67,6 +68,16 @@ export function AccionesRemito({
         ) : (
           <button type="button" disabled title={AVISO_SIN_GUARDAR} className="boton-secundario">
             Facturar
+          </button>
+        ))}
+      {permisos.puedeImprimir &&
+        (sinCambios ? (
+          <a href={`/remitos/${id}/pdf`} target="_blank" rel="noopener noreferrer" className="boton-secundario">
+            PDF
+          </a>
+        ) : (
+          <button type="button" disabled title={AVISO_PDF_SIN_GUARDAR} className="boton-secundario">
+            PDF
           </button>
         ))}
       {permisos.puedeAnular && (
