@@ -10,6 +10,7 @@ import {
   mapaPrecios,
   mensajeErrorGuardado,
   precioPropuesto,
+  sinVinculoRemito,
   totalesDeItems,
   vencimientoPara,
   type BorradorEnviado,
@@ -163,6 +164,8 @@ describe("armarBorrador", () => {
             alicuota_iva: 21,
             importe: 1800.9,
             iva: 378.19,
+            // Una factura manda siempre el vínculo con remitos (null: ninguno).
+            remito_item_id: null,
           },
           {
             producto_id: null,
@@ -177,6 +180,7 @@ describe("armarBorrador", () => {
             alicuota_iva: 10.5,
             importe: 500,
             iva: 52.5,
+            remito_item_id: null,
           },
         ],
       },
@@ -476,7 +480,8 @@ describe("armarItems y totalesDeItems (compartidos con presupuestos)", () => {
   it("arman los mismos ítems y totales que el borrador", () => {
     const resultado = armarBorrador(enviado(), contexto);
     if (!("borrador" in resultado)) throw new Error(JSON.stringify(resultado));
-    const { items, errores } = armarItems(enviado().items, productos);
+    // El borrador es una factura: vincula remitos.
+    const { items, errores } = armarItems(enviado().items, productos, {}, { vincularRemitos: true });
     expect(errores).toEqual([]);
     expect(items).toEqual(resultado.borrador.items);
     expect(totalesDeItems(items)).toMatchObject({ neto: 2300.9, noGravado: 0, iva: 430.69, total: 2731.59 });
@@ -501,5 +506,86 @@ describe("erroresVencimiento", () => {
 
   it("con contado no mira el vencimiento", () => {
     expect(erroresVencimiento("contado", "2026-10-16", "")).toEqual([]);
+  });
+});
+
+describe("vínculo con remitos (remito_item_id)", () => {
+  const REMITO_ITEM_1 = "f0000000-0000-0000-0000-000000000001";
+  const REMITO_ITEM_2 = "f0000000-0000-0000-0000-000000000002";
+  const renglon = (remitoItemId: string | null | undefined, cantidad = "2") => ({
+    ...enviado().items[0],
+    cantidad,
+    ...(remitoItemId === undefined ? {} : { remitoItemId }),
+  });
+
+  it("una factura conserva el vínculo de cada renglón y manda null en los que no tienen", () => {
+    const resultado = armarBorrador(enviado({ items: [renglon(REMITO_ITEM_1), renglon(null), renglon(undefined)] }), contexto);
+    if (!("borrador" in resultado)) throw new Error(JSON.stringify(resultado));
+    expect(resultado.borrador.items.map((i) => i.remito_item_id)).toEqual([REMITO_ITEM_1, null, null]);
+    // La clave va siempre: así la base usa el valor explícito y no hereda por producto y descripción.
+    expect(resultado.borrador.items.every((i) => "remito_item_id" in i)).toBe(true);
+  });
+
+  it("renglones repetidos o reordenados conservan cada uno su vínculo (R3-004)", () => {
+    // Mismo producto y descripción en los dos: sólo el id explícito los distingue.
+    const ordenOriginal = [renglon(REMITO_ITEM_1, "3"), renglon(REMITO_ITEM_2, "5")];
+    const reordenados = [ordenOriginal[1], ordenOriginal[0]];
+    const resultado = armarBorrador(enviado({ items: reordenados }), contexto);
+    if (!("borrador" in resultado)) throw new Error(JSON.stringify(resultado));
+    expect(resultado.borrador.items.map((i) => [i.cantidad, i.remito_item_id])).toEqual([
+      [5, REMITO_ITEM_2],
+      [3, REMITO_ITEM_1],
+    ]);
+  });
+
+  it("una nota nunca lo manda, aunque venga de la pantalla", () => {
+    const resultado = armarBorrador(
+      enviado({ clase: "nota_credito", items: [renglon(REMITO_ITEM_1)], periodoAsociado: { desde: "2026-10-01", hasta: "2026-10-16" } }),
+      contexto,
+    );
+    if (!("borrador" in resultado)) throw new Error(JSON.stringify(resultado));
+    expect(resultado.borrador.items.some((i) => "remito_item_id" in i)).toBe(false);
+  });
+
+  it("un vínculo mal formado en una factura es un error", () => {
+    expect(armarBorrador(enviado({ items: [renglon("no-es-un-id")] }), contexto)).toEqual({
+      errores: ["Ítem 1: el vínculo con el remito no es válido. Recargá la página."],
+    });
+  });
+
+  it("armarItems sin vincularRemitos (presupuestos, remitos) nunca lo manda", () => {
+    const { items } = armarItems([renglon(REMITO_ITEM_1), renglon(null)], productos);
+    expect(items.some((i) => "remito_item_id" in i)).toBe(false);
+  });
+
+  it("armarItems con vincularRemitos lo manda en cada renglón", () => {
+    const { items } = armarItems([renglon(REMITO_ITEM_1), renglon(undefined)], productos, {}, { vincularRemitos: true });
+    expect(items.map((i) => i.remito_item_id)).toEqual([REMITO_ITEM_1, null]);
+  });
+
+  it("sinVinculoRemito lo quita al duplicar o generar una nota, y deja el resto igual", () => {
+    const { items } = armarItems([renglon(REMITO_ITEM_1)], productos, {}, { vincularRemitos: true });
+    const copiados = sinVinculoRemito(items);
+    expect(copiados.some((i) => "remito_item_id" in i)).toBe(false);
+    const resto = { ...items[0] };
+    delete resto.remito_item_id;
+    expect(copiados[0]).toEqual(resto);
+    // Lo leído de la base sin la columna queda igual.
+    expect(sinVinculoRemito([resto])).toEqual([resto]);
+  });
+});
+
+describe("mensajeErrorGuardado: vínculos con remitos", () => {
+  it("lo pendiente excedido o una facturación inválida muestran el mensaje de la base", () => {
+    const excede = { code: "RM010", message: "Se facturaría 400 de un ítem de remito de 300: lo pendiente es 300.", hint: "excede_pendiente" };
+    expect(mensajeErrorGuardado(excede)).toBe(excede.message);
+    const invalida = { code: "RM009", message: "Sólo una factura puede facturar un remito.", hint: "facturacion_invalida" };
+    expect(mensajeErrorGuardado(invalida)).toBe(invalida.message);
+  });
+
+  it("un ítem de remito que ya no existe se explica", () => {
+    expect(mensajeErrorGuardado({ code: "RM004", message: "No se encontró el ítem de remito." })).toBe(
+      "No se encontró el remito. Puede que lo hayan borrado.",
+    );
   });
 });

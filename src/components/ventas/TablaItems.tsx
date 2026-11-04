@@ -168,6 +168,11 @@ export function TablaItems<F extends FilaItem = FilaItem>({
                         Ítem libre (sin producto)
                       </label>
                       {f.aviso && <p className="text-xs text-amber-700">⚠ {f.aviso}</p>}
+                      {f.remitoItemId && (
+                        <p className="text-xs text-stone-500">
+                          Remito {f.remitoTexto ?? "vinculado"}: la cantidad no puede superar lo pendiente.
+                        </p>
+                      )}
                     </div>
                   </td>
                   <td>

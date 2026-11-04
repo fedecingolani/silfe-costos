@@ -4,6 +4,7 @@ import {
   cambiosAlElegirProducto,
   filaDeItem,
   filaEnviada,
+  filaEnviadaConRemito,
   filasIniciales,
   filaVacia,
   type ItemEditable,
@@ -116,5 +117,36 @@ describe("filaEnviada", () => {
       descuentoPct: "0",
       alicuotaIva: "21",
     });
+  });
+});
+
+describe("vínculo con remitos en los renglones", () => {
+  const ID_1 = "f0000000-0000-0000-0000-000000000001";
+  const ID_2 = "f0000000-0000-0000-0000-000000000002";
+
+  it("filaDeItem conserva el vínculo y el número del remito, sin mostrarlo en lo que se envía siempre", () => {
+    const fila = filaDeItem(item({ remito_item_id: ID_1, remito_texto: "R-00007-00000001" }), [lona]);
+    expect(fila).toMatchObject({ remitoItemId: ID_1, remitoTexto: "R-00007-00000001" });
+    expect(filaEnviada(fila)).not.toHaveProperty("remitoItemId");
+  });
+
+  it("un ítem sin vínculo no agrega campos al renglón", () => {
+    const fila = filaDeItem(item({ remito_item_id: null }), [lona]);
+    expect(fila).not.toHaveProperty("remitoItemId");
+    expect(filaDeItem(item(), [lona])).not.toHaveProperty("remitoItemId");
+  });
+
+  it("filaEnviadaConRemito manda el vínculo, o null si el renglón no tiene", () => {
+    expect(filaEnviadaConRemito(filaDeItem(item({ remito_item_id: ID_1 }), [lona])).remitoItemId).toBe(ID_1);
+    expect(filaEnviadaConRemito(filaVacia()).remitoItemId).toBeNull();
+  });
+
+  it("renglones repetidos y reordenados conservan cada uno su vínculo (R3-004)", () => {
+    const filas = filasIniciales([item({ remito_item_id: ID_1, cantidad: 3 }), item({ remito_item_id: ID_2, cantidad: 5 })], [lona]);
+    const enviadas = [filas[1], filas[0]].map(filaEnviadaConRemito);
+    expect(enviadas.map((f) => [f.cantidad, f.remitoItemId])).toEqual([
+      ["5", ID_2],
+      ["3", ID_1],
+    ]);
   });
 });

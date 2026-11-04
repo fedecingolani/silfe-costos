@@ -26,6 +26,7 @@ import {
   type AsociadoGuardado,
   type AsociadoManualEnviado,
 } from "./asociados";
+import { mensajeErrorRemito } from "@/lib/remitos/errores";
 import { calcularItem, calcularTotales, type ItemACalcular, type OpcionesCalculo, type Totales } from "./calculo";
 import { letraYTipoNota } from "./letra";
 import { esFechaValida } from "./validacion";
@@ -45,6 +46,11 @@ export type FilaItemEnviada = {
   precioUnitario: string;
   descuentoPct: string;
   alicuotaIva: string;
+  /**
+   * Ítem de remito que factura el renglón (sólo facturas). Lo manda el
+   * editor de comprobantes; presupuestos y remitos no lo mandan.
+   */
+  remitoItemId?: string | null;
 };
 
 export type BorradorEnviado = {
@@ -117,6 +123,12 @@ export type ItemGuardado = {
   alicuota_iva: AlicuotaIva | null;
   importe: number;
   iva: number;
+  /**
+   * Ítem de remito que factura (sólo en facturas, con vincularRemitos). Si
+   * la clave viene, guardar_borrador_comprobante usa el valor tal cual (null
+   * desvincula); si no viene, hereda por producto y descripción.
+   */
+  remito_item_id?: string | null;
 };
 
 export type BorradorArmado = {
@@ -233,6 +245,12 @@ export function armarItems(
   valores: readonly unknown[],
   productos: ReadonlyMap<string, ProductoCatalogo>,
   opciones: OpcionesCalculo = {},
+  /**
+   * vincularRemitos: cada ítem lleva remito_item_id (el del renglón o null),
+   * así la base usa el valor explícito. Sólo para facturas; sin él la clave
+   * nunca va (presupuestos, remitos, notas).
+   */
+  { vincularRemitos = false }: { vincularRemitos?: boolean } = {},
 ): { items: ItemGuardado[]; errores: string[] } {
   const errores: string[] = [];
   const items: ItemGuardado[] = [];
@@ -275,6 +293,12 @@ export function armarItems(
     const descuento = aDecimal(valor.descuentoPct as string) ?? 0;
     if (descuento < 0 || descuento > 100) errores.push(`${n}: el descuento tiene que estar entre 0 y 100.`);
 
+    const remito = valor.remitoItemId;
+    const remitoItemId = esUuid(remito) ? remito : null;
+    if (vincularRemitos && remitoItemId === null && remito !== undefined && remito !== null && remito !== "") {
+      errores.push(`${n}: el vínculo con el remito no es válido. Recargá la página.`);
+    }
+
     if (errores.length > erroresAntes || !datosProducto || alicuota === null || cantidad === null) return;
 
     const calculable = {
@@ -294,9 +318,23 @@ export function armarItems(
       alicuota_iva: alicuota === NO_GRAVADO ? null : alicuota,
       importe,
       iva,
+      ...(vincularRemitos ? { remito_item_id: remitoItemId } : {}),
     });
   });
   return { items, errores };
+}
+
+/**
+ * Ítems sin el vínculo con remitos: al duplicar un comprobante o generar
+ * una nota, la copia no factura los remitos del original (la base rechaza
+ * el vínculo en una nota: RM009, y en una copia excedería lo pendiente).
+ */
+export function sinVinculoRemito<T extends object>(items: readonly T[]): Omit<T, "remito_item_id">[] {
+  return items.map((item) => {
+    const copia = { ...item } as T & { remito_item_id?: unknown };
+    delete copia.remito_item_id;
+    return copia;
+  });
 }
 
 /** Totales de los renglones ya armados. */
@@ -376,7 +414,8 @@ export function armarBorrador(
   const electronico = contexto.puntoVentaElectronico !== false;
   const opcionesCalculo: OpcionesCalculo = { sinIva: !electronico };
 
-  const leidos = armarItems(enviado.items, contexto.productos, opcionesCalculo);
+  // Sólo una factura factura remitos: una nota no lleva el vínculo aunque la pantalla lo mande.
+  const leidos = armarItems(enviado.items, contexto.productos, opcionesCalculo, { vincularRemitos: clase === "factura" });
   errores.push(...leidos.errores);
   const items = leidos.items;
 
@@ -469,11 +508,13 @@ const MENSAJES_GUARDADO: Record<string, string> = {
 };
 
 /** Mensaje legible de un error de la base al guardar o borrar un comprobante. */
-export function mensajeErrorGuardado(error: { code?: string; message: string }): string {
+export function mensajeErrorGuardado(error: { code?: string; message: string; hint?: string | null }): string {
   // CM007 (asociado inválido): el mensaje de la base ya es legible y dice qué asociado.
   // CB020: es la ND de un cheque rechazado (no se borra ni cambia de cliente); el mensaje dice qué cheque.
   // CM010: un X emitido con comprobantes que dependen de él; el mensaje dice cuáles.
   if (error.code === "CM007" || error.code === "CB020" || error.code === "CM010") return error.message;
+  // Vínculos con remitos (RM009 factura inválida, RM010 excede lo pendiente, RM004 ítem borrado).
+  if (error.code?.startsWith("RM")) return mensajeErrorRemito(error, "guardar el comprobante");
   // Al borrar, la clave foránea de otra tabla que todavía apunta al comprobante.
   if (error.code === "23503" && error.message.startsWith("update or delete on table")) {
     return "El comprobante tiene comprobantes asociados: no se puede borrar.";
