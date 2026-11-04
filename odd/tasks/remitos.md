@@ -91,8 +91,8 @@ remitos, envío por mail.
 
 | ID | Tarea | Ruta | Estado | Commit |
 | --- | --- | --- | --- | --- |
-| T1 | DB: `remito`, `remito_item`, estados, triggers de bloqueo, `emitir_remito` con numeración por punto de venta, anulación, RLS aparte (pgTAP en rojo primero) | delegada (writer) | [ ] | |
-| T2 | DB: `comprobante_item.remito_item_id`, vista de pendientes por ítem, `facturar_remitos` (mismo cliente, tope de pendiente, candado), estado derivado y desbloqueo al borrar el borrador (pgTAP) | delegada (writer) | [ ] | |
+| T1 | DB: `remito`, `remito_item`, estados, triggers de bloqueo, `emitir_remito` con numeración por punto de venta, anulación, RLS aparte (pgTAP en rojo primero) | delegada (writer) | [x] | 6f65156 |
+| T2 | DB: `comprobante_item.remito_item_id`, vista de pendientes por ítem, `facturar_remitos` (mismo cliente, tope de pendiente, candado), estado derivado y desbloqueo al borrar el borrador, `guardar_remito`; más las dos advertencias de la revisión de T1 (pgTAP) | delegada (writer) | [ ] | |
 | T3 | TS: tipos, cálculo de bultos y valor declarado, validación y armado de la facturación (Vitest) | delegada (writer) | [ ] | |
 | T4 | Pantallas: listado, editor (bultos, transporte, domicilio, valor declarado) y detalle | delegada (writer) | [ ] | |
 | T5 | Pantalla de facturación: cliente → remitos pendientes → cantidades → borrador de factura | delegada (writer) | [ ] | |
@@ -128,7 +128,23 @@ remitos, envío por mail.
 
 - 04/11: decisiones de producto cerradas con el usuario; mapeo del modelo de comprobantes,
   numeración X y conversión de presupuestos.
+- T1 (04/11, `feat/remitos-01-db`, 6f65156): migraciones `20261104000001_remitos.sql` y
+  `20261104000002_rls_remitos.sql`, `supabase/tests/remitos_test.sql` (83 aserciones).
+  - RED: 29 de 83 fallaban sin tablas. GREEN: `supabase test db` 18 archivos / 841 tests PASS
+    (repetido por el orquestador), `npm test` 829 PASS.
+  - Códigos de error RM001–RM007. `bultos_total` lo pisa siempre el trigger con la suma de los
+    ítems (no da error si se escribe a mano). Banderas de transacción `remito.emitiendo` y
+    `remito.anulando`.
+  - Revisión nativa: riesgo medio, enfoque de confiabilidad, **aprobada** y acusada
+    (review-1dda88bb9d48dc03). Dos advertencias no bloqueantes, que pasan a T2:
+    1. La transición borrador→emitido (y emitido→anulado) se apoya sólo en la bandera de
+       transacción; una sesión autenticada puede setearla con `set_config` y saltear los
+       controles de `emitir_remito` (ítems, punto de venta activo, candado, max+1).
+    2. `fn_remito_item_bloqueo` lee el estado del padre sin bloquearlo: un ítem insertado en
+       paralelo con `anular_remito` puede quedar en un remito anulado.
+  - Para destrabar la revisión se agregaron `.atl/` y `firebase-debug.log` a
+    `.git/info/exclude` (sólo local).
 
 ## Próximo paso
 
-T1 en `feat/remitos-01-db`.
+T2 en `feat/remitos-02-facturacion-db`, sobre T1.
