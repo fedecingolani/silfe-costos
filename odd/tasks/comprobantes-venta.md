@@ -267,7 +267,7 @@ Menú **Ventas → Comprobantes**.
 | T4 | Pantallas: listado, alta/edición de borrador y detalle | delegada (writer) | [x] |
 | T5 | Impresión: PDF completo con QR para comprobantes electrónicos | delegada (writer) | [x] |
 | T6 | Notas de crédito/débito con comprobante asociado | delegada (writer) | [x] |
-| T7 | Recorrido en homologación: Factura A, Factura B, NC parcial, rechazo de ARCA y respuesta perdida simulada | orquestador | [ ] |
+| T7 | Recorrido en homologación: Factura A, Factura B, NC parcial, rechazo de ARCA y respuesta perdida simulada | orquestador | [x] (cerrada sin el tramo con ARCA, ver avance) |
 | T8 | **Segunda etapa:** punto de venta no electrónico (numeración propia, sin ARCA) | delegada (writer) | [x] |
 | T9 | Impresión en formulario preimpreso | sin definir | [ ] |
 
@@ -490,7 +490,8 @@ Menú **Ventas → Comprobantes**.
 - Revisión nativa de las correcciones de T6 (a1c32f5): aprobada con 2 sugerencias. Corregida: si el asociado de la base desaparece entre la carga y el bloqueo, la nota de crédito se frena (antes seguía a ARCA sin control de saldo); test en rojo primero. Pendiente (sugerencia): pgTAP de pasar a `factura` una nota con asociados guardados y de la derivación del ambiente con `p_asociados` null.
 - T7 parcial (16/10), sin ARCA: `wswhomo.afip.gov.ar` (WSFE homologación) corta las conexiones desde la Mac y desde Cloudflare (520); WSAA homologación y WSFE producción responden. Recorrido de pantallas en local OK: buscador de clientes, letra A/B, precio desde la lista, cálculo por ítem y por alícuota, guardar borrador, validación de fecha, falla de ARCA antes del CAE (queda borrador, bloqueo liberado, ticket guardado), Contado fija el vencimiento, borrar borrador, detalle de autorizado (simulado por SQL con CAE de prueba), PDF 200, nota de crédito con letra heredada y tope de saldo, duplicar. Corregido en de07b13: el modal de confirmación ya no aparece si la pantalla sabe que la autorización va a fallar, y el buscador muestra "Buscando…" en vez de "ningún cliente" mientras espera. Pendiente: CAE real, rechazo de ARCA y respuesta perdida, cuando vuelva WSFE homologación. Detalle visual: en anchos angostos la tabla de ítems se desborda.
 - T8 (03/11): resuelta en la feature `comprobante-x` (ver `odd/tasks/comprobante-x.md`, commits 4757e23, 67e8f58, c1b0691, a69f4e7): letra X, numeración propia, emisión sin ARCA, notas X y PDF no fiscal. La impresión en formulario preimpreso no se hizo y pasa a T9.
+- T7 (03/11): cerrada por decisión del usuario sin hacer el tramo con ARCA. No se verificaron CAE real (Factura A/B), NC parcial con CAE, rechazo de ARCA ni respuesta perdida con reconciliación. Para esa fecha WSFE homologación ya respondía (HTTP 200 desde la Mac).
 
 ## Próximo paso
 
-T7: recorrido en homologación (Factura A, Factura B, NC parcial, rechazo de ARCA y respuesta perdida simulada).
+T9: impresión en formulario preimpreso.
