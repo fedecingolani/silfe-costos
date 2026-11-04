@@ -1,6 +1,6 @@
 # Remitos de venta
 
-> Estado: **planificada** (decisiones tomadas el 04/11/2026).
+> Estado: **implementada, pendiente de merge** (decisiones y T1–T7 del 04/11/2026).
 > Rama: `feat/remitos` (sale de `main` en fe1d108).
 > Copia en Engram: `odd/remitos/tasks`.
 
@@ -97,7 +97,7 @@ remitos, envío por mail.
 | T4 | Pantallas: listado, editor (bultos, transporte, domicilio, valor declarado) y detalle | delegada (writer) | [x] | eea8442 |
 | T5 | Pantalla de facturación: cliente → remitos pendientes → cantidades → borrador de factura; el editor de comprobantes manda `remito_item_id` en cada ítem; error claro si el cliente no tiene condición de IVA | delegada (writer) | [x] | 53b42ce, dfc8b63 |
 | T6 | PDF del remito (letra R, bultos, valor declarado, transporte, domicilio de entrega) | delegada (writer) | [x] | 040e182 |
-| T7 | Menú (Ventas → Remitos) y recorrido en el navegador | orquestador | [ ] | |
+| T7 | Menú (Ventas → Remitos) y recorrido en el navegador | orquestador | [x] | 1f79dba |
 
 ## Entrega
 
@@ -262,6 +262,17 @@ remitos, envío por mail.
     tiene `arca_emisor` cargado.
   - Revisión nativa: el usuario eligió saltearla para este candidato.
 
+- T7 (04/11, `feat/remitos-07-menu`, 1f79dba): se mergeó el PR #23 (menú agrupado) en `main`
+  y se trajo `main` a esta rama. "Remitos" en Ventas pasa de "Próximamente" a `/remitos`; el
+  contador del listado dice "1 remito" / "N remitos".
+  - `typecheck`, `lint` y `npm test` 967 OK.
+  - Recorrido final en el navegador: el menú marca Remitos activo en el listado, en
+    `/remitos/facturar` y en el detalle; el detalle tiene el botón PDF; sin errores en consola
+    (salvo los avisos del websocket de recarga del servidor de desarrollo).
+  - Entre T1 y T6 quedó recorrido el ciclo completo en local: alta, emisión
+    (R-00007-00000001), facturación parcial de 100 de 300 (Factura A en borrador, remito
+    "Facturado parcial") y PDF.
+
 ## Próximo paso
 
-T7: menú (cuando se mergee #23) y recorrido completo.
+Mergear los PRs encadenados #24–#30 en `feat/remitos`, después `feat/remitos` → `main`, aplicar las migraciones 20261104000001–000004 en Supabase (`supabase db push`) y deployar. Pendientes menores: scroll horizontal de la tabla de ítems con bultos y título de `ModalError` al emitir o anular.
