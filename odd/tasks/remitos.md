@@ -174,6 +174,11 @@ remitos, envío por mail.
       de restricción diferido `trg_remito_con_items` (migración `20261104000004`), 2 tests nuevos.
       RED parcial: sin la migración la corrida aborta al nombrar el trigger. Suite: 939 PASS.
       Evaluación del commit: medio, bajo el presupuesto (58 líneas), queda pendiente en la tanda.
+    - Revisión de la rama contra `main` (review-4d3efe59adea9d0d): **aprobada** y acusada, con
+      un hallazgo: cambiar `remito_id` de un ítem podía vaciar un remito emitido. Corregido:
+      `trg_remito_con_items` también corre en `update of remito_id` (misma migración 000004,
+      aplicada a mano en local). Test nuevo; RED sin la corrección (test 24 «no exception»),
+      GREEN 940 PASS.
     - R3-003 (cliente sin condición de IVA deja la letra nula) y R3-004 (herencia del vínculo
       con ítems repetidos o reordenados): pasan a T5, que valida la condición de IVA y hace que
       el editor mande `remito_item_id`.
