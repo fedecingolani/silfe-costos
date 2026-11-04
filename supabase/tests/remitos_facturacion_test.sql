@@ -13,7 +13,7 @@
 begin;
 create extension if not exists pgtap with schema extensions;
 
-select plan(98);
+select plan(99);
 
 -- ---------------------------------------------------------------------
 -- Estructura
@@ -205,6 +205,12 @@ select lives_ok(
       '[{"descripcion": "Gancho", "cantidad": 20, "precio_unitario": 5, "alicuota_iva": 10.5, "importe": 100, "iva": 10.5}]');
     set constraints trg_remito_con_items immediate$$,
   'guardar_remito reemplaza los ítems de un emitido y al cerrar sigue con ítems'
+);
+set constraints trg_remito_con_items deferred;
+select throws_ok(
+  $$update remito_item set remito_id = pg_temp.r('borr') where remito_id = pg_temp.r('r2');
+    set constraints trg_remito_con_items immediate$$,
+  'RM005', null, 'Mover el único ítem de un emitido a otro remito lo dejaría sin ítems'
 );
 set constraints trg_remito_con_items deferred;
 

@@ -30,8 +30,10 @@ $$;
 comment on function fn_remito_con_items() is
   'Al cerrar la transacción, rechaza dejar sin ítems un remito emitido o anulado';
 
+-- También al cambiar remito_id: mover el único ítem a otro remito deja vacío
+-- al de origen (old.remito_id).
 create constraint trigger trg_remito_con_items
-  after delete on remito_item
+  after delete or update of remito_id on remito_item
   deferrable initially deferred
   for each row
   execute function fn_remito_con_items();
