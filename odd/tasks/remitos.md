@@ -94,7 +94,7 @@ remitos, envío por mail.
 | T1 | DB: `remito`, `remito_item`, estados, triggers de bloqueo, `emitir_remito` con numeración por punto de venta, anulación, RLS aparte (pgTAP en rojo primero) | delegada (writer) | [x] | 6f65156 |
 | T2 | DB: `comprobante_item.remito_item_id`, vista de pendientes por ítem, `facturar_remitos` (mismo cliente, tope de pendiente, candado), estado derivado y desbloqueo al borrar el borrador, `guardar_remito`; más las tres advertencias de las revisiones de T1 (pgTAP) | delegada (writer) | [x] | 53a8d0a, e52860f |
 | T3 | TS: tipos, cálculo de bultos y valor declarado, validación y armado de la facturación (Vitest) | delegada (writer) | [x] | 1890ccd, f9224a3 |
-| T4 | Pantallas: listado, editor (bultos, transporte, domicilio, valor declarado) y detalle | delegada (writer) | [ ] | |
+| T4 | Pantallas: listado, editor (bultos, transporte, domicilio, valor declarado) y detalle | delegada (writer) | [x] | eea8442 |
 | T5 | Pantalla de facturación: cliente → remitos pendientes → cantidades → borrador de factura; el editor de comprobantes manda `remito_item_id` en cada ítem; error claro si el cliente no tiene condición de IVA | delegada (writer) | [ ] | |
 | T6 | PDF del remito (letra R, bultos, valor declarado, transporte, domicilio de entrega) | delegada (writer) | [ ] | |
 | T7 | Menú (Ventas → Remitos) y recorrido en el navegador | orquestador | [ ] | |
@@ -204,6 +204,24 @@ remitos, envío por mail.
        función).
     GREEN: `npm test` 913, `typecheck` y `lint` OK.
 
+- T4 (04/11, `feat/remitos-04-pantallas`, eea8442): `/remitos` (listado con filtros),
+  `/remitos/nuevo`, `/remitos/[id]` (editor en borrador y emitido; sólo lectura en parcial,
+  facturado y anulado, con facturado/pendiente por ítem y facturas vinculadas), acciones emitir,
+  anular y borrar con confirmación. `TablaItems` pasó a ser genérica con `nuevaFila` y
+  `columnaExtra` opcionales; presupuestos y comprobantes no cambian.
+  - Sin helpers puros nuevos (sin RED/GREEN propio). `npm test` 913, `typecheck`, `lint` y
+    `build` OK.
+  - Recorrido en el navegador (orquestador, base local con un cliente y transporte de prueba
+    cargados por SQL): elegir cliente completa transporte y domicilio; bultos total = 12;
+    valor declarado sigue la suma ($ 300.000) y "Usar la suma de los ítems" vuelve a la
+    sugerencia; guardar crea el borrador; emitir asigna `R-00007-00000001`; el listado lo
+    muestra Emitido. Sin errores en consola.
+  - Detalles a mejorar (no bloquean): "1 remitos" en el contador; con la columna de bultos la
+    tabla de ítems pide scroll horizontal a 1280 px; `ModalError` titula "No se pudo guardar"
+    también al emitir o anular.
+  - Revisión nativa: el usuario eligió saltearla para este candidato
+    (`declined_this_candidate`).
+
 ## Próximo paso
 
-T4 en `feat/remitos-04-pantallas`, sobre T3.
+T5 en `feat/remitos-05-facturacion`, sobre T4.
