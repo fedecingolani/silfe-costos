@@ -14,6 +14,7 @@ import { repositorioComprobantes, serviciosArca } from "@/lib/comprobantes/autor
 import {
   armarBorrador,
   mensajeErrorGuardado,
+  sinVinculoRemito,
   type ItemGuardado,
   type ProductoCatalogo,
 } from "@/lib/comprobantes/borrador";
@@ -262,7 +263,8 @@ export async function duplicarComprobante(id: string): Promise<EstadoAccionCompr
   const esX = c.letra === "X" || (c.letra === null && c.ambiente === null);
   const punto = puntoVentaPara(Number(c.punto_venta), esX, puntosActivos(puntos));
   if ("error" in punto) return { error: punto.error };
-  const copiados = ((items ?? []) as ItemGuardado[]).map((i) => (esX ? { ...i, iva: 0 } : i));
+  // La copia no factura los remitos del original (las columnas leídas ya no lo traen; esto lo asegura).
+  const copiados = sinVinculoRemito((items ?? []) as ItemGuardado[]).map((i) => (esX ? { ...i, iva: 0 } : i));
   const asociados = await leerAsociados(supabase, id);
   if (typeof asociados === "string") return { error: asociados };
 
@@ -329,7 +331,8 @@ export async function generarNota(id: string, clase: ClaseComprobante): Promise<
 
   const nota = armarNota(
     { ...c, punto_venta: Number(c.punto_venta) },
-    ((items ?? []) as ItemGuardado[]).map((i) => ({
+    // Una nota no lleva el vínculo con remitos (la base lo rechaza: RM009).
+    sinVinculoRemito((items ?? []) as ItemGuardado[]).map((i) => ({
       ...i,
       cantidad: Number(i.cantidad),
       precio_unitario: Number(i.precio_unitario),

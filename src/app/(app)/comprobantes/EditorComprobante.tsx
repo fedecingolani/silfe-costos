@@ -20,7 +20,7 @@ import {
   type PeriodoAsociado,
 } from "@/lib/comprobantes/asociados";
 import { itemParaCalcular, mapaPrecios, type BorradorEnviado } from "@/lib/comprobantes/borrador";
-import { filaEnviada, filasIniciales, type FilaItem, type ItemEditable } from "@/lib/ventas/filas";
+import { filaEnviada, filaEnviadaConRemito, filasIniciales, type FilaItem, type ItemEditable } from "@/lib/ventas/filas";
 import {
   NOMBRES_AMBIENTE_ARCA,
   NOMBRES_CLASE_COMPROBANTE,
@@ -182,7 +182,8 @@ export function EditorComprobante({
       observaciones,
       asociadoManual: esNota && !interno && !porPeriodo ? manual : null,
       periodoAsociado: porPeriodo ? periodo : null,
-      items: filas.map(filaEnviada),
+      // Una factura manda el vínculo de cada renglón con su remito (null si no tiene); una nota, nunca.
+      items: filas.map(clase === "factura" ? filaEnviadaConRemito : filaEnviada),
     };
     return JSON.stringify(enviado);
   }

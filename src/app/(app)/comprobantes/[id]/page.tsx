@@ -23,6 +23,7 @@ import {
 } from "@/lib/comprobantes/asociados-carga";
 import { NOMBRES_ESTADO, TONO_ESTADO, nombreComprobante, numeroVisible } from "@/lib/comprobantes/listado";
 import { numeroPresupuesto } from "@/lib/presupuestos/listado";
+import { numeroRemito } from "@/lib/remitos/numero";
 import {
   NOMBRES_AMBIENTE_ARCA,
   NOMBRES_CONDICION_PAGO,
@@ -52,10 +53,11 @@ const COLUMNAS_COMPROBANTE =
   "arca_resultado, arca_observaciones, arca_errores, intento_numero, autorizado_en";
 const COLUMNAS_ITEM =
   "id, orden, producto_id, codigo, descripcion, observaciones, unidad, cantidad, precio_unitario, descuento_pct, " +
-  "gravado, alicuota_iva, importe, iva";
+  "gravado, alicuota_iva, importe, iva, remito_item_id";
 
 type ComprobanteLeido = Omit<Comprobante, "creado_por" | "creado_en" | "actualizado_en" | "moneda">;
-type ItemLeido = Omit<ComprobanteItem, "comprobante_id">;
+/** remito_item_id: ítem de remito que factura (sólo facturas). */
+type ItemLeido = Omit<ComprobanteItem, "comprobante_id"> & { remito_item_id: string | null };
 
 const DOCUMENTO: Record<number, string> = { 80: "CUIT", 96: "DNI", 99: "Sin identificar" };
 
@@ -186,6 +188,23 @@ export default async function ComprobantePage({ params }: { params: Promise<{ id
     }
     const observaciones = c.arca_observaciones ?? [];
 
+    // Número del remito de cada ítem vinculado, para marcarlo en el editor.
+    const vinculados = [...new Set(items.map((i) => i.remito_item_id).filter((v): v is string => v !== null))];
+    const remitoDeItem = new Map<string, string>();
+    if (vinculados.length > 0) {
+      const { data: remitoItems, error: errorRemitos } = await supabase
+        .from("remito_item")
+        .select("id, remito(punto_venta, numero)")
+        .in("id", vinculados);
+      if (errorRemitos) return <p className="text-sm text-red-700">Error al cargar los remitos: {errorRemitos.message}</p>;
+      for (const ri of (remitoItems ?? []) as unknown as {
+        id: string;
+        remito: { punto_venta: number; numero: number | null } | null;
+      }[]) {
+        if (ri.remito?.numero != null) remitoDeItem.set(ri.id, numeroRemito(ri.remito.punto_venta, ri.remito.numero));
+      }
+    }
+
     return (
       <>
         {migas}
@@ -258,6 +277,8 @@ export default async function ComprobantePage({ params }: { params: Promise<{ id
               descuento_pct: Number(i.descuento_pct),
               gravado: i.gravado,
               alicuota_iva: i.alicuota_iva === null ? null : Number(i.alicuota_iva),
+              remito_item_id: i.remito_item_id,
+              remito_texto: i.remito_item_id ? (remitoDeItem.get(i.remito_item_id) ?? null) : null,
             })),
           }}
           contexto={contexto}

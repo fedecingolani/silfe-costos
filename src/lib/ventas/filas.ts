@@ -25,6 +25,8 @@ export type FilaItem = FilaItemEnviada & {
   alicuotaProducto: string | null;
   busqueda: string;
   aviso: string | null;
+  /** Número del remito del que viene el renglón (R-00007-00000001), para marcarlo. Sólo facturas. */
+  remitoTexto?: string | null;
 };
 
 /** Ítem tal como está guardado, para cargarlo en el editor. */
@@ -38,6 +40,10 @@ export type ItemEditable = {
   descuento_pct: number;
   gravado: boolean;
   alicuota_iva: number | null;
+  /** Ítem de remito que factura (sólo facturas). */
+  remito_item_id?: string | null;
+  /** Número del remito de ese ítem (R-00007-00000001). */
+  remito_texto?: string | null;
 };
 
 let contador = 0;
@@ -85,6 +91,8 @@ export function filaDeItem(item: ItemEditable, productos: readonly ProductoVendi
     alicuotaIva: item.gravado ? String(item.alicuota_iva) : NO_GRAVADO,
     busqueda: "",
     aviso: null,
+    // El vínculo con el remito viaja oculto en el renglón; sólo si lo tiene.
+    ...(item.remito_item_id ? { remitoItemId: item.remito_item_id, remitoTexto: item.remito_texto ?? null } : {}),
   };
 }
 
@@ -132,4 +140,12 @@ export function filaEnviada(fila: FilaItem): FilaItemEnviada {
     descuentoPct: fila.descuentoPct,
     alicuotaIva: fila.alicuotaIva,
   };
+}
+
+/**
+ * Lo que se envía de un renglón de factura: además, el ítem de remito que
+ * factura (o null). El servidor lo usa sólo en facturas.
+ */
+export function filaEnviadaConRemito(fila: FilaItem): FilaItemEnviada {
+  return { ...filaEnviada(fila), remitoItemId: fila.remitoItemId ?? null };
 }
