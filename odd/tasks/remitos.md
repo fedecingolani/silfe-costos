@@ -1,6 +1,6 @@
 # Remitos de venta
 
-> Estado: **implementada, pendiente de merge** (decisiones y T1–T7 del 04/11/2026).
+> Estado: **en producción** (04/11/2026) (decisiones y T1–T7 del 04/11/2026).
 > Rama: `feat/remitos` (sale de `main` en fe1d108).
 > Copia en Engram: `odd/remitos/tasks`.
 
@@ -273,6 +273,19 @@ remitos, envío por mail.
     (R-00007-00000001), facturación parcial de 100 de 300 (Factura A en borrador, remito
     "Facturado parcial") y PDF.
 
+- Entrega (04/11):
+  - Al mergear la cadena, GitHub cerró #25, #27 y #29 en vez de reapuntarlos (se borró su
+    rama base). No se perdió código: `feat/remitos-06-pdf` contenía todos los commits de T1–T7
+    y se mergeó a `main` en el PR #31 (8b50343). Para la próxima cadena: mergear sin
+    `--delete-branch` hasta el final, o reapuntar cada PR antes de borrar su base.
+  - `supabase migration list --linked`: historial remoto idéntico; faltaban sólo
+    20261104000001–000004. `supabase db push` las aplicó y la lista posterior las muestra en
+    el remoto.
+  - `npm test` 967 en `main`; `npm run deploy` → versión `0f1ed3d6-f492-4401-976d-e8502111b287`.
+    `/login` 200; `/remitos`, `/remitos/nuevo` y `/remitos/facturar` redirigen al login.
+  - No verificado en producción con sesión ni con datos reales.
+
 ## Próximo paso
 
-Mergear los PRs encadenados #24–#30 en `feat/remitos`, después `feat/remitos` → `main`, aplicar las migraciones 20261104000001–000004 en Supabase (`supabase db push`) y deployar. Pendientes menores: scroll horizontal de la tabla de ítems con bultos y título de `ModalError` al emitir o anular.
+Pendientes menores: scroll horizontal de la tabla de ítems con bultos y título de `ModalError`
+al emitir o anular.
