@@ -95,7 +95,7 @@ remitos, envío por mail.
 | T2 | DB: `comprobante_item.remito_item_id`, vista de pendientes por ítem, `facturar_remitos` (mismo cliente, tope de pendiente, candado), estado derivado y desbloqueo al borrar el borrador, `guardar_remito`; más las tres advertencias de las revisiones de T1 (pgTAP) | delegada (writer) | [x] | 53a8d0a, e52860f |
 | T3 | TS: tipos, cálculo de bultos y valor declarado, validación y armado de la facturación (Vitest) | delegada (writer) | [x] | 1890ccd, f9224a3 |
 | T4 | Pantallas: listado, editor (bultos, transporte, domicilio, valor declarado) y detalle | delegada (writer) | [x] | eea8442 |
-| T5 | Pantalla de facturación: cliente → remitos pendientes → cantidades → borrador de factura; el editor de comprobantes manda `remito_item_id` en cada ítem; error claro si el cliente no tiene condición de IVA | delegada (writer) | [ ] | |
+| T5 | Pantalla de facturación: cliente → remitos pendientes → cantidades → borrador de factura; el editor de comprobantes manda `remito_item_id` en cada ítem; error claro si el cliente no tiene condición de IVA | delegada (writer) | [x] | 53b42ce, dfc8b63 |
 | T6 | PDF del remito (letra R, bultos, valor declarado, transporte, domicilio de entrega) | delegada (writer) | [ ] | |
 | T7 | Menú (Ventas → Remitos) y recorrido en el navegador | orquestador | [ ] | |
 
@@ -222,6 +222,30 @@ remitos, envío por mail.
   - Revisión nativa: el usuario eligió saltearla para este candidato
     (`declined_this_candidate`).
 
+- T5 (04/11, `feat/remitos-05-facturacion`, 53b42ce + dfc8b63):
+  - Parte A, `/remitos/facturar`: lista los clientes con pendientes; con `?cliente=` agrupa
+    los ítems pendientes por remito, con cantidad a facturar editable, punto de venta (primero
+    electrónico por defecto), vista previa de totales y errores en vivo. La Server Action
+    vuelve a leer pendientes, punto de venta y condición de IVA de la base, llama a
+    `facturar_remitos` y redirige al borrador de factura. También hay un botón "Facturar
+    remitos" en el listado.
+  - Parte B (R3-004): el editor de facturas carga, conserva y manda `remito_item_id` en cada
+    renglón (null si no tiene vínculo), así la base nunca usa la herencia por producto y
+    descripción. `armarItems` sólo lo emite con `{ vincularRemitos: true }` y sólo para
+    facturas; duplicar y generar nota pasan por `sinVinculoRemito`; presupuestos nunca lo
+    mandan. Los renglones vinculados muestran "Remito R-…". RM009/RM010 al guardar se
+    traducen con `mensajeErrorRemito`.
+  - RED/GREEN: parte A, 8 tests nuevos en rojo y luego 27 en verde; parte B, 10 tests nuevos
+    en rojo (incluido el caso R3-004 de renglones repetidos y reordenados) y 2 expectativas
+    existentes actualizadas a propósito. `npm test` 934, `typecheck`, `lint`, `build` OK,
+    `supabase test db` 940 PASS.
+  - Recorrido del orquestador en el navegador: facturar 100 de 300 de R-00007-00000001 crea
+    una Factura A en borrador con la marca del remito; el remito pasa a "Facturado parcial"
+    con 100 facturados y 200 pendientes, sólo lectura. El borrador quedó en la base local.
+  - Nota: correr `npm run build` con el servidor de desarrollo levantado rompió Turbopack
+    (módulos viejos y recarga infinita); hubo que reiniciarlo y borrar `.next`.
+  - Revisión nativa: el usuario eligió saltearla para este candidato.
+
 ## Próximo paso
 
-T5 en `feat/remitos-05-facturacion`, sobre T4.
+T6 en `feat/remitos-06-pdf`, sobre T5.
