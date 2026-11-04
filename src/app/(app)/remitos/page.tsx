@@ -155,7 +155,7 @@ export default async function RemitosPage({
       </form>
 
       <Tarjeta
-        titulo={`${filas.length} remitos`}
+        titulo={`${filas.length} ${filas.length === 1 ? "remito" : "remitos"}`}
         descripcion={filas.length >= LIMITE ? `Se muestran los ${LIMITE} más recientes: acotá con los filtros.` : undefined}
       >
         <div className="overflow-x-auto">
