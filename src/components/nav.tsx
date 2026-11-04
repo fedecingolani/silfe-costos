@@ -169,7 +169,7 @@ function Chevron({ abierta }: { abierta: boolean }) {
       aria-hidden="true"
       viewBox="0 0 20 20"
       fill="currentColor"
-      className={`size-4 shrink-0 text-stone-400 transition-transform ${abierta ? "rotate-90" : ""}`}
+      className={`size-5 shrink-0 text-stone-500 transition-transform ${abierta ? "rotate-90" : ""}`}
     >
       <path
         fillRule="evenodd"
@@ -203,7 +203,7 @@ export function Nav() {
       <Link
         href={INICIO.href!}
         aria-current={dashboardActivo ? "page" : undefined}
-        className={`block rounded-lg px-3 py-2 text-xs font-bold uppercase tracking-wider transition ${
+        className={`block rounded-lg px-3 py-2 text-sm font-bold uppercase tracking-wide transition ${
           dashboardActivo ? "bg-marca-600 text-white" : "text-stone-800 hover:bg-stone-200/70"
         }`}
       >
@@ -220,7 +220,7 @@ export function Nav() {
               onClick={() => alternar(seccion.titulo)}
               aria-expanded={abierta}
               aria-controls={idLista}
-              className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-xs font-bold uppercase tracking-wider transition hover:bg-stone-200/70 ${
+              className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm font-bold uppercase tracking-wide transition hover:bg-stone-200/70 ${
                 contieneActivo ? "text-marca-700" : "text-stone-800"
               }`}
             >
