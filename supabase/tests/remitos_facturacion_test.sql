@@ -13,7 +13,7 @@
 begin;
 create extension if not exists pgtap with schema extensions;
 
-select plan(96);
+select plan(98);
 
 -- ---------------------------------------------------------------------
 -- Estructura
@@ -188,6 +188,25 @@ select throws_ok(
   $$select guardar_remito('f0000000-0000-0000-0000-000000000000', '{"punto_venta": 9201}', '[]')$$,
   'RM004', null, 'guardar_remito avisa si el remito no existe'
 );
+
+-- trg_remito_con_items es diferido y el archivo no hace commit: pasar a
+-- inmediato evalúa lo pendiente, igual que al cerrar la transacción.
+select throws_ok(
+  $$select guardar_remito(pg_temp.r('r2'),
+      '{"punto_venta": 9201, "cliente_id": "c0000000-0000-0000-0000-000000000031", "fecha": "2026-11-04"}',
+      '[]');
+    set constraints trg_remito_con_items immediate$$,
+  'RM005', null, 'guardar_remito no deja un emitido sin ítems'
+);
+set constraints trg_remito_con_items deferred;
+select lives_ok(
+  $$select guardar_remito(pg_temp.r('r2'),
+      '{"punto_venta": 9201, "cliente_id": "c0000000-0000-0000-0000-000000000031", "fecha": "2026-11-04"}',
+      '[{"descripcion": "Gancho", "cantidad": 20, "precio_unitario": 5, "alicuota_iva": 10.5, "importe": 100, "iva": 10.5}]');
+    set constraints trg_remito_con_items immediate$$,
+  'guardar_remito reemplaza los ítems de un emitido y al cerrar sigue con ítems'
+);
+set constraints trg_remito_con_items deferred;
 
 do $$ begin perform pg_temp.remito('r3', 'c0000000-0000-0000-0000-000000000032',
   '[{"descripcion": "Lona", "cantidad": 10, "precio_unitario": 1, "alicuota_iva": 21}]'); end $$;
