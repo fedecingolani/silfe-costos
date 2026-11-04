@@ -93,7 +93,7 @@ remitos, envío por mail.
 | --- | --- | --- | --- | --- |
 | T1 | DB: `remito`, `remito_item`, estados, triggers de bloqueo, `emitir_remito` con numeración por punto de venta, anulación, RLS aparte (pgTAP en rojo primero) | delegada (writer) | [x] | 6f65156 |
 | T2 | DB: `comprobante_item.remito_item_id`, vista de pendientes por ítem, `facturar_remitos` (mismo cliente, tope de pendiente, candado), estado derivado y desbloqueo al borrar el borrador, `guardar_remito`; más las tres advertencias de las revisiones de T1 (pgTAP) | delegada (writer) | [x] | 53a8d0a, e52860f |
-| T3 | TS: tipos, cálculo de bultos y valor declarado, validación y armado de la facturación (Vitest) | delegada (writer) | [ ] | |
+| T3 | TS: tipos, cálculo de bultos y valor declarado, validación y armado de la facturación (Vitest) | delegada (writer) | [x] | 1890ccd, f9224a3 |
 | T4 | Pantallas: listado, editor (bultos, transporte, domicilio, valor declarado) y detalle | delegada (writer) | [ ] | |
 | T5 | Pantalla de facturación: cliente → remitos pendientes → cantidades → borrador de factura; el editor de comprobantes manda `remito_item_id` en cada ítem; error claro si el cliente no tiene condición de IVA | delegada (writer) | [ ] | |
 | T6 | PDF del remito (letra R, bultos, valor declarado, transporte, domicilio de entrega) | delegada (writer) | [ ] | |
@@ -183,6 +183,27 @@ remitos, envío por mail.
       con ítems repetidos o reordenados): pasan a T5, que valida la condición de IVA y hace que
       el editor mande `remito_item_id`.
 
+- T3 (04/11, `feat/remitos-03-logica`, 1890ccd + f9224a3): módulos `src/lib/remitos/`
+  (`borrador`, `editor`, `facturacion`, `errores`, `listado`, `numero`, `decimal`) y tipos en
+  `tipos.ts`.
+  - RED: los 7 archivos de test fallaban por módulo inexistente. GREEN: `npm test` 911,
+    `typecheck` y `lint` OK.
+  - Decisiones: cantidades y centavos con enteros escalados (`decimal.ts`, BigInt), sin
+    redondeo silencioso (más de 4 decimales es error); el remito calcula IVA siempre (no tiene
+    letra); un valor declarado guardado que difiere de la suma se trata como manual; un
+    borrador no se imprime; RM009/RM010 muestran el mensaje de la base.
+  - `MENSAJE_CLIENTE_SIN_CONDICION_IVA` en `facturacion.ts` cubre R3-003 de T2.
+  - Revisión nativa: la rama entera contra `main` superó el tamaño de revisión
+    (`lens_context_budget_exceeded`); se revisó sólo T3 contra la punta de T2
+    (review-071be9500638522d), **aprobada** y acusada. Los tres hallazgos se corrigieron en
+    f9224a3, con test en rojo primero:
+    1. bultos asociados por posición: ahora, si `armarItems` no devuelve un ítem por renglón,
+       no se guarda (hoy no pasa: cada fila descartada suma un error);
+    2. un transporte o lista de precios mal formado es error, no "sin transporte";
+    3. la traducción de errores usa `Object.hasOwn` (una pista "constructor" ya no devuelve una
+       función).
+    GREEN: `npm test` 913, `typecheck` y `lint` OK.
+
 ## Próximo paso
 
-T3 en `feat/remitos-03-logica`, sobre T2.
+T4 en `feat/remitos-04-pantallas`, sobre T3.
