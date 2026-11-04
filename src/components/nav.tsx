@@ -41,6 +41,7 @@ const SECCIONES: { titulo: string; items: Item[] }[] = [
       { href: "/mano-obra", texto: "Mano de obra" },
       { href: "/procesos", texto: "Procesos" },
       { href: "/productos", texto: "Productos" },
+      { texto: "Stock" },
     ],
   },
   {
