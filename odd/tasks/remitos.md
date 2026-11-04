@@ -96,7 +96,7 @@ remitos, envío por mail.
 | T3 | TS: tipos, cálculo de bultos y valor declarado, validación y armado de la facturación (Vitest) | delegada (writer) | [x] | 1890ccd, f9224a3 |
 | T4 | Pantallas: listado, editor (bultos, transporte, domicilio, valor declarado) y detalle | delegada (writer) | [x] | eea8442 |
 | T5 | Pantalla de facturación: cliente → remitos pendientes → cantidades → borrador de factura; el editor de comprobantes manda `remito_item_id` en cada ítem; error claro si el cliente no tiene condición de IVA | delegada (writer) | [x] | 53b42ce, dfc8b63 |
-| T6 | PDF del remito (letra R, bultos, valor declarado, transporte, domicilio de entrega) | delegada (writer) | [ ] | |
+| T6 | PDF del remito (letra R, bultos, valor declarado, transporte, domicilio de entrega) | delegada (writer) | [x] | 040e182 |
 | T7 | Menú (Ventas → Remitos) y recorrido en el navegador | orquestador | [ ] | |
 
 ## Entrega
@@ -246,6 +246,22 @@ remitos, envío por mail.
     (módulos viejos y recarga infinita); hubo que reiniciarlo y borrar `.next`.
   - Revisión nativa: el usuario eligió saltearla para este candidato.
 
+- T6 (04/11, `feat/remitos-06-pdf`, 040e182): `src/lib/remitos/pdf-datos.ts`, `pdf.ts`
+  (renderer propio que reusa los helpers exportados de `comprobantes/pdf.ts`, sin tocarlo),
+  `pdf-descarga.ts` y la ruta `/remitos/[id]/pdf` (404 si no existe, 409 en borrador). Botón
+  "PDF" en el detalle.
+  - Precios: se imprimen, como el presupuesto, controlados por
+    `MOSTRAR_PRECIOS_REMITO = true` (se puede apagar en una línea; sin precios quedan cantidad,
+    bultos, total de bultos y valor declarado). Anulado lleva marca de agua "ANULADO".
+  - RED: los 3 archivos de test fallaban sin módulos. GREEN: 33 tests nuevos; `npm test` 967,
+    `typecheck` y `lint` OK. `build` no se corrió (servidor de desarrollo levantado).
+  - Control del orquestador: la ruta devuelve 200 `application/pdf`
+    "Remito R-00007-00000001.pdf"; renderizado a PNG se ven la R con la leyenda, transporte,
+    domicilio de entrega, bultos por ítem, "Bultos total: 12", "Valor declarado:
+    $ 300.000,00" y el bloque "Recibí conforme". El emisor sale vacío porque la base local no
+    tiene `arca_emisor` cargado.
+  - Revisión nativa: el usuario eligió saltearla para este candidato.
+
 ## Próximo paso
 
-T6 en `feat/remitos-06-pdf`, sobre T5.
+T7: menú (cuando se mergee #23) y recorrido completo.
