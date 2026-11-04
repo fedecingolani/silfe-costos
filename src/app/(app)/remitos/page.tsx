@@ -74,9 +74,14 @@ export default async function RemitosPage({
         titulo="Remitos"
         descripcion="Remitos de venta. Los borradores y los emitidos sin facturar se editan; después se facturan desde acá."
         acciones={
-          <Link href="/remitos/nuevo" className="boton-primario">
-            + Nuevo remito
-          </Link>
+          <div className="flex gap-2">
+            <Link href="/remitos/facturar" className="boton-secundario">
+              Facturar remitos
+            </Link>
+            <Link href="/remitos/nuevo" className="boton-primario">
+              + Nuevo remito
+            </Link>
+          </div>
         }
       />
 

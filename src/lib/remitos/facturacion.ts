@@ -173,3 +173,61 @@ export function armarFacturacion(
     totales: calcularTotales(calculables, { sinIva: !puntoVenta!.electronico }),
   };
 }
+
+export const MENSAJE_SELECCION_DESACTUALIZADA =
+  "Un ítem elegido ya no está pendiente (lo facturaron o cambió el remito). Recargá la página.";
+
+const MENSAJE_DATOS_INVALIDOS = "Los datos de la facturación no son válidos.";
+
+/** Lo que manda la pantalla de cada renglón: si va y cuánto. */
+export type SeleccionEnviada = { remitoItemId: string; elegido: boolean; cantidad: string };
+
+/**
+ * Aplica lo elegido en la pantalla sobre los pendientes leídos de la base
+ * (seleccionInicial en el servidor). Del navegador sólo se toman `elegido`
+ * y `cantidad`: precio, alícuota, pendiente y cliente salen de la base. Un
+ * renglón que la pantalla no manda queda sin elegir; uno elegido que ya no
+ * está pendiente pide recargar.
+ */
+export function aplicarSeleccion(
+  base: readonly ItemAFacturar[],
+  enviados: unknown,
+): { items: ItemAFacturar[] } | { error: string } {
+  if (!Array.isArray(enviados)) return { error: MENSAJE_DATOS_INVALIDOS };
+  const elegidos = new Map<string, { elegido: boolean; cantidad: string }>();
+  for (const e of enviados) {
+    if (typeof e !== "object" || e === null) return { error: MENSAJE_DATOS_INVALIDOS };
+    const { remitoItemId, elegido, cantidad } = e as Record<string, unknown>;
+    if (typeof remitoItemId !== "string" || typeof elegido !== "boolean" || typeof cantidad !== "string") {
+      return { error: MENSAJE_DATOS_INVALIDOS };
+    }
+    elegidos.set(remitoItemId, { elegido, cantidad });
+  }
+  const ids = new Set(base.map((i) => i.remitoItemId));
+  for (const [id, { elegido }] of elegidos) {
+    if (elegido && !ids.has(id)) return { error: MENSAJE_SELECCION_DESACTUALIZADA };
+  }
+  return {
+    items: base.map((item) => {
+      const enviado = elegidos.get(item.remitoItemId);
+      return enviado ? { ...item, elegido: enviado.elegido, cantidad: enviado.cantidad } : { ...item, elegido: false };
+    }),
+  };
+}
+
+/** Renglones de un mismo remito, para mostrarlos juntos. */
+export type GrupoRemito = { remitoId: string; numeroRemito: string; fechaRemito: string; items: ItemAFacturar[] };
+
+/** Agrupa por remito, respetando el orden en que llegan (el de seleccionInicial). */
+export function agruparPorRemito(items: readonly ItemAFacturar[]): GrupoRemito[] {
+  const grupos = new Map<string, GrupoRemito>();
+  for (const item of items) {
+    let grupo = grupos.get(item.remitoId);
+    if (!grupo) {
+      grupo = { remitoId: item.remitoId, numeroRemito: item.numeroRemito, fechaRemito: item.fechaRemito, items: [] };
+      grupos.set(item.remitoId, grupo);
+    }
+    grupo.items.push(item);
+  }
+  return [...grupos.values()];
+}

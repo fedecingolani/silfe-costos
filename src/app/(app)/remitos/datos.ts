@@ -1,6 +1,6 @@
 import "server-only";
 import type { createClient } from "@/lib/supabase/server";
-import type { Remito, RemitoItem } from "@/lib/tipos";
+import type { Remito, RemitoItem, RemitoItemPendiente } from "@/lib/tipos";
 
 type Supabase = Awaited<ReturnType<typeof createClient>>;
 
@@ -61,4 +61,55 @@ export async function cargarRemito(
     bultos: Number(i.bultos),
   }));
   return { remito, items };
+}
+
+const COLUMNAS_PENDIENTE =
+  "remito_item_id, remito_id, cliente_id, punto_venta, numero, fecha, estado_remito, orden, producto_id, codigo, " +
+  "descripcion, unidad, precio_unitario, descuento_pct, gravado, alicuota_iva, bultos, cantidad, facturado, pendiente";
+
+/**
+ * Ítems con algo pendiente de los remitos emitidos de un cliente
+ * (v_remito_item_pendiente). El estado de la vista es el guardado: parcial
+ * y facturado se derivan, así que un remito facturado en parte sigue
+ * "emitido" acá.
+ */
+export async function cargarPendientes(supabase: Supabase, clienteId: string): Promise<RemitoItemPendiente[] | string> {
+  const { data, error } = await supabase
+    .from("v_remito_item_pendiente")
+    .select(COLUMNAS_PENDIENTE)
+    .eq("cliente_id", clienteId)
+    .eq("estado_remito", "emitido")
+    .gt("pendiente", 0);
+  if (error) return `No se pudieron leer los remitos pendientes: ${error.message}`;
+  return (data ?? []) as unknown as RemitoItemPendiente[];
+}
+
+/** Clientes con algo pendiente de facturar en remitos emitidos, por razón social. */
+export async function cargarClientesConPendientes(
+  supabase: Supabase,
+): Promise<{ id: string; razon_social: string; remitos: number }[] | string> {
+  const { data, error } = await supabase
+    .from("v_remito_item_pendiente")
+    .select("cliente_id, remito_id")
+    .eq("estado_remito", "emitido")
+    .gt("pendiente", 0);
+  if (error) return `No se pudieron leer los remitos pendientes: ${error.message}`;
+  const remitosPorCliente = new Map<string, Set<string>>();
+  for (const f of data ?? []) {
+    const remitos = remitosPorCliente.get(f.cliente_id as string) ?? new Set<string>();
+    remitos.add(f.remito_id as string);
+    remitosPorCliente.set(f.cliente_id as string, remitos);
+  }
+  if (remitosPorCliente.size === 0) return [];
+  const { data: clientes, error: errorClientes } = await supabase
+    .from("cliente")
+    .select("id, razon_social")
+    .in("id", [...remitosPorCliente.keys()])
+    .order("razon_social");
+  if (errorClientes) return `No se pudieron leer los clientes: ${errorClientes.message}`;
+  return (clientes ?? []).map((c) => ({
+    id: c.id as string,
+    razon_social: c.razon_social as string,
+    remitos: remitosPorCliente.get(c.id as string)?.size ?? 0,
+  }));
 }

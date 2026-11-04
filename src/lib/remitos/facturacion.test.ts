@@ -2,6 +2,9 @@ import { describe, expect, it } from "vitest";
 import type { RemitoItemPendiente } from "@/lib/tipos";
 import {
   MENSAJE_CLIENTE_SIN_CONDICION_IVA,
+  MENSAJE_SELECCION_DESACTUALIZADA,
+  agruparPorRemito,
+  aplicarSeleccion,
   armarFacturacion,
   seleccionInicial,
   subtotalFacturacion,
@@ -225,5 +228,81 @@ describe("subtotalFacturacion", () => {
   it("un ítem no gravado suma en no gravado", () => {
     const items = seleccionInicial([fila({ gravado: false, alicuota_iva: null })]);
     expect(subtotalFacturacion(items)).toMatchObject({ neto: 0, noGravado: 3000, iva: 0, total: 3000 });
+  });
+});
+
+describe("aplicarSeleccion", () => {
+  it("toma de la pantalla sólo si va elegido y la cantidad; el resto sale de la base", () => {
+    const base = seleccionInicial(filas);
+    const resultado = aplicarSeleccion(base, [
+      { remitoItemId: base[0].remitoItemId, elegido: true, cantidad: "120" },
+      { remitoItemId: base[1].remitoItemId, elegido: false, cantidad: "100.25" },
+    ]);
+    if ("error" in resultado) throw new Error(resultado.error);
+    expect(resultado.items).toEqual([
+      { ...base[0], cantidad: "120" },
+      { ...base[1], elegido: false },
+    ]);
+  });
+
+  it("ignora precios, pendientes o clientes que mande el navegador", () => {
+    const base = seleccionInicial(filas);
+    const resultado = aplicarSeleccion(base, [
+      { remitoItemId: base[0].remitoItemId, elegido: true, cantidad: "1", precioUnitario: 0, pendiente: 9999, clienteId: OTRO_CLIENTE },
+    ]);
+    if ("error" in resultado) throw new Error(resultado.error);
+    expect(resultado.items[0]).toEqual({ ...base[0], cantidad: "1" });
+  });
+
+  it("un renglón que no manda la pantalla queda sin elegir", () => {
+    const base = seleccionInicial(filas);
+    const resultado = aplicarSeleccion(base, [{ remitoItemId: base[1].remitoItemId, elegido: true, cantidad: "5" }]);
+    if ("error" in resultado) throw new Error(resultado.error);
+    expect(resultado.items.map((i) => [i.elegido, i.cantidad])).toEqual([
+      [false, "300"],
+      [true, "5"],
+    ]);
+  });
+
+  it("un ítem elegido que ya no está pendiente pide recargar", () => {
+    const base = seleccionInicial(filas);
+    expect(
+      aplicarSeleccion(base, [{ remitoItemId: "f0000000-0000-0000-0000-000000000099", elegido: true, cantidad: "1" }]),
+    ).toEqual({ error: MENSAJE_SELECCION_DESACTUALIZADA });
+  });
+
+  it("uno no elegido que ya no está pendiente se ignora", () => {
+    const base = seleccionInicial(filas);
+    const resultado = aplicarSeleccion(base, [
+      { remitoItemId: "f0000000-0000-0000-0000-000000000099", elegido: false, cantidad: "1" },
+    ]);
+    expect("items" in resultado && resultado.items.every((i) => !i.elegido)).toBe(true);
+  });
+
+  it("datos mal formados son un error", () => {
+    const base = seleccionInicial(filas);
+    expect(aplicarSeleccion(base, "x")).toEqual({ error: "Los datos de la facturación no son válidos." });
+    expect(aplicarSeleccion(base, [null])).toEqual({ error: "Los datos de la facturación no son válidos." });
+    expect(aplicarSeleccion(base, [{ remitoItemId: base[0].remitoItemId, elegido: "sí", cantidad: "1" }])).toEqual({
+      error: "Los datos de la facturación no son válidos.",
+    });
+  });
+});
+
+describe("agruparPorRemito", () => {
+  it("junta los renglones de cada remito, en el orden en que llegan", () => {
+    const base = seleccionInicial([
+      ...filas,
+      fila({ remito_item_id: "f0000000-0000-0000-0000-000000000003", orden: 1, descripcion: "Malla" }),
+    ]);
+    const grupos = agruparPorRemito(base);
+    expect(grupos.map((g) => [g.remitoId, g.numeroRemito, g.fechaRemito, g.items.map((i) => i.descripcion)])).toEqual([
+      ["e0000000-0000-0000-0000-000000000001", "R-00001-00000003", "2026-11-04", ["Lona", "Malla"]],
+      ["e0000000-0000-0000-0000-000000000002", "R-00001-00000004", "2026-11-05", ["Correa"]],
+    ]);
+  });
+
+  it("sin renglones no hay grupos", () => {
+    expect(agruparPorRemito([])).toEqual([]);
   });
 });
