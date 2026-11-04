@@ -38,10 +38,10 @@ function deLista<T extends string>(valor: string, lista: readonly T[]): T | "" {
 }
 
 /**
- * Filtros del listado. Valores desconocidos se ignoran; por defecto, el
- * ambiente activo. "interno" muestra los comprobantes sin ARCA (X).
+ * Filtros del listado. Valores desconocidos se ignoran; por defecto, todos
+ * los ambientes. "interno" muestra los comprobantes sin ARCA (X).
  */
-export function leerFiltros(parametros: Parametros, ambienteActivo: AmbienteArca): FiltrosListado {
+export function leerFiltros(parametros: Parametros): FiltrosListado {
   const desde = primero(parametros.desde);
   const hasta = primero(parametros.hasta);
   const ambiente = primero(parametros.ambiente);
@@ -52,8 +52,20 @@ export function leerFiltros(parametros: Parametros, ambienteActivo: AmbienteArca
     clase: deLista(primero(parametros.clase), CLASES_COMPROBANTE),
     estado: deLista(primero(parametros.estado), ESTADOS_COMPROBANTE),
     ambiente:
-      ambiente === "todos" || ambiente === "interno" ? ambiente : deLista(ambiente, AMBIENTES_ARCA) || ambienteActivo,
+      ambiente === "todos" || ambiente === "interno" ? ambiente : deLista(ambiente, AMBIENTES_ARCA) || "todos",
   };
+}
+
+/** Cookie donde el listado recuerda sus filtros (ver RecordarFiltros). */
+export const COOKIE_FILTROS = "filtros_comprobantes";
+
+/** Consulta de URL con sólo los filtros aplicados; vacía si no hay ninguno. */
+export function consultaFiltros(filtros: FiltrosListado): string {
+  const consulta = new URLSearchParams();
+  for (const [clave, valor] of Object.entries(filtros)) {
+    if (valor && !(clave === "ambiente" && valor === "todos")) consulta.set(clave, valor);
+  }
+  return consulta.toString();
 }
 
 /**
