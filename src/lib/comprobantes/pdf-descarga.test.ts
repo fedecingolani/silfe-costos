@@ -2,7 +2,8 @@ import { describe, expect, it, vi } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { cargarPdfComprobante, respuestaPdf } from "./pdf-descarga";
 import { PNG_1X1, PNG_1X1_BASE64 } from "@/lib/empresa/logo-fixtures";
-import { COMPROBANTE_EJEMPLO, EMISOR_EJEMPLO, ITEM_EJEMPLO } from "./pdf-fixtures";
+import { COLUMNAS_EMPRESA_PDF } from "@/lib/empresa/pdf-empresa";
+import { COMPROBANTE_EJEMPLO, EMISOR_EJEMPLO, EMPRESA_EJEMPLO, ITEM_EJEMPLO } from "./pdf-fixtures";
 
 const ID = COMPROBANTE_EJEMPLO.id;
 
@@ -104,15 +105,17 @@ describe("cargarPdfComprobante", () => {
     expect(consultas.find((c) => c.tabla === "comprobante_asociado")?.columnas).not.toContain("*");
   });
 
-  it("lee el logo de la empresa, sólo sus columnas", async () => {
+  it("lee el logo y la identidad de la empresa en una consulta, sólo sus columnas", async () => {
     const { cliente, consultas } = clienteStub({
       ...BASE,
-      empresa: { data: { logo_base64: PNG_1X1_BASE64, logo_tipo: "image/png" }, error: null },
+      empresa: { data: { ...EMPRESA_EJEMPLO, logo_base64: PNG_1X1_BASE64, logo_tipo: "image/png" }, error: null },
     });
     const r = await cargarPdfComprobante({ id: ID, cliente });
     if (!r.ok) throw new Error("esperaba ok");
     expect(r.logo).toEqual(PNG_1X1);
-    expect(consultas.find((c) => c.tabla === "empresa")?.columnas).toBe("logo_base64, logo_tipo");
+    expect(r.datos.emisor.nombreFantasia).toBe("SIL - FE");
+    expect(r.datos.emisor.contacto).toContain("ventas@ejemplo.com.ar");
+    expect(consultas.filter((c) => c.tabla === "empresa").map((c) => c.columnas)).toEqual([COLUMNAS_EMPRESA_PDF]);
   });
 
   it("sale sin logo si falla la lectura del logo", async () => {
@@ -121,6 +124,7 @@ describe("cargarPdfComprobante", () => {
     const r = await cargarPdfComprobante({ id: ID, cliente });
     if (!r.ok) throw new Error("esperaba ok");
     expect(r.logo).toBeNull();
+    expect(r.datos.emisor.nombreFantasia).toBe("");
     expect(aviso).toHaveBeenCalled();
     aviso.mockRestore();
   });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { EMISOR_EJEMPLO, ITEM_EJEMPLO } from "@/lib/comprobantes/pdf-fixtures";
+import { EMISOR_EJEMPLO, IDENTIDAD_EJEMPLO, ITEM_EJEMPLO } from "@/lib/comprobantes/pdf-fixtures";
 import { armarDatosPdfPresupuesto, type ClientePdfPresupuesto, type FilaPresupuestoPdf } from "./pdf-datos";
 
 const PRESUPUESTO: FilaPresupuestoPdf = {
@@ -89,5 +89,13 @@ describe("armarDatosPdfPresupuesto", () => {
     const datos = armar({ emisor: null });
     expect(datos.emisor.razonSocial).toBe("");
     expect(datos.emisor.cuit).toBe("");
+  });
+
+  it("lleva el nombre de fantasía y el contacto sólo si se pasan", () => {
+    expect(armar().emisor).toMatchObject({ nombreFantasia: "", contacto: "" });
+    expect(armar({ identidad: IDENTIDAD_EJEMPLO }).emisor).toMatchObject({
+      nombreFantasia: "SIL - FE",
+      contacto: "Tel. 0298 444-5555 · ventas@ejemplo.com.ar · www.ejemplo.com.ar",
+    });
   });
 });

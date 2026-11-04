@@ -15,6 +15,7 @@ import {
   type IvaAutorizado,
   type LetraComprobante,
 } from "@/lib/tipos";
+import { SIN_IDENTIDAD_PDF, type IdentidadPdf } from "@/lib/empresa/pdf-empresa";
 import { periodoDeFila, textoAsociado, textoPeriodo } from "./asociados";
 import { calcularTotales, tasaDeFila } from "./calculo";
 import { formatearNumero } from "./numero";
@@ -108,6 +109,10 @@ export type DatosPdfComprobante = {
     cuit: string;
     ingresosBrutos: string;
     inicioActividades: string;
+    /** Nombre de fantasía de la empresa, arriba de la razón social; vacío, no se imprime. */
+    nombreFantasia: string;
+    /** "Tel. … · email · web", debajo del domicilio; vacío, no se imprime. */
+    contacto: string;
   };
   receptor: {
     razonSocial: string;
@@ -269,8 +274,11 @@ export function ivaDelComprobante(
   return { alicuotas, origen, inconsistencia };
 }
 
-/** Datos del emisor para el encabezado; vacíos si no están cargados. */
-export function emisorDelPdf(emisor: FilaEmisorPdf | null): DatosPdfComprobante["emisor"] {
+/** Datos del emisor y de la empresa para el encabezado; vacíos si no están cargados. */
+export function emisorDelPdf(
+  emisor: FilaEmisorPdf | null,
+  identidad: IdentidadPdf = SIN_IDENTIDAD_PDF,
+): DatosPdfComprobante["emisor"] {
   return {
     razonSocial: emisor?.razon_social ?? "",
     domicilio: emisor?.domicilio_comercial ?? "",
@@ -278,6 +286,8 @@ export function emisorDelPdf(emisor: FilaEmisorPdf | null): DatosPdfComprobante[
     cuit: emisor?.cuit ? formatearCuit(emisor.cuit) : "",
     ingresosBrutos: emisor?.ingresos_brutos ?? "",
     inicioActividades: fechaCorta(emisor?.inicio_actividades),
+    nombreFantasia: identidad.nombreFantasia,
+    contacto: identidad.contacto,
   };
 }
 
@@ -326,11 +336,14 @@ export function armarDatosPdf({
   items,
   emisor,
   asociados = [],
+  identidad,
 }: {
   comprobante: FilaComprobantePdf;
   items: readonly FilaItemPdf[];
   emisor: FilaEmisorPdf | null;
   asociados?: readonly AsociadoPdf[];
+  /** Nombre de fantasía y contacto de la empresa; sin ellos, el encabezado no los lleva. */
+  identidad?: IdentidadPdf;
 }): DatosPdfComprobante {
   const letra = c.letra ?? "";
   const sinArca = c.letra === "X";
@@ -347,7 +360,7 @@ export function armarDatosPdf({
     codigoArca: !sinArca && c.tipo_arca ? String(c.tipo_arca).padStart(3, "0") : "",
     numero,
     fecha: fechaCorta(c.fecha),
-    emisor: emisorDelPdf(emisor),
+    emisor: emisorDelPdf(emisor, identidad),
     receptor: {
       razonSocial: c.receptor_razon_social ?? "",
       domicilio: c.receptor_domicilio ?? "",

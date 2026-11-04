@@ -17,6 +17,7 @@ import {
   type FilaEmisorPdf,
   type FilaItemPdf,
 } from "@/lib/comprobantes/pdf-datos";
+import type { IdentidadPdf } from "@/lib/empresa/pdf-empresa";
 import type { Cliente, Presupuesto } from "@/lib/tipos";
 import { numeroPresupuesto } from "./listado";
 
@@ -48,11 +49,14 @@ export function armarDatosPdfPresupuesto({
   cliente,
   items,
   emisor,
+  identidad,
 }: {
   presupuesto: FilaPresupuestoPdf;
   cliente: ClientePdfPresupuesto | null;
   items: readonly FilaItemPdf[];
   emisor: FilaEmisorPdf | null;
+  /** Nombre de fantasía y contacto de la empresa; sin ellos, el encabezado no los lleva. */
+  identidad?: IdentidadPdf;
 }): DatosPdfComprobante {
   const numero = numeroPresupuesto(p.numero);
   // Mismo armado del domicilio que el receptor de una factura al autorizarla.
@@ -68,7 +72,7 @@ export function armarDatosPdfPresupuesto({
     codigoArca: "",
     numero,
     fecha: fechaCorta(p.fecha),
-    emisor: emisorDelPdf(emisor),
+    emisor: emisorDelPdf(emisor, identidad),
     receptor: {
       razonSocial: cliente?.razon_social ?? "",
       domicilio,

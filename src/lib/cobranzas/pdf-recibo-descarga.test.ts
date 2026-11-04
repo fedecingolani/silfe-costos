@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { EMISOR_EJEMPLO } from "@/lib/comprobantes/pdf-fixtures";
+import { EMISOR_EJEMPLO, EMPRESA_EJEMPLO } from "@/lib/comprobantes/pdf-fixtures";
 import { JPEG_1X1, JPEG_1X1_BASE64 } from "@/lib/empresa/logo-fixtures";
 import { cargarPdfRecibo } from "./pdf-recibo-descarga";
 import {
@@ -105,5 +105,14 @@ describe("cargarPdfRecibo", () => {
     const r = await cargarPdfRecibo({ id: ID, cliente });
     if (!r.ok) throw new Error("esperaba datos");
     expect(r.logo).toEqual(JPEG_1X1);
+  });
+
+  it("lee la identidad de la empresa con el logo, en una sola consulta", async () => {
+    const { cliente, consultas } = clienteStub({ ...BASE, empresa: { data: EMPRESA_EJEMPLO, error: null } });
+    const r = await cargarPdfRecibo({ id: ID, cliente });
+    if (!r.ok) throw new Error("esperaba datos");
+    expect(r.datos.emisor.nombreFantasia).toBe("SIL - FE");
+    expect(r.datos.emisor.contacto).toBe("Tel. 0298 444-5555 · ventas@ejemplo.com.ar · www.ejemplo.com.ar");
+    expect(consultas.filter((c) => c.tabla === "empresa")).toHaveLength(1);
   });
 });

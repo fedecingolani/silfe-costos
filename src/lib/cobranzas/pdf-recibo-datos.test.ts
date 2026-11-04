@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { armarDatosPdfRecibo, detalleMedio, puedeImprimirRecibo } from "./pdf-recibo-datos";
+import { IDENTIDAD_EJEMPLO } from "@/lib/comprobantes/pdf-fixtures";
 import { MEDIOS_EJEMPLO, ejemploRecibo, ejemploReciboAnulado } from "./pdf-recibo-fixtures";
 
 describe("puedeImprimirRecibo", () => {
@@ -99,5 +100,13 @@ describe("armarDatosPdfRecibo", () => {
     const datos = armarDatosPdfRecibo({ ...ejemploRecibo(), emisor: null });
     expect(datos.emisor.razonSocial).toBe("");
     expect(datos.emisor.cuit).toBe("");
+  });
+
+  it("lleva el nombre de fantasía y el contacto sólo si se pasan", () => {
+    expect(armarDatosPdfRecibo(ejemploRecibo()).emisor).toMatchObject({ nombreFantasia: "", contacto: "" });
+    expect(armarDatosPdfRecibo({ ...ejemploRecibo(), identidad: IDENTIDAD_EJEMPLO }).emisor).toMatchObject({
+      nombreFantasia: "SIL - FE",
+      contacto: "Tel. 0298 444-5555 · ventas@ejemplo.com.ar · www.ejemplo.com.ar",
+    });
   });
 });

@@ -1,7 +1,8 @@
 /**
  * Carga lo que necesita el PDF de un presupuesto (abierto o convertido): el
- * presupuesto, sus ítems, el cliente, los datos del emisor y el logo. Sólo
- * columnas explícitas; nunca nada de arca_credencial.
+ * presupuesto, sus ítems, el cliente, los datos del emisor y el logo, el
+ * nombre de fantasía y el contacto de la empresa. Sólo columnas explícitas;
+ * nunca nada de arca_credencial.
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
@@ -11,7 +12,7 @@ import {
   type FilaEmisorPdf,
   type FilaItemPdf,
 } from "@/lib/comprobantes/pdf-datos";
-import { leerLogoEmpresa } from "@/lib/empresa/logo";
+import { leerEmpresaPdf } from "@/lib/empresa/pdf-empresa";
 import { esUuid } from "@/lib/listas-precios/uuid";
 import {
   COLUMNAS_CLIENTE_PDF,
@@ -59,12 +60,13 @@ export async function cargarPdfPresupuesto({
   const cliente = await supabase.from("cliente").select(COLUMNAS_CLIENTE_PDF).eq("id", p.cliente_id).maybeSingle();
   if (cliente.error) return respuestaError(`Error al cargar el cliente: ${cliente.error.message}`, 500);
 
-  const logo = (await leerLogoEmpresa(supabase))?.bytes ?? null;
+  const { logo, identidad } = await leerEmpresaPdf(supabase);
   const datos = armarDatosPdfPresupuesto({
     presupuesto: p,
     cliente: cliente.data as ClientePdfPresupuesto | null,
     items: (items.data ?? []) as unknown as FilaItemPdf[],
     emisor: emisor.data as FilaEmisorPdf | null,
+    identidad,
   });
   for (const aviso of datos.inconsistencias) console.warn(`PDF del presupuesto ${id}: ${aviso}`);
   return { ok: true, datos, logo };

@@ -137,3 +137,31 @@ con su commit; la estrategia de PR (uno solo o encadenados) se decide antes de a
 Decidir la estrategia de PR (rama de ~1600 líneas) y, opcionalmente, cubrir con tests la acción
 `guardarEmpresa` y la ruta del logo.
 - PR abierto: https://github.com/fedecingolani/silfe-costos/pull/19 (sin checks de CI configurados).
+- Mergeado (PR #19, `0406823`) y desplegado: migraciones `20261101000001` y `20261101000002`
+  aplicadas en producción con `supabase db push --remote --include-all --yes` (la `20261102000001`
+  ya estaba aplicada). Worker `silfe-costos` versión `ff062b86`. Humo: `/login` 200 con
+  "Charoli Gestión", `/empresa/logo` sin sesión redirige al login y `/logo-silfe.png` da 404.
+- Pendiente del usuario: cargar logo, nombre y color de SILFE en Configuración → Empresa.
+- Ojo con el CLI de Supabase v3: `db push` sin `--remote` apunta al stack local.
+
+## Ampliación: nombre y contacto en los PDF (T6)
+
+Pedido del usuario después del deploy: el presupuesto muestra el logo pero no el nombre de
+fantasía. Encabezado acordado para comprobantes, presupuestos y recibos:
+
+```
+[logo]
+SIL - FE                          ← nombre de fantasía, destacado
+Razón Social: …
+Domicilio: …
+Tel. / email / web                ← contacto, en letra chica
+```
+
+Cada línea se omite si el dato está vacío. La lista de precios no cambia (ya tiene su pie de
+contacto en Parámetros). Rama `feat/pdf-encabezado-empresa`.
+
+| ID | Tarea | Ruta | Estado |
+| --- | --- | --- | --- |
+| T6 | Nombre de fantasía y contacto en el encabezado de comprobante, presupuesto y recibo | delegada (writer: datos, generadores, tests) | [x] |
+
+Progreso T6: una sola lectura de `empresa` por PDF (`leerEmpresaPdf`: logo + identidad, nunca falla) y un bloque izquierdo compartido (`dibujarBloqueEmisor`) en comprobante, presupuesto y recibo; nombre y contacto se achican o se cortan con "…" sin invadir el centro, y sin identidad el encabezado queda idéntico (test de posiciones).

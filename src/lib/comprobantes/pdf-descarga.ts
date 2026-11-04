@@ -1,10 +1,11 @@
 /**
  * Carga lo que necesita el PDF de un comprobante: el comprobante, sus
  * ítems, los datos del emisor, si el punto de venta es electrónico y el
- * logo. Sólo columnas explícitas; nunca nada de arca_credencial.
+ * logo, el nombre de fantasía y el contacto de la empresa. Sólo columnas
+ * explícitas; nunca nada de arca_credencial.
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { leerLogoEmpresa } from "@/lib/empresa/logo";
+import { leerEmpresaPdf } from "@/lib/empresa/pdf-empresa";
 import { esUuid } from "@/lib/listas-precios/uuid";
 import { datosAsociado, leerAsociados } from "./asociados-carga";
 import {
@@ -75,12 +76,13 @@ export async function cargarPdfComprobante({
   const asociados = c.clase === "factura" ? [] : await leerAsociados(cliente, id);
   if (typeof asociados === "string") return respuestaError(asociados, 500);
 
-  const logo = (await leerLogoEmpresa(cliente))?.bytes ?? null;
+  const { logo, identidad } = await leerEmpresaPdf(cliente);
   const datos = armarDatosPdf({
     comprobante: c,
     items: (items.data ?? []) as unknown as FilaItemPdf[],
     emisor: datosEmisor!,
     asociados: asociados.map(datosAsociado),
+    identidad,
   });
   // No se corta la impresión: se deja rastro para revisar el comprobante.
   for (const aviso of datos.inconsistencias) console.warn(`PDF del comprobante ${c.id}: ${aviso}`);
