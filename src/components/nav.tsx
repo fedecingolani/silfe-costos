@@ -17,7 +17,7 @@ const SECCIONES: { titulo: string; items: Item[] }[] = [
       { href: "/clientes", texto: "Clientes" },
       { href: "/cuentas-corrientes", texto: "Cuentas corrientes" },
       { href: "/presupuestos", texto: "Presupuestos" },
-      { texto: "Remitos" },
+      { href: "/remitos", texto: "Remitos" },
       { href: "/seguimiento", texto: "Seguimiento" },
       { href: "/listas-precios", texto: "Listas de precios" },
       { href: "/transportes", texto: "Transportes" },
