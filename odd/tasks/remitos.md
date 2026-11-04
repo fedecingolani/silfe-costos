@@ -92,7 +92,7 @@ remitos, envío por mail.
 | ID | Tarea | Ruta | Estado | Commit |
 | --- | --- | --- | --- | --- |
 | T1 | DB: `remito`, `remito_item`, estados, triggers de bloqueo, `emitir_remito` con numeración por punto de venta, anulación, RLS aparte (pgTAP en rojo primero) | delegada (writer) | [x] | 6f65156 |
-| T2 | DB: `comprobante_item.remito_item_id`, vista de pendientes por ítem, `facturar_remitos` (mismo cliente, tope de pendiente, candado), estado derivado y desbloqueo al borrar el borrador, `guardar_remito`; más las dos advertencias de la revisión de T1 (pgTAP) | delegada (writer) | [ ] | |
+| T2 | DB: `comprobante_item.remito_item_id`, vista de pendientes por ítem, `facturar_remitos` (mismo cliente, tope de pendiente, candado), estado derivado y desbloqueo al borrar el borrador, `guardar_remito`; más las tres advertencias de las revisiones de T1 (pgTAP) | delegada (writer) | [ ] | |
 | T3 | TS: tipos, cálculo de bultos y valor declarado, validación y armado de la facturación (Vitest) | delegada (writer) | [ ] | |
 | T4 | Pantallas: listado, editor (bultos, transporte, domicilio, valor declarado) y detalle | delegada (writer) | [ ] | |
 | T5 | Pantalla de facturación: cliente → remitos pendientes → cantidades → borrador de factura | delegada (writer) | [ ] | |
@@ -142,6 +142,10 @@ remitos, envío por mail.
        controles de `emitir_remito` (ítems, punto de venta activo, candado, max+1).
     2. `fn_remito_item_bloqueo` lee el estado del padre sin bloquearlo: un ítem insertado en
        paralelo con `anular_remito` puede quedar en un remito anulado.
+    3. (Revisión de la rama contra `main`, review-1f9ae299dac289bb, también aprobada.)
+       `remito.lista_precio_id` es `on delete set null`, pero un remito anulado rechaza todo
+       cambio (RM001): borrar una lista de precios usada por un remito anulado falla con un
+       error confuso. Hay que permitir ese cambio puntual o cambiar la FK.
   - Para destrabar la revisión se agregaron `.atl/` y `firebase-debug.log` a
     `.git/info/exclude` (sólo local).
 
