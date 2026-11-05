@@ -9,7 +9,7 @@
 begin;
 create extension if not exists pgtap with schema extensions;
 
-select plan(78);
+select plan(79);
 
 -- ---------------------------------------------------------------------
 -- Estructura
@@ -354,6 +354,12 @@ select throws_ok(
     update comprobante_compra set estado = 'confirmado' where id = %L$$,
     (select id from cc where nombre = 'cero'), (select id from cc where nombre = 'cero')),
   'CP006', null, 'Con SQL directo tampoco se confirma un comprobante con total cero'
+);
+select throws_ok(
+  format($$select set_config('compras.confirmando', %L, true);
+    update comprobante_compra set estado = 'confirmado', total = 999 where id = %L$$,
+    (select id from cc where nombre = 'cero'), (select id from cc where nombre = 'cero')),
+  'CP006', null, 'Escribir un total a mano no saltea el control: vale el total recalculado'
 );
 select throws_ok(
   format($$select set_config('compras.confirmando', %L, true);

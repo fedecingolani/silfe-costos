@@ -302,7 +302,8 @@ begin
     end if;
     -- Las reglas de la confirmación se repiten acá: la marca de la
     -- transacción se puede poner a mano, así que no alcanza como control.
-    if new.total <= 0 then
+    -- El total recalculado, no el de la fila: más abajo se pisa con éste.
+    if (select t.total from public.fn_comprobante_compra_totales(new.id, new.letra) t) <= 0 then
       raise exception 'El total del comprobante tiene que ser mayor que cero.'
         using errcode = 'CP006', hint = 'total_no_positivo';
     end if;
