@@ -91,7 +91,7 @@ Migraciones nuevas en `supabase/migrations/`, tests pgTAP en `supabase/tests/`, 
 - [x] **T2 — Comprobantes de compra: modelo.** Cabecera, renglones, alícuotas y percepciones. Funciones para guardar borrador, confirmar y anular. Número único por proveedor. Tests pgTAP.
 - [x] **T3 — Comprobantes de compra: pantallas.** Listado, alta y detalle. Editor con selección de materia prima y alta del artículo del proveedor en el momento. Menú Compras → Comprobantes.
 - [x] **T4 — Actualización de precios al confirmar.** Comparación por renglón, casillas y alta en `precio_materia_prima`.
-- [ ] **T4b — Notas de crédito y débito asociadas a una factura.**
+- [x] **T4b — Notas de crédito y débito asociadas a una factura.**
   - **Desde la factura:** una factura confirmada tiene botones "Nota de crédito" y "Nota de débito". Abren una nota asociada a esa factura con sus renglones y precios ya cargados, para ajustarlos.
   - **Nota suelta:** se carga con los importes que quiera el usuario.
   - **Precios de costeo:** las notas no los actualizan. El diálogo "Actualizar precios" queda solo para facturas.
@@ -248,6 +248,36 @@ Migraciones nuevas en `supabase/migrations/`, tests pgTAP en `supabase/tests/`, 
   - Las notas no actualizan precios (decisión del usuario; se implementa en T4b).
   - Idea a evaluar: resaltar las diferencias grandes, como el −76,6%, que es justo el caso de "precio raro".
 
+### T4b — Notas asociadas a una factura
+
+- **Ruta:** delegada a un writer. El título del error se arregló inline.
+- **Rama:** `feat/compras-04b-notas-asociadas`, apilada sobre T4.
+- **Commits:**
+  - `69f842c` SQL
+  - `b885d09` librería y pantallas
+  - `7b2ac5f` título de `ModalError` por acción
+- **Migración `20261105000006_compras_notas_asociadas.sql`:**
+  - Nueva columna `comprobante_compra.comprobante_asociado_id`.
+  - El trigger `trg_comprobante_compra_asociado` controla la asociación: solo una NC o ND, asociada a una factura confirmada del mismo proveedor y la misma letra. Lo vuelve a controlar al confirmar, y bloquea la factura `for share`.
+  - Errores nuevos:
+    - CP012 asociación inválida
+    - CP013 una nota no actualiza precios
+    - CP014 una factura con notas confirmadas no se anula
+  - Una nota en borrador no bloquea anular la factura, pero después no se puede confirmar.
+- **Pantallas:**
+  - La factura confirmada tiene los botones "Nota de crédito" y "Nota de débito", que abren `nuevo?desde=&tipo=` con los renglones y precios de la factura (sin percepciones).
+  - En el editor, la "Factura asociada" es opcional para una nota suelta.
+  - El detalle de la factura lista sus notas, y el de la nota muestra su factura.
+- **RED → GREEN:**
+  - pgTAP: falló 4 de 4 sin la migración; después pasaron 30 de 30.
+  - Vitest: 8 tests en rojo y luego en verde.
+- **Checks:** typecheck y lint OK. Vitest con 1066 tests y pgTAP con 1124, todo en verde.
+- **Navegador:**
+  - Desde la FC A 00003-00012345 se abrió una nota de crédito precargada: mismo proveedor y letra, asociada, con el renglón de 10 kg a $1.000. Se cambió la cantidad a 2.
+  - Al confirmarla apareció el diálogo simple, sin precios. Quedó la NC A 00003-00000077 por $2.420, con su "Factura asociada".
+  - La factura lista la nota. Al intentar anularla aparece "La factura tiene notas de crédito o débito confirmadas: anulá primero las notas.", con el título "No se pudo anular".
+- **Revisión RDD:** pendiente, igual que la de T4.
+
 ## Próximo paso
 
-T4b (notas asociadas a una factura), apilada sobre T4.
+T5 (modelo de remitos de compra), apilada sobre T4b.
