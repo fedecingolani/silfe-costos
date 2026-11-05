@@ -43,6 +43,14 @@ describe("mensajeErrorArticulo", () => {
     );
   });
 
+  it("al guardar, una clave foránea rota es una materia prima o un proveedor que ya no existe", () => {
+    for (const accion of ["agregar", "actualizar"]) {
+      expect(mensajeErrorArticulo(accion, { code: "23503", message: "violates foreign key" })).toBe(
+        "La materia prima o el proveedor ya no existen. Recargá la página.",
+      );
+    }
+  });
+
   it("si no lo reconoce, dice qué acción falló", () => {
     expect(mensajeErrorArticulo("actualizar", { message: "sin conexión" })).toBe(
       "No se pudo actualizar el artículo: sin conexión",

@@ -125,4 +125,11 @@ describe("validarArticulo", () => {
       error: "El factor de conversión tiene que ser un número mayor que cero.",
     });
   });
+
+  it("rechaza un factor que la columna numeric(20,8) no puede guardar", () => {
+    const error = "El factor de conversión tiene que estar entre 0,00000001 y 999.999.999.999.";
+    expect(validarArticulo({ ...base, factor: "0.000000001" })).toEqual({ error });
+    expect(validarArticulo({ ...base, factor: "1e12" })).toEqual({ error });
+    expect(validarArticulo({ ...base, factor: "0.00000001" })).toMatchObject({ datos: { factor_conversion: 0.00000001 } });
+  });
 });

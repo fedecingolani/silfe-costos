@@ -31,6 +31,10 @@ export function mensajeErrorProveedor(accion: string, error: ErrorBase): string 
 export function mensajeErrorArticulo(accion: string, error: ErrorBase): string {
   const unico = mensajeUnico(error);
   if (unico) return unico;
-  if (error.code === "23503") return MENSAJE_ARTICULO_EN_USO;
+  // Al borrar, la clave foránea rota es un comprobante que usa el artículo; al
+  // guardar, es la materia prima o el proveedor que se borró mientras tanto.
+  if (error.code === "23503") {
+    return accion === "eliminar" ? MENSAJE_ARTICULO_EN_USO : "La materia prima o el proveedor ya no existen. Recargá la página.";
+  }
   return `No se pudo ${accion} el artículo: ${error.message}`;
 }

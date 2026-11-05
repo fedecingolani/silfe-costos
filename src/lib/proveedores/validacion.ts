@@ -78,6 +78,9 @@ export function validarDatosFiscales(entrada: {
  * Factor de conversión del artículo: acepta coma o punto decimal y vacío es 1
  * (1 a 1). Devuelve null si no es un número mayor que cero.
  */
+const FACTOR_MINIMO = 1e-8;
+const FACTOR_TOPE = 1e12;
+
 export function parsearFactor(valor: string | null | undefined): number | null {
   const texto = (valor ?? "").trim().replace(",", ".");
   if (texto === "") return 1;
@@ -90,6 +93,10 @@ export function validarArticulo(entrada: EntradaArticulo): Resultado<DatosArticu
   if (descripcion === null) return { error: "La descripción del artículo es obligatoria." };
   const factor = parsearFactor(entrada.factor);
   if (factor === null) return { error: "El factor de conversión tiene que ser un número mayor que cero." };
+  // Rango que guarda numeric(20,8): fuera de él la base lo redondea a 0 o desborda.
+  if (factor < FACTOR_MINIMO || factor >= FACTOR_TOPE) {
+    return { error: "El factor de conversión tiene que estar entre 0,00000001 y 999.999.999.999." };
+  }
   return {
     datos: {
       codigo: limpiar(entrada.codigo),
