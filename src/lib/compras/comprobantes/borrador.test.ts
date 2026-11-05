@@ -422,6 +422,7 @@ describe("ida y vuelta: comprobante guardado → editor → lo que se guarda", (
     exento: false,
     importe: 100,
     iva: 0,
+    remito_compra_item_id: null,
     ...cambios,
   });
   const items = [

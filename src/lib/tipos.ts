@@ -104,6 +104,8 @@ export type ComprobanteCompraItem = {
   exento: boolean;
   importe: number;
   iva: number;
+  /** Renglón de remito de compra que factura (sólo en facturas); vacío sin remito. */
+  remito_compra_item_id: string | null;
 };
 
 export type ComprobanteCompraPercepcion = {
@@ -134,6 +136,84 @@ export type PrecioComprobanteCompra = {
   precio_vigente: number | null;
   incluye_iva: boolean | null;
   cambio: boolean;
+};
+
+export const ESTADOS_REMITO_COMPRA = ["borrador", "recibido", "anulado"] as const;
+
+export type EstadoRemitoCompra = (typeof ESTADOS_REMITO_COMPRA)[number];
+
+/** Estado de facturación de un remito de compra (v_remito_compra_estado). */
+export const ESTADOS_FACTURACION_REMITO_COMPRA = ["pendiente", "parcial", "facturado"] as const;
+
+export type EstadoFacturacionRemitoCompra = (typeof ESTADOS_FACTURACION_REMITO_COMPRA)[number];
+
+/** Remito de un proveedor: la mercadería recibida, con su número de remito. No mueve stock. */
+export type RemitoCompra = {
+  id: string;
+  proveedor_id: string;
+  punto_venta: number;
+  numero: number;
+  /** yyyy-mm-dd */
+  fecha: string;
+  observaciones: string | null;
+  estado: EstadoRemitoCompra;
+  recibido_en: string | null;
+  anulado_en: string | null;
+  creado_por: string | null;
+  creado_en: string;
+  actualizado_en: string;
+};
+
+/** Renglón de un remito de compra: siempre un artículo del proveedor. */
+export type RemitoCompraItem = {
+  id: string;
+  remito_compra_id: string;
+  orden: number;
+  proveedor_articulo_id: string;
+  /** Copiada del artículo por la base. */
+  materia_prima_id: string | null;
+  codigo_proveedor: string | null;
+  descripcion: string;
+  unidad: string | null;
+  /** 4 decimales, en la unidad del proveedor. */
+  cantidad: number;
+};
+
+/** Fila de v_remito_compra_item_pendiente: lo facturado y lo pendiente de cada renglón de remito de compra. */
+export type RemitoCompraItemPendiente = {
+  remito_compra_item_id: string;
+  remito_compra_id: string;
+  proveedor_id: string;
+  punto_venta: number;
+  numero: number;
+  /** yyyy-mm-dd, del remito. */
+  fecha: string;
+  estado_remito: EstadoRemitoCompra;
+  orden: number;
+  proveedor_articulo_id: string;
+  materia_prima_id: string | null;
+  codigo_proveedor: string | null;
+  descripcion: string;
+  unidad: string | null;
+  cantidad: number;
+  /** Suma de los renglones de comprobantes no anulados que lo apuntan, borradores incluidos. */
+  facturada: number;
+  /** cantidad − facturada */
+  pendiente: number;
+};
+
+/** Fila de v_remito_compra_estado. */
+export type RemitoCompraEstado = {
+  remito_compra_id: string;
+  proveedor_id: string;
+  punto_venta: number;
+  numero: number;
+  fecha: string;
+  estado: EstadoRemitoCompra;
+  estado_facturacion: EstadoFacturacionRemitoCompra;
+  cantidad: number;
+  facturada: number;
+  pendiente: number;
 };
 
 export type ProveedorContacto = {

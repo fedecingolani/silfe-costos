@@ -3,7 +3,8 @@
  * o borrar comprobantes de compra (SQLSTATE CP001–CP009, ver
  * 20261105000003_comprobantes_compra.sql; CP010–CP011, ver
  * 20261105000005_compras_actualizar_precios.sql; CP012–CP014, ver
- * 20261105000006_compras_notas_asociadas.sql). Cada código trae su pista (HINT)
+ * 20261105000006_compras_notas_asociadas.sql; y RC004, RC009 y RC010 del vínculo
+ * con los remitos de compra, ver 20261105000007_remitos_compra.sql). Cada código trae su pista (HINT)
  * con el motivo: se busca por las dos, por si llega sólo una. Las acciones
  * devuelven el mensaje en lugar de lanzarlo.
  */
@@ -24,6 +25,9 @@ const ASOCIADO =
   "La factura asociada tiene que ser una factura confirmada del mismo proveedor y la misma letra. Elegí otra o dejala vacía.";
 const NOTA_SIN_PRECIOS = "Las notas de crédito y débito no actualizan precios de materias primas.";
 const CON_NOTAS = "La factura tiene notas de crédito o débito confirmadas: anulá primero las notas.";
+const REMITO_INEXISTENTE = "No se encontró un renglón de remito. Puede que lo hayan borrado: recargá la página.";
+const FACTURACION =
+  "Los renglones de remitos van sólo en una factura del mismo proveedor, de remitos recibidos y con el mismo artículo.";
 
 const PROPIOS: Record<string, string> = {
   CP001: INMUTABLE,
@@ -50,6 +54,10 @@ const PROPIOS: Record<string, string> = {
   nota_sin_precios: NOTA_SIN_PRECIOS,
   CP014: CON_NOTAS,
   factura_con_notas: CON_NOTAS,
+  RC004: REMITO_INEXISTENTE,
+  remito_inexistente: REMITO_INEXISTENTE,
+  RC009: FACTURACION,
+  facturacion_invalida: FACTURACION,
   "23503": "El proveedor, un artículo o una materia prima ya no existen. Recargá la página.",
 };
 
@@ -58,6 +66,9 @@ const SIN_MATERIA_PRIMA = new Set(["CP007", "articulo_sin_materia_prima"]);
 
 /** El mensaje de la base dice qué materia prima tiene dos renglones elegidos. */
 const MATERIA_PRIMA_REPETIDA = new Set(["CP011", "materia_prima_repetida"]);
+
+/** El mensaje de la base dice qué renglón de remito y cuánto le queda pendiente. */
+const EXCEDE_PENDIENTE = new Set(["RC010", "excede_pendiente"]);
 
 /** Claves únicas (23505), por nombre del índice. */
 const MENSAJES_UNICO: [indice: string, mensaje: string][] = [
@@ -97,6 +108,9 @@ export function mensajeErrorComprobanteCompra(error: ErrorBase, accion = "guarda
     return `${error.message} Asociala en el catálogo del proveedor.`;
   }
   if ((error.code && MATERIA_PRIMA_REPETIDA.has(error.code)) || (error.hint && MATERIA_PRIMA_REPETIDA.has(error.hint))) {
+    return error.message;
+  }
+  if ((error.code && EXCEDE_PENDIENTE.has(error.code)) || (error.hint && EXCEDE_PENDIENTE.has(error.hint))) {
     return error.message;
   }
   // Object.hasOwn: una pista como "constructor" no tiene que encontrar lo heredado de Object.
