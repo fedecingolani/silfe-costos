@@ -160,12 +160,15 @@ export async function actualizarArticulo(
   const entrada = datosArticulo(formData);
   if ("error" in entrada) return { error: entrada.error };
   const supabase = await createClient();
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from("proveedor_articulo")
     .update({ ...entrada.datos, activo: formData.get("activo") === "on" })
     .eq("id", String(formData.get("id")))
-    .eq("proveedor_id", proveedorId);
+    .eq("proveedor_id", proveedorId)
+    .select("id");
   if (error) return { error: mensajeErrorArticulo("actualizar", error) };
+  // Sin filas: alguien borró el artículo mientras se editaba.
+  if (!data?.length) return { error: "El artículo ya no existe. Recargá la página." };
   refrescar(proveedorId);
   redirect(`/proveedores/${proveedorId}`);
 }

@@ -7,7 +7,7 @@
 begin;
 create extension if not exists pgtap with schema extensions;
 
-select plan(38);
+select plan(43);
 
 -- ----- Datos de prueba ---------------------------------------------------
 
@@ -38,6 +38,12 @@ select lives_ok(
     where id = '00000000-0000-4000-8000-0000000000c1'$$,
   'Se guardan condición IVA, domicilio, CBU y alias válidos'
 );
+-- Paridad con CONDICIONES_IVA de src/lib/tipos.ts: la base acepta las cuatro.
+select lives_ok(
+  format('update proveedor set condicion_iva = %L where id = %L', c, '00000000-0000-4000-8000-0000000000c2'),
+  format('Se acepta la condición frente al IVA %s', c)
+)
+from unnest(array['Responsable Inscripto', 'Monotributista', 'Exento', 'Consumidor Final']) as c;
 select throws_ok(
   $$update proveedor set condicion_iva = 'Inscripto' where id = '00000000-0000-4000-8000-0000000000c1'$$,
   '23514', null, 'La condición frente al IVA tiene que ser una de las conocidas'
@@ -84,6 +90,17 @@ select has_trigger('public', 'proveedor_articulo', 'trg_proveedor_articulo_actua
 insert into proveedor_articulo (id, proveedor_id, codigo, descripcion, unidad, materia_prima_id) values
   ('00000000-0000-4000-8000-0000000000d1', '00000000-0000-4000-8000-0000000000c1',
    'SG-8', 'SOGA PP diam 8MM', 'rollo', '00000000-0000-4000-8000-0000000000b1');
+
+-- actualizado_en: el alta lo deja en el pasado y una modificación lo renueva.
+insert into proveedor_articulo (id, proveedor_id, descripcion, actualizado_en) values
+  ('00000000-0000-4000-8000-0000000000d2', '00000000-0000-4000-8000-0000000000c1',
+   'Artículo viejo', '2000-01-01 00:00:00+00');
+update proveedor_articulo set unidad = 'caja' where id = '00000000-0000-4000-8000-0000000000d2';
+select ok(
+  (select actualizado_en > '2000-01-01 00:00:00+00'::timestamptz
+   from proveedor_articulo where id = '00000000-0000-4000-8000-0000000000d2'),
+  'Modificar un artículo renueva actualizado_en'
+);
 
 select is(
   (select factor_conversion from proveedor_articulo where id = '00000000-0000-4000-8000-0000000000d1'),
