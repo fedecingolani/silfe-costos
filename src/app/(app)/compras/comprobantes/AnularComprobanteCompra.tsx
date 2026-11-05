@@ -33,7 +33,7 @@ export function AnularComprobanteCompra({ id }: { id: string }) {
           })
         }
       />
-      <ModalError estado={resultado} />
+      <ModalError estado={resultado} titulo="No se pudo anular" />
     </>
   );
 }
