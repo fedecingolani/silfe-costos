@@ -33,14 +33,17 @@ import {
   type LetraCompra,
   type ProveedorArticulo,
   type TipoComprobanteCompra,
+  type PrecioComprobanteCompra,
   type TipoPercepcionCompra,
 } from "@/lib/tipos";
 import { Confirmacion } from "../../remitos/Confirmacion";
+import { ActualizarPrecios } from "./ActualizarPrecios";
 import {
   articulosDelProveedor,
   borrarComprobanteCompra,
   confirmarComprobanteCompra,
   guardarComprobanteCompra,
+  preciosComprobanteCompra,
   type ResultadoComprobanteCompra,
 } from "./acciones";
 import type { ComprobanteCompraCargado, ContextoEditorCompra, MateriaPrimaOfrecida } from "./datos";
@@ -87,6 +90,11 @@ export function EditorComprobanteCompra({
   const proveedorPedido = useRef<string>(guardado?.comprobante.proveedor_id ?? "");
   const [resultado, setResultado] = useState<ResultadoComprobanteCompra | undefined>(undefined);
   const [aviso, setAviso] = useState<string | null>(null);
+  // Editor abierto en «nuevo»: al confirmar se navega a la dirección del
+  // comprobante (la de history.replaceState no la conoce el router).
+  const abiertoComoNuevo = useRef(guardado === null);
+  // Comprobante guardado a punto de confirmarse, con sus precios para elegir.
+  const [porConfirmar, setPorConfirmar] = useState<{ id: string; lineas: PrecioComprobanteCompra[] } | null>(null);
 
   // Las filas se arman en el navegador: sus claves salen de un contador del módulo.
   const [editor, setEditor] = useState<EstadoEditor>(() =>
@@ -178,21 +186,39 @@ export function EditorComprobanteCompra({
     });
   }
 
-  /** Guarda y confirma. Si la confirmación falla, el borrador queda guardado. */
-  function confirmar() {
+  /**
+   * Guarda y abre la confirmación con los precios de la factura para elegir
+   * cuáles se actualizan. Si algo falla, el borrador queda guardado. Sin
+   * navegar (desmontaría el editor y se perdería el error): sólo se ajusta
+   * la dirección al comprobante.
+   */
+  function prepararConfirmacion() {
     setAviso(null);
     iniciar(async () => {
       const guardadoId = await guardar();
       if (!guardadoId) return;
-      const r = await confirmarComprobanteCompra(guardadoId);
-      if (r.error) {
-        // El borrador quedó guardado. Sin navegar (desmontaría el editor y
-        // se perdería el error): sólo se ajusta la dirección al comprobante.
+      if (id === null) window.history.replaceState(null, "", `${RUTA}/${guardadoId}`);
+      const r = await preciosComprobanteCompra(guardadoId);
+      if ("error" in r) {
         setResultado({ error: r.error });
-        if (id === null) window.history.replaceState(null, "", `${RUTA}/${guardadoId}`);
         return;
       }
-      if (id === null) router.replace(`${RUTA}/${guardadoId}`);
+      setPorConfirmar({ id: guardadoId, lineas: r.lineas });
+    });
+  }
+
+  /** Confirma el comprobante guardado y actualiza los precios elegidos, todo junto. */
+  function confirmar(actualizarPrecios: string[]) {
+    if (!porConfirmar) return;
+    const guardadoId = porConfirmar.id;
+    setPorConfirmar(null);
+    iniciar(async () => {
+      const r = await confirmarComprobanteCompra(guardadoId, actualizarPrecios);
+      if (r.error) {
+        setResultado({ error: r.error });
+        return;
+      }
+      if (abiertoComoNuevo.current) router.replace(`${RUTA}/${guardadoId}`);
       else router.refresh();
     });
   }
@@ -598,15 +624,15 @@ export function EditorComprobanteCompra({
         <button type="button" disabled={pendiente} onClick={guardarBorrador} className="boton-primario">
           {pendiente ? "Guardando…" : "Guardar borrador"}
         </button>
-        <Confirmacion
-          boton="Confirmar"
-          clase="boton-secundario"
-          titulo="¿Confirmar el comprobante?"
-          mensaje="Se guarda y se confirma. Después no se puede modificar ni borrar: sólo anular."
-          confirmar="Confirmar"
-          deshabilitado={pendiente}
-          onConfirmar={confirmar}
-        />
+        <button
+          type="button"
+          disabled={pendiente}
+          onClick={prepararConfirmacion}
+          title="Se guarda y se confirma; antes elegís qué precios de materias primas se actualizan."
+          className="boton-secundario"
+        >
+          Confirmar
+        </button>
         {id && (
           <Confirmacion
             boton="Borrar"
@@ -620,6 +646,13 @@ export function EditorComprobanteCompra({
           />
         )}
       </div>
+      {porConfirmar && (
+        <ActualizarPrecios
+          lineas={porConfirmar.lineas}
+          onCancelar={() => setPorConfirmar(null)}
+          onConfirmar={confirmar}
+        />
+      )}
       <ModalError estado={resultado} />
     </div>
   );

@@ -114,6 +114,26 @@ export type ComprobanteCompraPercepcion = {
   importe: number;
 };
 
+/**
+ * Un renglón con materia prima de un comprobante de compra, con el precio
+ * de la factura y el vigente del proveedor (precios_comprobante_compra).
+ */
+export type PrecioComprobanteCompra = {
+  comprobante_compra_item_id: string;
+  orden: number;
+  descripcion: string;
+  materia_prima_id: string;
+  materia_prima_codigo: string;
+  materia_prima_nombre: string;
+  unidad_compra: string;
+  /** Por unidad de compra; sin IVA en A y M, con el IVA no computable en B y C. */
+  precio_factura: number;
+  /** Último precio del proveedor a la fecha del comprobante; null si no tiene. */
+  precio_vigente: number | null;
+  incluye_iva: boolean | null;
+  cambio: boolean;
+};
+
 export type ProveedorContacto = {
   id: string;
   proveedor_id: string;

@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 import { mensajeErrorComprobanteCompra } from "./errores";
 
 describe("mensajeErrorComprobanteCompra", () => {
-  it("traduce cada código CP001–CP009 a un mensaje propio", () => {
-    const codigos = ["CP001", "CP002", "CP003", "CP004", "CP005", "CP006", "CP007", "CP008", "CP009"];
+  it("traduce cada código CP001–CP011 a un mensaje propio", () => {
+    const codigos = ["CP001", "CP002", "CP003", "CP004", "CP005", "CP006", "CP007", "CP008", "CP009", "CP010", "CP011"];
     const mensajes = codigos.map((code) => mensajeErrorComprobanteCompra({ code, message: "texto de la base" }));
     for (const mensaje of mensajes) expect(mensaje).not.toMatch(/^No se pudo/);
     expect(new Set(mensajes).size).toBe(codigos.length);
@@ -31,6 +31,12 @@ describe("mensajeErrorComprobanteCompra", () => {
     expect(mensajeErrorComprobanteCompra({ code: "CP007", message: base })).toBe(
       `${base} Asociala en el catálogo del proveedor.`,
     );
+  });
+
+  it("CP011 muestra el mensaje de la base, que dice qué materia prima", () => {
+    const base = 'Elegiste dos renglones de "Malla": el precio se actualiza con uno solo.';
+    expect(mensajeErrorComprobanteCompra({ code: "CP011", message: base })).toBe(base);
+    expect(mensajeErrorComprobanteCompra({ hint: "materia_prima_repetida", message: base })).toBe(base);
   });
 
   it("número repetido y claves foráneas", () => {

@@ -1,7 +1,8 @@
 /**
  * Mensajes legibles de los errores de la base al guardar, confirmar, anular
  * o borrar comprobantes de compra (SQLSTATE CP001–CP009, ver
- * 20261105000003_comprobantes_compra.sql). Cada código trae su pista (HINT)
+ * 20261105000003_comprobantes_compra.sql; CP010–CP011, ver
+ * 20261105000005_compras_actualizar_precios.sql). Cada código trae su pista (HINT)
  * con el motivo: se busca por las dos, por si llega sólo una. Las acciones
  * devuelven el mensaje en lugar de lanzarlo.
  */
@@ -17,6 +18,7 @@ const SIN_ITEMS = "Agregá al menos un renglón antes de confirmar el comprobant
 const TOTAL = "El total del comprobante tiene que ser mayor que cero.";
 const OTRO_PROVEEDOR = "Hay renglones con artículos de otro proveedor. Elegí artículos del proveedor del comprobante.";
 const ALICUOTA = "Los comprobantes B y C no discriminan IVA: sacá la alícuota de los renglones.";
+const SIN_PRECIO = "Sólo se actualiza el precio de renglones del comprobante con materia prima. Recargá la página.";
 
 const PROPIOS: Record<string, string> = {
   CP001: INMUTABLE,
@@ -35,11 +37,16 @@ const PROPIOS: Record<string, string> = {
   articulo_de_otro_proveedor: OTRO_PROVEEDOR,
   CP009: ALICUOTA,
   alicuota_no_discriminada: ALICUOTA,
+  CP010: SIN_PRECIO,
+  renglon_sin_precio: SIN_PRECIO,
   "23503": "El proveedor, un artículo o una materia prima ya no existen. Recargá la página.",
 };
 
 /** El mensaje de la base dice qué artículo no tiene materia prima. */
 const SIN_MATERIA_PRIMA = new Set(["CP007", "articulo_sin_materia_prima"]);
+
+/** El mensaje de la base dice qué materia prima tiene dos renglones elegidos. */
+const MATERIA_PRIMA_REPETIDA = new Set(["CP011", "materia_prima_repetida"]);
 
 /** Claves únicas (23505), por nombre del índice. */
 const MENSAJES_UNICO: [indice: string, mensaje: string][] = [
@@ -77,6 +84,9 @@ export function mensajeErrorComprobanteCompra(error: ErrorBase, accion = "guarda
   }
   if ((error.code && SIN_MATERIA_PRIMA.has(error.code)) || (error.hint && SIN_MATERIA_PRIMA.has(error.hint))) {
     return `${error.message} Asociala en el catálogo del proveedor.`;
+  }
+  if ((error.code && MATERIA_PRIMA_REPETIDA.has(error.code)) || (error.hint && MATERIA_PRIMA_REPETIDA.has(error.hint))) {
+    return error.message;
   }
   // Object.hasOwn: una pista como "constructor" no tiene que encontrar lo heredado de Object.
   const propio = (clave: string | null | undefined) => (clave && Object.hasOwn(PROPIOS, clave) ? PROPIOS[clave] : undefined);
