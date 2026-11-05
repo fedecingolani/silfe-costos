@@ -9,7 +9,7 @@
 begin;
 create extension if not exists pgtap with schema extensions;
 
-select plan(76);
+select plan(78);
 
 -- ---------------------------------------------------------------------
 -- Estructura
@@ -347,6 +347,19 @@ select is(
 select throws_ok(
   format('select confirmar_comprobante_compra(%L)', (select id from cc where nombre = 'sin_mp')),
   'CP007', null, 'No se confirma con un artículo sin materia prima'
+);
+-- La marca de la transacción sola no saltea las reglas: las controla el trigger.
+select throws_ok(
+  format($$select set_config('compras.confirmando', %L, true);
+    update comprobante_compra set estado = 'confirmado' where id = %L$$,
+    (select id from cc where nombre = 'cero'), (select id from cc where nombre = 'cero')),
+  'CP006', null, 'Con SQL directo tampoco se confirma un comprobante con total cero'
+);
+select throws_ok(
+  format($$select set_config('compras.confirmando', %L, true);
+    update comprobante_compra set estado = 'confirmado' where id = %L$$,
+    (select id from cc where nombre = 'sin_mp'), (select id from cc where nombre = 'sin_mp')),
+  'CP007', null, 'Con SQL directo tampoco se confirma con un artículo sin materia prima'
 );
 -- Asociar la materia prima en el catálogo destraba la confirmación.
 update proveedor_articulo set materia_prima_id = '00000000-0000-4000-8000-0000000001b1'

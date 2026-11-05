@@ -300,6 +300,22 @@ begin
       raise exception 'Un comprobante de compra se confirma sólo con confirmar_comprobante_compra.'
         using errcode = 'CP002', hint = 'transicion_invalida';
     end if;
+    -- Las reglas de la confirmación se repiten acá: la marca de la
+    -- transacción se puede poner a mano, así que no alcanza como control.
+    if new.total <= 0 then
+      raise exception 'El total del comprobante tiene que ser mayor que cero.'
+        using errcode = 'CP006', hint = 'total_no_positivo';
+    end if;
+    if exists (
+      select 1
+      from public.comprobante_compra_item i
+      join public.proveedor_articulo a on a.id = i.proveedor_articulo_id
+      where i.comprobante_compra_id = new.id
+        and (a.materia_prima_id is null or i.materia_prima_id is distinct from a.materia_prima_id)
+    ) then
+      raise exception 'Hay renglones con un artículo sin materia prima asociada.'
+        using errcode = 'CP007', hint = 'articulo_sin_materia_prima';
+    end if;
     new.confirmado_en := coalesce(new.confirmado_en, now());
   elsif new.estado <> 'borrador' then
     raise exception 'Un comprobante en borrador sólo puede pasar a confirmado (o borrarse).'
