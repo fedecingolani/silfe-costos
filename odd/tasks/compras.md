@@ -1,6 +1,6 @@
 # Compras: comprobantes, remitos, pagos y cuentas corrientes de proveedores
 
-Estado: en curso (T1 terminada).
+Estado: en curso (T1 y T2 terminadas).
 
 ## Objetivo
 
@@ -88,7 +88,7 @@ Migraciones nuevas en `supabase/migrations/`, tests pgTAP en `supabase/tests/`, 
 ## Tareas
 
 - [x] **T1 — Proveedor y catálogo de artículos.** Datos fiscales del proveedor (condición IVA, domicilio, CBU, alias). Tabla de artículos del proveedor (código, descripción, unidad, factor, materia prima). ABM del catálogo en el detalle del proveedor.
-- [ ] **T2 — Comprobantes de compra: modelo.** Cabecera, renglones, alícuotas y percepciones. Funciones para guardar borrador, confirmar y anular. Número único por proveedor. Tests pgTAP.
+- [x] **T2 — Comprobantes de compra: modelo.** Cabecera, renglones, alícuotas y percepciones. Funciones para guardar borrador, confirmar y anular. Número único por proveedor. Tests pgTAP.
 - [ ] **T3 — Comprobantes de compra: pantallas.** Listado, alta y detalle. Editor con selección de materia prima y alta del artículo del proveedor en el momento. Menú Compras → Comprobantes.
 - [ ] **T4 — Actualización de precios al confirmar.** Comparación por renglón, casillas y alta en `precio_materia_prima`.
 - [ ] **T5 — Remitos de compra: modelo.** Cabecera y renglones, vínculo parcial de renglones de factura con renglones de remito, bloqueo del remito facturado, vista de pendientes. Tests pgTAP.
@@ -136,6 +136,50 @@ Migraciones nuevas en `supabase/migrations/`, tests pgTAP en `supabase/tests/`, 
   - Los textos nuevos usan formas impersonales y el resto de la app usa voseo.
   - El dev server que estaba corriendo mostraba un error de hidratación del menú, por código viejo en el servidor. No tiene relación con T1.
 
+- **PR:** #34, con base `main`.
+- **Revisión de la rama completa contra main:** aprobada, con tres sugerencias que se resolvieron en T2: paridad de la condición frente al IVA, test real del trigger de `actualizado_en` y error al editar un artículo borrado.
+
+### T2 — Comprobantes de compra: modelo
+
+- **Ruta:** delegada a un writer. El ajuste posterior a la revisión se hizo inline.
+- **Rama:** `feat/compras-02-comprobantes-modelo`, apilada sobre T1.
+- **Commits:**
+  - `bac9447` seguimientos de T1
+  - `a2c563b` modelo
+  - `86a132b` reglas de confirmación en el trigger
+- **Migraciones:** `20261105000003_comprobantes_compra.sql` y `20261105000004_rls_comprobantes_compra.sql`.
+- **Tablas:** `comprobante_compra`, `comprobante_compra_item` y `comprobante_compra_percepcion`.
+- **RPC:**
+  - `guardar_comprobante_compra(p_id, p_comprobante, p_items, p_percepciones)`. Cada renglón lleva `proveedor_articulo_id`, `articulo_nuevo` (busca el artículo por código o descripción, o lo crea) o ninguno, si es un renglón libre.
+  - `confirmar_comprobante_compra(p_id)`.
+  - `anular_comprobante_compra(p_id)`.
+- **Totales:** los calculan triggers, nunca el cliente, con `fn_comprobante_compra_totales`.
+  - A y M discriminan IVA por alícuota.
+  - En B y C todo va a no gravado, y una alícuota se rechaza con CP009.
+  - Las percepciones se suman por tipo.
+- **Materia prima del renglón:** se copia siempre del artículo. Al confirmar se refresca, así que asociarla en el catálogo destraba la confirmación.
+- **Número duplicado:** lo rechaza el índice único (23505), salvo que el anterior esté anulado.
+- **Códigos de error:**
+  - CP001 inmutable
+  - CP002 transición
+  - CP003 borrado
+  - CP004 inexistente
+  - CP005 sin renglones
+  - CP006 total no positivo
+  - CP007 artículo sin materia prima
+  - CP008 artículo de otro proveedor
+  - CP009 alícuota no discriminada
+- **Mensajes en la app:** se traducen en `src/lib/compras/comprobantes/errores.ts`.
+- **RED → GREEN:**
+  - pgTAP falló 9 de 9 sin la migración.
+  - Vitest falló porque el módulo no existía.
+  - Ajuste de la revisión: 2 tests en rojo (el bypass) y luego en verde.
+- **Checks:** typecheck y lint OK. Vitest con 998 tests y pgTAP con 1061, todo en verde.
+- **Revisión RDD:** riesgo medio, concedida y aprobada.
+  - El aviso R3-confirm-guc-bypass (la marca `compras.confirmando` se podía poner a mano y saltear las reglas) se corrigió: el trigger ahora exige total > 0 y artículos con materia prima.
+  - La sugerencia de testear el caso sin filas de `actualizarArticulo` quedó sin test, porque es una Server Action que habla directo con Supabase.
+- **Pendientes:** el trigger diferido "con renglones" solo tiene un test de existencia, porque CP001 impide llegar a ese caso dentro de un test.
+
 ## Próximo paso
 
-T2 (modelo de comprobantes de compra) en `feat/compras-02-comprobantes-modelo`, apilada sobre T1.
+T3 (pantallas de comprobantes de compra), apilada sobre T2.
