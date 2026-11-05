@@ -1,6 +1,6 @@
 # Compras: comprobantes, remitos, pagos y cuentas corrientes de proveedores
 
-Estado: en curso (definición cerrada, implementación sin empezar).
+Estado: en curso (T1 terminada).
 
 ## Objetivo
 
@@ -87,7 +87,7 @@ Migraciones nuevas en `supabase/migrations/`, tests pgTAP en `supabase/tests/`, 
 
 ## Tareas
 
-- [ ] **T1 — Proveedor y catálogo de artículos.** Datos fiscales del proveedor (condición IVA, domicilio, CBU, alias). Tabla de artículos del proveedor (código, descripción, unidad, factor, materia prima). ABM del catálogo en el detalle del proveedor.
+- [x] **T1 — Proveedor y catálogo de artículos.** Datos fiscales del proveedor (condición IVA, domicilio, CBU, alias). Tabla de artículos del proveedor (código, descripción, unidad, factor, materia prima). ABM del catálogo en el detalle del proveedor.
 - [ ] **T2 — Comprobantes de compra: modelo.** Cabecera, renglones, alícuotas y percepciones. Funciones para guardar borrador, confirmar y anular. Número único por proveedor. Tests pgTAP.
 - [ ] **T3 — Comprobantes de compra: pantallas.** Listado, alta y detalle. Editor con selección de materia prima y alta del artículo del proveedor en el momento. Menú Compras → Comprobantes.
 - [ ] **T4 — Actualización de precios al confirmar.** Comparación por renglón, casillas y alta en `precio_materia_prima`.
@@ -111,8 +111,31 @@ Migraciones nuevas en `supabase/migrations/`, tests pgTAP en `supabase/tests/`, 
 
 ## Progreso
 
-Sin tareas empezadas.
+### T1 — Proveedor y catálogo de artículos
+
+- **Ruta:** delegada a un writer, porque toca más de 2 archivos no triviales. El fix de la revisión se hizo inline.
+- **Rama:** `feat/compras-01-proveedor-articulos`.
+- **Commits:**
+  - `2f5fdde` modelo (migraciones `20261105000001`/`000002` y pgTAP)
+  - `35c9499` pantallas
+  - `841fb44` fix de la revisión
+- **Modelo:**
+  - `proveedor` suma `condicion_iva`, `domicilio`, `cbu` (22 dígitos) y `alias` (6–20).
+  - `proveedor_articulo` tiene factor 1 por defecto y `materia_prima_id` opcional (`on delete restrict`).
+  - Hay una clave única por proveedor sobre el código, o sobre la descripción cuando no hay código.
+- **Pantalla:** el detalle del proveedor tiene las secciones "Datos fiscales" y "Artículos del proveedor", con alta y edición en un modal.
+- **RED → GREEN:**
+  - pgTAP: falló 23 de 23 sin la migración y pasó después.
+  - Vitest: falló porque el módulo no existía y pasó después.
+  - Fix de la revisión: 2 tests en rojo y luego en verde.
+- **Checks:** typecheck y lint OK. Vitest con 991 tests y pgTAP con 978, todo en verde.
+- **Navegador:** se agregó el artículo "SOGA PP 8MM ROLLO 200M" (rollo, factor 10,5) asociado a la Soga 8mm.
+- **Revisión RDD:** riesgo medio, concedida y aprobada.
+  - El revisor dejó dos observaciones informativas, ambas corregidas en `841fb44`: el factor fuera del rango de `numeric(20,8)` y el mensaje de una clave foránea rota al guardar.
+- **Pendientes:**
+  - Los textos nuevos usan formas impersonales y el resto de la app usa voseo.
+  - El dev server que estaba corriendo mostraba un error de hidratación del menú, por código viejo en el servidor. No tiene relación con T1.
 
 ## Próximo paso
 
-T1 en la rama `feat/compras-01-proveedor-articulos`.
+T2 (modelo de comprobantes de compra) en `feat/compras-02-comprobantes-modelo`, apilada sobre T1.
