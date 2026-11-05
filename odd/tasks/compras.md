@@ -90,7 +90,11 @@ Migraciones nuevas en `supabase/migrations/`, tests pgTAP en `supabase/tests/`, 
 - [x] **T1 — Proveedor y catálogo de artículos.** Datos fiscales del proveedor (condición IVA, domicilio, CBU, alias). Tabla de artículos del proveedor (código, descripción, unidad, factor, materia prima). ABM del catálogo en el detalle del proveedor.
 - [x] **T2 — Comprobantes de compra: modelo.** Cabecera, renglones, alícuotas y percepciones. Funciones para guardar borrador, confirmar y anular. Número único por proveedor. Tests pgTAP.
 - [x] **T3 — Comprobantes de compra: pantallas.** Listado, alta y detalle. Editor con selección de materia prima y alta del artículo del proveedor en el momento. Menú Compras → Comprobantes.
-- [ ] **T4 — Actualización de precios al confirmar.** Comparación por renglón, casillas y alta en `precio_materia_prima`.
+- [x] **T4 — Actualización de precios al confirmar.** Comparación por renglón, casillas y alta en `precio_materia_prima`.
+- [ ] **T4b — Notas de crédito y débito asociadas a una factura.**
+  - **Desde la factura:** una factura confirmada tiene botones "Nota de crédito" y "Nota de débito". Abren una nota asociada a esa factura con sus renglones y precios ya cargados, para ajustarlos.
+  - **Nota suelta:** se carga con los importes que quiera el usuario.
+  - **Precios de costeo:** las notas no los actualizan. El diálogo "Actualizar precios" queda solo para facturas.
 - [ ] **T5 — Remitos de compra: modelo.** Cabecera y renglones, vínculo parcial de renglones de factura con renglones de remito, bloqueo del remito facturado, vista de pendientes. Tests pgTAP.
 - [ ] **T6 — Remitos de compra: pantallas.** Listado, alta y detalle, y facturar desde remitos. Menú Compras → Remitos.
 - [ ] **T7 — Pagos: modelo.** Orden de pago, medios (efectivo, transferencia, cheques de terceros, cheques propios), imputación a comprobantes y saldo a favor. Tests pgTAP.
@@ -215,6 +219,35 @@ Migraciones nuevas en `supabase/migrations/`, tests pgTAP en `supabase/tests/`, 
   - A 1024 px la tabla de renglones queda apretada: precio e IVA se ven angostos y la columna de importe se corta. Es el mismo problema de scroll horizontal que quedó en remitos.
   - El título de `ModalError` dice siempre "No se pudo guardar".
 
+- **PR:** #36, con base en la rama de T2.
+
+### T4 — Actualización de precios al confirmar
+
+- **Ruta:** delegada a un writer.
+- **Rama:** `feat/compras-04-actualizar-precios`, apilada sobre T3.
+- **Commits:**
+  - `a6ae6c7` SQL
+  - `4e1398c` pantalla
+- **Migración:** `20261105000005_compras_actualizar_precios.sql`.
+  - `precios_comprobante_compra(p_id)` devuelve, por cada renglón con materia prima:
+    - el precio de la factura por unidad de compra: precio × (1 − descuento) ÷ factor, con 4 decimales;
+    - el precio vigente del proveedor a la fecha del comprobante;
+    - la marca `cambio`.
+  - `confirmar_comprobante_compra(p_id, p_actualizar_precios uuid[] default '{}')` inserta los precios elegidos en la misma transacción que la confirmación.
+    - El precio nuevo pasa a ser el preferido si el preferido anterior era del mismo proveedor o si no había ninguno, igual que en la carga manual.
+    - Errores nuevos: CP010 (renglón ajeno o sin materia prima) y CP011 (materia prima repetida).
+- **En B y C:** se toma el precio tal cual, con un IVA que no se computa.
+- **Diálogo "Actualizar precios":** al confirmar. Las casillas vienen marcadas cuando el precio cambió.
+- **RED → GREEN:** pgTAP falló 3 de 32 sin las funciones. En Vitest, `precios.test.ts` falló porque el módulo no existía y `errores.test.ts` tuvo 2 tests en rojo; después todo pasó.
+- **Checks:** typecheck y lint OK. Vitest con 1055 tests y pgTAP con 1094, todo en verde.
+- **Navegador:** se cargó una FC A 00003-00012400 de Sogas Andinas con SG-8 a $1.450.
+  - El diálogo mostró el precio vigente de $6.200 y una diferencia de −76,6%, con la casilla marcada.
+  - Al confirmar, la materia prima quedó con $1.450 como preferido, con la observación "Compra FC A 00003-00012400", y el costeo pasó a $74,74 por metro.
+- **Revisión RDD:** pendiente. El usuario interrumpió la pregunta de consentimiento.
+- **Pendientes y decisiones:**
+  - Las notas no actualizan precios (decisión del usuario; se implementa en T4b).
+  - Idea a evaluar: resaltar las diferencias grandes, como el −76,6%, que es justo el caso de "precio raro".
+
 ## Próximo paso
 
-T4 (actualización de precios al confirmar), apilada sobre T3.
+T4b (notas asociadas a una factura), apilada sobre T4.
