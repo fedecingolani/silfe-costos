@@ -27,7 +27,7 @@ const SECCIONES: { titulo: string; items: Item[] }[] = [
   {
     titulo: "Compras",
     items: [
-      { texto: "Comprobantes" },
+      { href: "/compras/comprobantes", texto: "Comprobantes" },
       { texto: "Pagos" },
       { href: "/proveedores", texto: "Proveedores" },
       { texto: "Cuentas corrientes" },
