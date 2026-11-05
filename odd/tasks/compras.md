@@ -178,6 +178,7 @@ Migraciones nuevas en `supabase/migrations/`, tests pgTAP en `supabase/tests/`, 
 - **Revisión RDD:** riesgo medio, concedida y aprobada.
   - El aviso R3-confirm-guc-bypass (la marca `compras.confirmando` se podía poner a mano y saltear las reglas) se corrigió: el trigger ahora exige total > 0 y artículos con materia prima.
   - La sugerencia de testear el caso sin filas de `actualizarArticulo` quedó sin test, porque es una Server Action que habla directo con Supabase.
+- **Revisión de la rama completa (T1 + T2) contra main:** aprobada. El aviso R3-confirm-total-check-before-recompute (el trigger miraba el total de la fila antes de recalcularlo, así que `total = 999` a mano pasaba) se corrigió en `244bd36`: ahora controla el total recalculado. Hubo un test en rojo y luego en verde. pgTAP quedó con 1062 tests.
 - **Pendientes:** el trigger diferido "con renglones" solo tiene un test de existencia, porque CP001 impide llegar a ese caso dentro de un test.
 
 ## Próximo paso
