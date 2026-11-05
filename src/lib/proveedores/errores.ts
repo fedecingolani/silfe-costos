@@ -8,6 +8,9 @@
 /** Lo que importa de un error de Supabase (PostgREST). */
 export type ErrorBase = { code?: string; message: string };
 
+export const MENSAJE_ARTICULO_EN_USO =
+  "El artículo se usa en comprobantes o remitos: hay que desactivarlo en lugar de borrarlo.";
+
 /** Índice único (nombre en la base) → mensaje. */
 const UNICOS: Record<string, string> = {
   proveedor_nombre_uq: "Ya existe un proveedor con ese nombre.",
@@ -28,8 +31,6 @@ export function mensajeErrorProveedor(accion: string, error: ErrorBase): string 
 export function mensajeErrorArticulo(accion: string, error: ErrorBase): string {
   const unico = mensajeUnico(error);
   if (unico) return unico;
-  if (error.code === "23503") {
-    return "El artículo se usa en comprobantes o remitos: hay que desactivarlo en lugar de borrarlo.";
-  }
+  if (error.code === "23503") return MENSAJE_ARTICULO_EN_USO;
   return `No se pudo ${accion} el artículo: ${error.message}`;
 }

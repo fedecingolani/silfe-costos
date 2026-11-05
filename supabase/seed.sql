@@ -61,6 +61,24 @@ join unidad_medida uc on uc.codigo = m.u_compra
 join unidad_medida uu on uu.codigo = m.u_uso
 on conflict (codigo) do nothing;
 
+-- Datos fiscales y artículos de proveedores ---------------------------
+update proveedor p set condicion_iva = d.condicion, domicilio = d.domicilio
+from (values
+  ('Textiles del Valle SRL', 'Responsable Inscripto', 'Av. San Martín 1234, Mendoza'),
+  ('Sogas Andinas',          'Responsable Inscripto', 'Ruta 40 km 3, Luján de Cuyo')
+) as d(nombre, condicion, domicilio)
+where p.nombre = d.nombre and p.condicion_iva is null;
+
+insert into proveedor_articulo (proveedor_id, codigo, descripcion, unidad, factor_conversion, materia_prima_id)
+select pv.id, a.codigo, a.descripcion, a.unidad, a.factor, mp.id
+from (values
+  ('Sogas Andinas',          'SG-8',  'SOGA PP diam 8MM',      'kg',    1.0,  'MP-003'),
+  ('Textiles del Valle SRL', 'LN650', 'LONA PVC 650GR ROLLO',  'rollo', 50.0, 'MP-001')
+) as a(proveedor, codigo, descripcion, unidad, factor, mp_codigo)
+join proveedor pv on pv.nombre = a.proveedor
+join materia_prima mp on mp.codigo = a.mp_codigo
+on conflict do nothing;
+
 -- Precios (por unidad de compra) --------------------------------------
 insert into precio_materia_prima (materia_prima_id, proveedor_id, precio, vigente_desde, es_preferido)
 select mp.id, pv.id, p.precio, current_date - 30, true
