@@ -1,6 +1,6 @@
 # Compras: comprobantes, remitos, pagos y cuentas corrientes de proveedores
 
-Estado: en curso (T1 y T2 terminadas).
+Estado: en curso (T1, T2 y T3 terminadas).
 
 ## Objetivo
 
@@ -89,7 +89,7 @@ Migraciones nuevas en `supabase/migrations/`, tests pgTAP en `supabase/tests/`, 
 
 - [x] **T1 — Proveedor y catálogo de artículos.** Datos fiscales del proveedor (condición IVA, domicilio, CBU, alias). Tabla de artículos del proveedor (código, descripción, unidad, factor, materia prima). ABM del catálogo en el detalle del proveedor.
 - [x] **T2 — Comprobantes de compra: modelo.** Cabecera, renglones, alícuotas y percepciones. Funciones para guardar borrador, confirmar y anular. Número único por proveedor. Tests pgTAP.
-- [ ] **T3 — Comprobantes de compra: pantallas.** Listado, alta y detalle. Editor con selección de materia prima y alta del artículo del proveedor en el momento. Menú Compras → Comprobantes.
+- [x] **T3 — Comprobantes de compra: pantallas.** Listado, alta y detalle. Editor con selección de materia prima y alta del artículo del proveedor en el momento. Menú Compras → Comprobantes.
 - [ ] **T4 — Actualización de precios al confirmar.** Comparación por renglón, casillas y alta en `precio_materia_prima`.
 - [ ] **T5 — Remitos de compra: modelo.** Cabecera y renglones, vínculo parcial de renglones de factura con renglones de remito, bloqueo del remito facturado, vista de pendientes. Tests pgTAP.
 - [ ] **T6 — Remitos de compra: pantallas.** Listado, alta y detalle, y facturar desde remitos. Menú Compras → Remitos.
@@ -181,6 +181,40 @@ Migraciones nuevas en `supabase/migrations/`, tests pgTAP en `supabase/tests/`, 
 - **Revisión de la rama completa (T1 + T2) contra main:** aprobada. El aviso R3-confirm-total-check-before-recompute (el trigger miraba el total de la fila antes de recalcularlo, así que `total = 999` a mano pasaba) se corrigió en `244bd36`: ahora controla el total recalculado. Hubo un test en rojo y luego en verde. pgTAP quedó con 1062 tests.
 - **Pendientes:** el trigger diferido "con renglones" solo tiene un test de existencia, porque CP001 impide llegar a ese caso dentro de un test.
 
+- **PR:** #35, con base en la rama de T1.
+
+### T3 — Comprobantes de compra: pantallas
+
+- **Ruta:** delegada a un writer; los arreglos de la revisión se hicieron inline.
+- **Rama:** `feat/compras-03-comprobantes-pantallas`, apilada sobre T2.
+- **Commits:**
+  - `fb4c5d2` librería
+  - `bd77e74` pantallas y menú
+  - `7532f1e` arreglos de la revisión
+- **Pantallas:** en `/compras/comprobantes` (listado con filtros, `nuevo/` y `[id]/`).
+  - **Editor:**
+    - La letra se sugiere por la condición del proveedor frente al IVA.
+    - Los renglones pueden ser un artículo del catálogo (con buscador), un artículo nuevo (con materia prima obligatoria) o un renglón libre.
+    - Las percepciones de IIBB se cargan con provincia.
+    - Los totales se previsualizan con las mismas reglas que la base.
+  - **Vista de solo lectura:** para confirmados y anulados, con la acción Anular.
+  - **Menú:** Compras → Comprobantes.
+- **Librería:** `src/lib/compras/comprobantes/` (`borrador`, `totales`, `numero`, `letra`, `listado`) y `src/lib/compras/provincias.ts`.
+- **RED → GREEN:** 5 archivos de test fallaron porque los módulos no existían; después pasaron 55 tests.
+- **Checks:** typecheck y lint OK. Vitest con 1046 tests, en verde.
+- **Revisión RDD de T3:** riesgo medio, concedida y aprobada. Se corrigieron dos avisos y una sugerencia:
+  - el error de confirmación se perdía al navegar en un comprobante nuevo (ahora se usa `history.replaceState` y se guarda el id en el estado);
+  - un catálogo del proveedor anterior podía pisar al actual (ahora se usa una ref del último proveedor pedido);
+  - el id nulo que podía devolver la RPC.
+- **Revisión de la rama completa (T1–T3) contra main:** no se pudo hacer, porque supera el límite de la herramienta (`lens_context_budget_exceeded`). Cada tarea quedó revisada por separado.
+- **Navegador:** con un usuario de prueba local.
+  - Se cargó una FC A 00003-00012345 de Sogas Andinas: artículo SG-8, 10 kg a $1.000 con 21% de IVA y una percepción de IVA de $300.
+  - La vista previa y la base dieron lo mismo: neto $10.000, IVA $2.100 y total $12.400.
+  - El comprobante se confirmó y aparece en el listado ("1 comprobante").
+- **Pendientes:**
+  - A 1024 px la tabla de renglones queda apretada: precio e IVA se ven angostos y la columna de importe se corta. Es el mismo problema de scroll horizontal que quedó en remitos.
+  - El título de `ModalError` dice siempre "No se pudo guardar".
+
 ## Próximo paso
 
-T3 (pantallas de comprobantes de compra), apilada sobre T2.
+T4 (actualización de precios al confirmar), apilada sobre T3.
