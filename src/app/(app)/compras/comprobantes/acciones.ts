@@ -43,7 +43,8 @@ export async function guardarComprobanteCompra(id: string | null, datos: string)
     parametrosGuardarComprobanteCompra(id, armado.armado),
   );
   if (error) return { error: mensajeErrorComprobanteCompra(error) };
-  const guardadoId = String(data);
+  if (typeof data !== "string" || !UUID.test(data)) return { error: "No se pudo guardar el comprobante: la base no devolvió su id." };
+  const guardadoId = data;
 
   revalidatePath(RUTA);
   revalidatePath(`${RUTA}/${guardadoId}`);

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ModalError } from "@/components/ModalError";
@@ -80,7 +80,11 @@ export function EditorComprobanteCompra({
 }) {
   const router = useRouter();
   const [pendiente, iniciar] = useTransition();
-  const id = guardado?.comprobante.id ?? null;
+  // Un comprobante nuevo toma su id al guardarse: así un segundo intento lo
+  // actualiza en vez de crear otro, aunque el editor siga montado.
+  const [id, setId] = useState<string | null>(guardado?.comprobante.id ?? null);
+  // Último proveedor elegido: descarta catálogos que llegan tarde de uno anterior.
+  const proveedorPedido = useRef<string>(guardado?.comprobante.proveedor_id ?? "");
   const [resultado, setResultado] = useState<ResultadoComprobanteCompra | undefined>(undefined);
   const [aviso, setAviso] = useState<string | null>(null);
 
@@ -135,7 +139,9 @@ export function EditorComprobanteCompra({
       letra: letraElegida ? actual.letra : letraSugerida(elegido?.condicion_iva),
       filas: actual.filas.map((f) => (f.modo === "articulo" ? { ...f, articuloId: null } : f)),
     }));
-    setArticulos(proveedorId ? await articulosDelProveedor(proveedorId) : []);
+    proveedorPedido.current = proveedorId;
+    const catalogo = proveedorId ? await articulosDelProveedor(proveedorId) : [];
+    if (proveedorPedido.current === proveedorId) setArticulos(catalogo);
   }
 
   // ----- Acciones -----------------------------------------------------------
@@ -154,6 +160,7 @@ export function EditorComprobanteCompra({
       setResultado({ error: r.error ?? "No se pudo guardar el comprobante." });
       return null;
     }
+    setId(r.id);
     return r.id;
   }
 
@@ -179,9 +186,10 @@ export function EditorComprobanteCompra({
       if (!guardadoId) return;
       const r = await confirmarComprobanteCompra(guardadoId);
       if (r.error) {
+        // El borrador quedó guardado. Sin navegar (desmontaría el editor y
+        // se perdería el error): sólo se ajusta la dirección al comprobante.
         setResultado({ error: r.error });
-        if (id === null) router.replace(`${RUTA}/${guardadoId}`);
-        else router.refresh();
+        if (id === null) window.history.replaceState(null, "", `${RUTA}/${guardadoId}`);
         return;
       }
       if (id === null) router.replace(`${RUTA}/${guardadoId}`);
