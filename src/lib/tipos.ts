@@ -39,6 +39,81 @@ export type ProveedorArticulo = {
   activo: boolean;
 };
 
+export const TIPOS_COMPROBANTE_COMPRA = ["factura", "nota_credito", "nota_debito"] as const;
+
+export type TipoComprobanteCompra = (typeof TIPOS_COMPROBANTE_COMPRA)[number];
+
+/** A y M discriminan IVA; B y C no (el precio lo incluye). */
+export const LETRAS_COMPRA = ["A", "B", "C", "M"] as const;
+
+export type LetraCompra = (typeof LETRAS_COMPRA)[number];
+
+export const ESTADOS_COMPROBANTE_COMPRA = ["borrador", "confirmado", "anulado"] as const;
+
+export type EstadoComprobanteCompra = (typeof ESTADOS_COMPROBANTE_COMPRA)[number];
+
+export const TIPOS_PERCEPCION_COMPRA = ["iva", "iibb", "otro"] as const;
+
+export type TipoPercepcionCompra = (typeof TIPOS_PERCEPCION_COMPRA)[number];
+
+/** Factura, nota de crédito o de débito de un proveedor. Los totales los calcula la base. */
+export type ComprobanteCompra = {
+  id: string;
+  proveedor_id: string;
+  tipo: TipoComprobanteCompra;
+  letra: LetraCompra;
+  punto_venta: number;
+  numero: number;
+  fecha: string;
+  fecha_vencimiento: string | null;
+  observaciones: string | null;
+  neto_gravado: number;
+  no_gravado: number;
+  exento: number;
+  iva: number;
+  percepcion_iva: number;
+  percepcion_iibb: number;
+  otros_impuestos: number;
+  total: number;
+  estado: EstadoComprobanteCompra;
+  confirmado_en: string | null;
+  anulado_en: string | null;
+  creado_por: string | null;
+  creado_en: string;
+  actualizado_en: string;
+};
+
+/** Renglón de un comprobante de compra: un artículo del proveedor o un renglón libre. */
+export type ComprobanteCompraItem = {
+  id: string;
+  comprobante_compra_id: string;
+  orden: number;
+  proveedor_articulo_id: string | null;
+  /** Copiada del artículo por la base; vacía en un renglón libre. */
+  materia_prima_id: string | null;
+  codigo_proveedor: string | null;
+  descripcion: string;
+  unidad: string | null;
+  cantidad: number;
+  precio_unitario: number;
+  descuento_pct: number;
+  /** Vacía: no gravado (y siempre en B y C). */
+  alicuota_iva: AlicuotaIva | null;
+  exento: boolean;
+  importe: number;
+  iva: number;
+};
+
+export type ComprobanteCompraPercepcion = {
+  id: string;
+  comprobante_compra_id: string;
+  tipo: TipoPercepcionCompra;
+  /** Provincia; obligatoria en iibb. */
+  jurisdiccion: string | null;
+  descripcion: string | null;
+  importe: number;
+};
+
 export type ProveedorContacto = {
   id: string;
   proveedor_id: string;
