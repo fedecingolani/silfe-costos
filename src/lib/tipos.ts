@@ -81,6 +81,8 @@ export type ComprobanteCompra = {
   creado_por: string | null;
   creado_en: string;
   actualizado_en: string;
+  /** Nota de crédito o débito: factura que corrige (confirmada, mismo proveedor y letra). Vacía: suelta. */
+  comprobante_asociado_id: string | null;
 };
 
 /** Renglón de un comprobante de compra: un artículo del proveedor o un renglón libre. */

@@ -2,8 +2,11 @@ import { describe, expect, it } from "vitest";
 import { mensajeErrorComprobanteCompra } from "./errores";
 
 describe("mensajeErrorComprobanteCompra", () => {
-  it("traduce cada código CP001–CP011 a un mensaje propio", () => {
-    const codigos = ["CP001", "CP002", "CP003", "CP004", "CP005", "CP006", "CP007", "CP008", "CP009", "CP010", "CP011"];
+  it("traduce cada código CP001–CP014 a un mensaje propio", () => {
+    const codigos = [
+      "CP001", "CP002", "CP003", "CP004", "CP005", "CP006", "CP007",
+      "CP008", "CP009", "CP010", "CP011", "CP012", "CP013", "CP014",
+    ];
     const mensajes = codigos.map((code) => mensajeErrorComprobanteCompra({ code, message: "texto de la base" }));
     for (const mensaje of mensajes) expect(mensaje).not.toMatch(/^No se pudo/);
     expect(new Set(mensajes).size).toBe(codigos.length);
@@ -20,6 +23,9 @@ describe("mensajeErrorComprobanteCompra", () => {
       ["CP007", "articulo_sin_materia_prima"],
       ["CP008", "articulo_de_otro_proveedor"],
       ["CP009", "alicuota_no_discriminada"],
+      ["CP012", "comprobante_asociado_invalido"],
+      ["CP013", "nota_sin_precios"],
+      ["CP014", "factura_con_notas"],
     ];
     for (const [code, hint] of pares) {
       expect(mensajeErrorComprobanteCompra({ message: "x", hint })).toBe(mensajeErrorComprobanteCompra({ code, message: "x" }));

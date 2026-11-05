@@ -44,6 +44,7 @@ const enviado = (cambios: Partial<ComprobanteCompraEnviado> = {}): ComprobanteCo
   fecha: "2026-11-05",
   fechaVencimiento: "2026-12-05",
   observaciones: "  Entrega parcial ",
+  comprobanteAsociadoId: "",
   renglones: [
     renglon({
       modo: "articulo",
@@ -99,7 +100,25 @@ describe("armarComprobanteCompra", () => {
       fecha: "2026-11-05",
       fecha_vencimiento: "2026-12-05",
       observaciones: "Entrega parcial",
+      comprobante_asociado_id: null,
     });
+  });
+
+  it("una nota manda su factura asociada; vacía, es una nota suelta", () => {
+    expect(armado({ tipo: "nota_credito", comprobanteAsociadoId: COMPROBANTE }).comprobante.comprobante_asociado_id).toBe(
+      COMPROBANTE,
+    );
+    expect(armado({ tipo: "nota_debito", comprobanteAsociadoId: "" }).comprobante.comprobante_asociado_id).toBeNull();
+  });
+
+  it("una factura no lleva factura asociada aunque el editor la conserve", () => {
+    expect(armado({ tipo: "factura", comprobanteAsociadoId: COMPROBANTE }).comprobante.comprobante_asociado_id).toBeNull();
+  });
+
+  it("rechaza una factura asociada que no es un id", () => {
+    expect(errores(enviado({ tipo: "nota_credito", comprobanteAsociadoId: "otra" }))).toContain(
+      "La factura asociada no es válida.",
+    );
   });
 
   it("un artículo existente va con proveedor_articulo_id y sin articulo_nuevo", () => {
@@ -310,6 +329,7 @@ describe("editorComprobanteCompraNuevo", () => {
       fecha: "2026-11-05",
       fechaVencimiento: "",
       observaciones: "",
+      comprobanteAsociadoId: "",
       percepciones: [],
     });
     expect(editor.filas).toHaveLength(1);
@@ -384,6 +404,7 @@ describe("ida y vuelta: comprobante guardado → editor → lo que se guarda", (
     creado_por: null,
     creado_en: "2026-11-01T10:00:00Z",
     actualizado_en: "2026-11-01T10:00:00Z",
+    comprobante_asociado_id: "d0000000-0000-0000-0000-000000000002",
   };
   const item = (cambios: Partial<ComprobanteCompraItem>): ComprobanteCompraItem => ({
     id: "e0000000-0000-0000-0000-000000000001",
@@ -440,6 +461,7 @@ describe("ida y vuelta: comprobante guardado → editor → lo que se guarda", (
       fecha: "2026-11-01",
       fechaVencimiento: "",
       observaciones: "",
+      comprobanteAsociadoId: "d0000000-0000-0000-0000-000000000002",
     });
     expect(editor.filas.map((f) => f.modo)).toEqual(["articulo", "libre"]);
     expect(editor.percepciones[0]).toMatchObject({ tipo: "iibb", jurisdiccion: "Neuquén", descripcion: "", importe: "12.34" });
@@ -459,6 +481,7 @@ describe("ida y vuelta: comprobante guardado → editor → lo que se guarda", (
       fecha: "2026-11-01",
       fecha_vencimiento: null,
       observaciones: null,
+      comprobante_asociado_id: "d0000000-0000-0000-0000-000000000002",
     });
     expect(p.p_items).toEqual([
       {

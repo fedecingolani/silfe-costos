@@ -78,6 +78,8 @@ export type EditorComprobanteCompra = {
   /** yyyy-mm-dd o vacío. */
   fechaVencimiento: string;
   observaciones: string;
+  /** Nota: id de la factura que corrige, o vacío (nota suelta). Una factura lo ignora. */
+  comprobanteAsociadoId: string;
   filas: FilaCompra[];
   percepciones: FilaPercepcion[];
 };
@@ -119,6 +121,7 @@ export function editorComprobanteCompraNuevo(hoy: string): EditorComprobanteComp
     fecha: hoy,
     fechaVencimiento: "",
     observaciones: "",
+    comprobanteAsociadoId: "",
     filas: [filaCompraVacia()],
     percepciones: [],
   };
@@ -156,6 +159,7 @@ export function editorDeComprobanteCompra(
     fecha: comprobante.fecha,
     fechaVencimiento: comprobante.fecha_vencimiento ?? "",
     observaciones: comprobante.observaciones ?? "",
+    comprobanteAsociadoId: comprobante.comprobante_asociado_id ?? "",
     filas: filas.length > 0 ? filas : [filaCompraVacia()],
     percepciones: percepciones.map((p) => ({
       clave: nuevaClave(),
@@ -258,6 +262,8 @@ export type CabeceraCompraGuardada = {
   fecha: string;
   fecha_vencimiento: string | null;
   observaciones: string | null;
+  /** Sólo en una nota: la factura que corrige. */
+  comprobante_asociado_id: string | null;
 };
 
 export type ArticuloNuevoGuardado = {
@@ -446,6 +452,11 @@ export function armarComprobanteCompra(
     errores.push("El vencimiento no puede ser anterior a la fecha del comprobante.");
   }
 
+  // Una factura no lleva factura asociada: el editor la conserva por si se vuelve a nota.
+  const asociadoTexto = typeof enviado.comprobanteAsociadoId === "string" ? enviado.comprobanteAsociadoId.trim() : "";
+  const asociado = tipo === "factura" || asociadoTexto === "" ? null : asociadoTexto;
+  if (asociado !== null && !esUuid(asociado)) errores.push("La factura asociada no es válida.");
+
   if (enviado.renglones.length === 0) errores.push("Agregá al menos un renglón.");
   const items: ItemCompraGuardado[] = [];
   enviado.renglones.forEach((r: unknown, i: number) => {
@@ -473,6 +484,7 @@ export function armarComprobanteCompra(
         fecha: fecha!,
         fecha_vencimiento: vencimiento,
         observaciones: texto(enviado.observaciones),
+        comprobante_asociado_id: asociado,
       },
       items,
       percepciones,

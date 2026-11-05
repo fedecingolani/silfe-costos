@@ -1,5 +1,6 @@
 import "server-only";
 import type { createClient } from "@/lib/supabase/server";
+import type { FacturaAsociable, NotaAsociada } from "@/lib/compras/comprobantes/nota";
 import type {
   ComprobanteCompra,
   ComprobanteCompraItem,
@@ -14,7 +15,7 @@ type Supabase = Awaited<ReturnType<typeof createClient>>;
 export const COLUMNAS_COMPROBANTE_COMPRA =
   "id, proveedor_id, tipo, letra, punto_venta, numero, fecha, fecha_vencimiento, observaciones, neto_gravado, " +
   "no_gravado, exento, iva, percepcion_iva, percepcion_iibb, otros_impuestos, total, estado, confirmado_en, " +
-  "anulado_en, creado_por, creado_en, actualizado_en";
+  "anulado_en, creado_por, creado_en, actualizado_en, comprobante_asociado_id";
 const COLUMNAS_ITEM =
   "id, comprobante_compra_id, orden, proveedor_articulo_id, materia_prima_id, codigo_proveedor, descripcion, unidad, " +
   "cantidad, precio_unitario, descuento_pct, alicuota_iva, exento, importe, iva";
@@ -54,6 +55,51 @@ export async function cargarArticulos(supabase: Supabase, proveedorId: string): 
     ...a,
     factor_conversion: Number(a.factor_conversion),
   }));
+}
+
+/** Columnas de una factura o nota que se lista (asociables, factura asociada y notas). */
+const COLUMNAS_RESUMEN = "id, tipo, letra, punto_venta, numero, fecha, total, estado";
+
+function resumen<T extends { punto_venta: number; numero: number; total: number }>(fila: T): T {
+  return { ...fila, punto_venta: Number(fila.punto_venta), numero: Number(fila.numero), total: Number(fila.total) };
+}
+
+/** Facturas confirmadas de un proveedor y una letra, las más nuevas primero: las que se asocian a una nota. */
+export async function cargarFacturasAsociables(
+  supabase: Supabase,
+  proveedorId: string,
+  letra: string,
+): Promise<FacturaAsociable[] | string> {
+  const { data, error } = await supabase
+    .from("comprobante_compra")
+    .select(COLUMNAS_RESUMEN)
+    .eq("proveedor_id", proveedorId)
+    .eq("letra", letra)
+    .eq("tipo", "factura")
+    .eq("estado", "confirmado")
+    .order("fecha", { ascending: false })
+    .order("numero", { ascending: false })
+    .limit(200);
+  if (error) return `No se pudieron leer las facturas del proveedor: ${error.message}`;
+  return ((data ?? []) as unknown as FacturaAsociable[]).map(resumen);
+}
+
+/** La factura asociada a una nota (cualquier estado: pudo anularse después). */
+export async function cargarFacturaAsociada(supabase: Supabase, id: string): Promise<NotaAsociada | null> {
+  const { data } = await supabase.from("comprobante_compra").select(COLUMNAS_RESUMEN).eq("id", id).maybeSingle();
+  return data ? resumen(data as unknown as NotaAsociada) : null;
+}
+
+/** Notas asociadas a una factura, en el orden en que se emitieron. */
+export async function cargarNotasAsociadas(supabase: Supabase, facturaId: string): Promise<NotaAsociada[] | string> {
+  const { data, error } = await supabase
+    .from("comprobante_compra")
+    .select(COLUMNAS_RESUMEN)
+    .eq("comprobante_asociado_id", facturaId)
+    .order("fecha")
+    .order("creado_en");
+  if (error) return `No se pudieron leer las notas de la factura: ${error.message}`;
+  return ((data ?? []) as unknown as NotaAsociada[]).map(resumen);
 }
 
 export type ComprobanteCompraCargado = {

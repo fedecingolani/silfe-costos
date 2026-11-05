@@ -2,7 +2,8 @@
  * Mensajes legibles de los errores de la base al guardar, confirmar, anular
  * o borrar comprobantes de compra (SQLSTATE CP001–CP009, ver
  * 20261105000003_comprobantes_compra.sql; CP010–CP011, ver
- * 20261105000005_compras_actualizar_precios.sql). Cada código trae su pista (HINT)
+ * 20261105000005_compras_actualizar_precios.sql; CP012–CP014, ver
+ * 20261105000006_compras_notas_asociadas.sql). Cada código trae su pista (HINT)
  * con el motivo: se busca por las dos, por si llega sólo una. Las acciones
  * devuelven el mensaje en lugar de lanzarlo.
  */
@@ -19,6 +20,10 @@ const TOTAL = "El total del comprobante tiene que ser mayor que cero.";
 const OTRO_PROVEEDOR = "Hay renglones con artículos de otro proveedor. Elegí artículos del proveedor del comprobante.";
 const ALICUOTA = "Los comprobantes B y C no discriminan IVA: sacá la alícuota de los renglones.";
 const SIN_PRECIO = "Sólo se actualiza el precio de renglones del comprobante con materia prima. Recargá la página.";
+const ASOCIADO =
+  "La factura asociada tiene que ser una factura confirmada del mismo proveedor y la misma letra. Elegí otra o dejala vacía.";
+const NOTA_SIN_PRECIOS = "Las notas de crédito y débito no actualizan precios de materias primas.";
+const CON_NOTAS = "La factura tiene notas de crédito o débito confirmadas: anulá primero las notas.";
 
 const PROPIOS: Record<string, string> = {
   CP001: INMUTABLE,
@@ -39,6 +44,12 @@ const PROPIOS: Record<string, string> = {
   alicuota_no_discriminada: ALICUOTA,
   CP010: SIN_PRECIO,
   renglon_sin_precio: SIN_PRECIO,
+  CP012: ASOCIADO,
+  comprobante_asociado_invalido: ASOCIADO,
+  CP013: NOTA_SIN_PRECIOS,
+  nota_sin_precios: NOTA_SIN_PRECIOS,
+  CP014: CON_NOTAS,
+  factura_con_notas: CON_NOTAS,
   "23503": "El proveedor, un artículo o una materia prima ya no existen. Recargá la página.",
 };
 

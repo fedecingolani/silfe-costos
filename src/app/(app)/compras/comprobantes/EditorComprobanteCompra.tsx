@@ -21,10 +21,16 @@ import {
   type ModoRenglon,
 } from "@/lib/compras/comprobantes/borrador";
 import { discriminaIva, letraSugerida } from "@/lib/compras/comprobantes/letra";
-import { NOMBRES_TIPO_COMPROBANTE_COMPRA } from "@/lib/compras/comprobantes/numero";
+import {
+  editorNotaDeFactura,
+  esNotaCompra,
+  type FacturaAsociable,
+  type TipoNotaCompra,
+} from "@/lib/compras/comprobantes/nota";
+import { NOMBRES_TIPO_COMPROBANTE_COMPRA, numeroComprobanteCompra } from "@/lib/compras/comprobantes/numero";
 import { calcularRenglonCompra, totalesComprobanteCompra } from "@/lib/compras/comprobantes/totales";
 import { PROVINCIAS } from "@/lib/compras/provincias";
-import { numero, pesos } from "@/lib/formato";
+import { fecha, numero, pesos } from "@/lib/formato";
 import {
   ALICUOTAS_IVA,
   LETRAS_COMPRA,
@@ -42,6 +48,7 @@ import {
   articulosDelProveedor,
   borrarComprobanteCompra,
   confirmarComprobanteCompra,
+  facturasAsociables,
   guardarComprobanteCompra,
   preciosComprobanteCompra,
   type ResultadoComprobanteCompra,
@@ -67,18 +74,25 @@ const NOMBRES_PERCEPCION: Record<TipoPercepcionCompra, string> = {
  * renglones (artículo del proveedor, artículo nuevo o renglón libre),
  * percepciones y vista previa de los totales. Guarda el borrador, lo
  * confirma (guarda y después confirma) o lo borra. Los totales que valen los
- * calcula la base al guardar.
+ * calcula la base al guardar. Una nota puede indicar la factura que corrige;
+ * abierta desde una factura (notaDe), arranca con sus renglones y precios.
  */
 export function EditorComprobanteCompra({
   guardado,
+  notaDe = null,
   contexto,
   articulos: articulosIniciales,
+  facturas: facturasIniciales = [],
   hoy,
 }: {
   guardado: ComprobanteCompraCargado | null;
+  /** Nota nueva desde una factura confirmada: copia sus renglones y precios. */
+  notaDe?: { factura: ComprobanteCompraCargado; tipo: TipoNotaCompra } | null;
   contexto: ContextoEditorCompra;
-  /** Catálogo del proveedor del comprobante guardado. */
+  /** Catálogo del proveedor del comprobante guardado (o de la factura de notaDe). */
   articulos: ProveedorArticulo[];
+  /** Facturas confirmadas del proveedor y la letra, para asociar a una nota. */
+  facturas?: FacturaAsociable[];
   hoy: string;
 }) {
   const router = useRouter();
@@ -87,7 +101,9 @@ export function EditorComprobanteCompra({
   // actualiza en vez de crear otro, aunque el editor siga montado.
   const [id, setId] = useState<string | null>(guardado?.comprobante.id ?? null);
   // Último proveedor elegido: descarta catálogos que llegan tarde de uno anterior.
-  const proveedorPedido = useRef<string>(guardado?.comprobante.proveedor_id ?? "");
+  const proveedorPedido = useRef<string>(
+    guardado?.comprobante.proveedor_id ?? notaDe?.factura.comprobante.proveedor_id ?? "",
+  );
   const [resultado, setResultado] = useState<ResultadoComprobanteCompra | undefined>(undefined);
   const [aviso, setAviso] = useState<string | null>(null);
   // Editor abierto en «nuevo»: al confirmar se navega a la dirección del
@@ -100,11 +116,17 @@ export function EditorComprobanteCompra({
   const [editor, setEditor] = useState<EstadoEditor>(() =>
     guardado
       ? editorDeComprobanteCompra(guardado.comprobante, guardado.items, guardado.percepciones)
-      : editorComprobanteCompraNuevo(hoy),
+      : notaDe
+        ? editorNotaDeFactura(notaDe.factura.comprobante, notaDe.factura.items, notaDe.tipo, hoy)
+        : editorComprobanteCompraNuevo(hoy),
   );
   // Mientras no se elija la letra a mano, sigue a la condición del proveedor.
-  const [letraElegida, setLetraElegida] = useState(guardado !== null);
+  const [letraElegida, setLetraElegida] = useState(guardado !== null || notaDe !== null);
   const [articulos, setArticulos] = useState(articulosIniciales);
+  const [facturas, setFacturas] = useState(facturasIniciales);
+  // Último proveedor y letra pedidos: descarta listas de facturas que llegan tarde.
+  const facturasPedidas = useRef("");
+  const esNota = esNotaCompra(editor.tipo);
 
   const conIva = discriminaIva(editor.letra);
   const proveedores = contexto.proveedores.filter((p) => p.activo || p.id === editor.proveedorId);
@@ -134,22 +156,49 @@ export function EditorComprobanteCompra({
     }));
   }
 
+  /** Lee las facturas que se pueden asociar a una nota de ese proveedor y letra. */
+  async function leerFacturas(proveedorId: string, letra: LetraCompra, tipo: TipoComprobanteCompra) {
+    const clave = `${proveedorId}|${letra}`;
+    facturasPedidas.current = clave;
+    if (!proveedorId || !esNotaCompra(tipo)) {
+      setFacturas([]);
+      return;
+    }
+    const lista = await facturasAsociables(proveedorId, letra);
+    if (facturasPedidas.current === clave) setFacturas(lista);
+  }
+
   /**
    * Otro proveedor: se lee su catálogo y los renglones pierden el artículo
    * elegido (era del anterior). Si la letra no se eligió a mano, se sugiere
-   * la de su condición frente al IVA.
+   * la de su condición frente al IVA. La factura asociada era del anterior.
    */
   async function cambiarProveedor(proveedorId: string) {
     const elegido = contexto.proveedores.find((p) => p.id === proveedorId);
+    const letra = letraElegida ? editor.letra : letraSugerida(elegido?.condicion_iva);
     setEditor((actual) => ({
       ...actual,
       proveedorId,
-      letra: letraElegida ? actual.letra : letraSugerida(elegido?.condicion_iva),
+      letra,
+      comprobanteAsociadoId: "",
       filas: actual.filas.map((f) => (f.modo === "articulo" ? { ...f, articuloId: null } : f)),
     }));
     proveedorPedido.current = proveedorId;
+    void leerFacturas(proveedorId, letra, editor.tipo);
     const catalogo = proveedorId ? await articulosDelProveedor(proveedorId) : [];
     if (proveedorPedido.current === proveedorId) setArticulos(catalogo);
+  }
+
+  /** La factura asociada tiene la letra de la nota: con otra letra se elige de nuevo. */
+  function cambiarLetra(letra: LetraCompra) {
+    setLetraElegida(true);
+    cambiar({ letra, comprobanteAsociadoId: "" });
+    void leerFacturas(editor.proveedorId, letra, editor.tipo);
+  }
+
+  function cambiarTipo(tipo: TipoComprobanteCompra) {
+    cambiar({ tipo });
+    if (esNotaCompra(tipo) && !esNota) void leerFacturas(editor.proveedorId, editor.letra, tipo);
   }
 
   // ----- Acciones -----------------------------------------------------------
@@ -198,6 +247,11 @@ export function EditorComprobanteCompra({
       const guardadoId = await guardar();
       if (!guardadoId) return;
       if (id === null) window.history.replaceState(null, "", `${RUTA}/${guardadoId}`);
+      // Las notas no actualizan precios: confirmación común.
+      if (esNota) {
+        setPorConfirmar({ id: guardadoId, lineas: [] });
+        return;
+      }
       const r = await preciosComprobanteCompra(guardadoId);
       if ("error" in r) {
         setResultado({ error: r.error });
@@ -274,7 +328,7 @@ export function EditorComprobanteCompra({
             <select
               id="tipo"
               value={editor.tipo}
-              onChange={(e) => cambiar({ tipo: e.target.value as TipoComprobanteCompra })}
+              onChange={(e) => cambiarTipo(e.target.value as TipoComprobanteCompra)}
               className="campo"
             >
               {TIPOS_COMPROBANTE_COMPRA.map((t) => (
@@ -291,10 +345,7 @@ export function EditorComprobanteCompra({
             <select
               id="letra"
               value={editor.letra}
-              onChange={(e) => {
-                setLetraElegida(true);
-                cambiar({ letra: e.target.value as LetraCompra });
-              }}
+              onChange={(e) => cambiarLetra(e.target.value as LetraCompra)}
               className="campo"
             >
               {LETRAS_COMPRA.map((l) => (
@@ -354,6 +405,14 @@ export function EditorComprobanteCompra({
               className="campo"
             />
           </div>
+          {esNota && (
+            <FacturaAsociada
+              valor={editor.comprobanteAsociadoId}
+              facturas={facturas}
+              proveedorElegido={editor.proveedorId !== ""}
+              onCambiar={(comprobanteAsociadoId) => cambiar({ comprobanteAsociadoId })}
+            />
+          )}
           <div className="sm:col-span-6">
             <label className="etiqueta" htmlFor="observaciones">
               Observaciones
@@ -628,7 +687,11 @@ export function EditorComprobanteCompra({
           type="button"
           disabled={pendiente}
           onClick={prepararConfirmacion}
-          title="Se guarda y se confirma; antes elegís qué precios de materias primas se actualizan."
+          title={
+            esNota
+              ? "Se guarda y se confirma. Las notas no actualizan precios de materias primas."
+              : "Se guarda y se confirma; antes elegís qué precios de materias primas se actualizan."
+          }
           className="boton-secundario"
         >
           Confirmar
@@ -663,6 +726,56 @@ function Linea({ etiqueta, valor }: { etiqueta: string; valor: number }) {
     <div className="flex justify-between">
       <dt className="text-stone-500">{etiqueta}</dt>
       <dd className="tabular-nums">{pesos(valor)}</dd>
+    </div>
+  );
+}
+
+/**
+ * Factura que corrige una nota (opcional). Elegirla no cambia los renglones:
+ * los copia sólo el botón de la factura. Si la guardada ya no se ofrece (se
+ * anuló), se muestra igual para que se elija otra.
+ */
+function FacturaAsociada({
+  valor,
+  facturas,
+  proveedorElegido,
+  onCambiar,
+}: {
+  valor: string;
+  facturas: FacturaAsociable[];
+  proveedorElegido: boolean;
+  onCambiar: (id: string) => void;
+}) {
+  const elegida = facturas.find((f) => f.id === valor);
+  return (
+    <div className="sm:col-span-3">
+      <label className="etiqueta" htmlFor="factura-asociada">
+        Factura asociada
+      </label>
+      <select
+        id="factura-asociada"
+        value={valor}
+        onChange={(e) => onCambiar(e.target.value)}
+        disabled={!proveedorElegido}
+        className="campo"
+      >
+        <option value="">Sin factura asociada (nota suelta)</option>
+        {valor !== "" && !elegida && <option value={valor}>Factura que ya no está confirmada: elegí otra</option>}
+        {facturas.map((f) => (
+          <option key={f.id} value={f.id}>
+            {numeroComprobanteCompra(f)} · {fecha(f.fecha)} · {pesos(f.total)}
+          </option>
+        ))}
+      </select>
+      {valor !== "" ? (
+        <Link href={`${RUTA}/${valor}`} className="mt-1 inline-block text-xs text-marca-700 hover:underline">
+          Ver factura{elegida ? ` ${numeroComprobanteCompra(elegida)}` : ""}
+        </Link>
+      ) : (
+        <p className="mt-1 text-xs text-stone-500">
+          Facturas confirmadas del proveedor con la misma letra. Elegirla no cambia los renglones.
+        </p>
+      )}
     </div>
   );
 }

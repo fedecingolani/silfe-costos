@@ -11,10 +11,18 @@ import {
   TONO_ESTADO_COMPROBANTE_COMPRA,
   permisosComprobanteCompra,
 } from "@/lib/compras/comprobantes/listado";
+import { esNotaCompra, puedeTenerNotas, type FacturaAsociable } from "@/lib/compras/comprobantes/nota";
 import { NOMBRES_TIPO_COMPROBANTE_COMPRA, numeroComprobanteCompra } from "@/lib/compras/comprobantes/numero";
 import type { CondicionIva } from "@/lib/tipos";
 import { AnularComprobanteCompra } from "../AnularComprobanteCompra";
-import { cargarArticulos, cargarComprobanteCompra, cargarContextoEditorCompra } from "../datos";
+import {
+  cargarArticulos,
+  cargarComprobanteCompra,
+  cargarContextoEditorCompra,
+  cargarFacturaAsociada,
+  cargarFacturasAsociables,
+  cargarNotasAsociadas,
+} from "../datos";
 import { EditorComprobanteCompra } from "../EditorComprobanteCompra";
 
 export const dynamic = "force-dynamic";
@@ -63,12 +71,15 @@ export default async function ComprobanteCompraPage({ params }: { params: Promis
   // ----- Borrador: se edita ------------------------------------------------------
 
   if (permisos.puedeEditar) {
-    const [contexto, articulos] = await Promise.all([
+    const [contexto, articulos, facturas] = await Promise.all([
       cargarContextoEditorCompra(supabase),
       cargarArticulos(supabase, c.proveedor_id),
+      esNotaCompra(c.tipo)
+        ? cargarFacturasAsociables(supabase, c.proveedor_id, c.letra)
+        : Promise.resolve([] as FacturaAsociable[]),
     ]);
-    if (typeof contexto === "string" || typeof articulos === "string") {
-      const error = typeof contexto === "string" ? contexto : articulos;
+    if (typeof contexto === "string" || typeof articulos === "string" || typeof facturas === "string") {
+      const error = [contexto, articulos, facturas].find((v) => typeof v === "string");
       return <p className="text-sm text-red-700">Error al cargar los datos del comprobante: {error as string}</p>;
     }
     return (
@@ -79,7 +90,13 @@ export default async function ComprobanteCompraPage({ params }: { params: Promis
           descripcion="Borrador: se puede editar, confirmar o borrar. Al confirmarlo ya no se modifica."
           acciones={pastilla}
         />
-        <EditorComprobanteCompra guardado={cargado} contexto={contexto} articulos={articulos} hoy={hoyArgentina()} />
+        <EditorComprobanteCompra
+          guardado={cargado}
+          contexto={contexto}
+          articulos={articulos}
+          facturas={facturas}
+          hoy={hoyArgentina()}
+        />
       </>
     );
   }
@@ -87,15 +104,19 @@ export default async function ComprobanteCompraPage({ params }: { params: Promis
   // ----- Confirmado o anulado: sólo lectura -------------------------------------
 
   const materiaIds = [...new Set(items.map((i) => i.materia_prima_id).filter((v): v is string => v !== null))];
-  const [{ data: proveedorData }, { data: materiasData, error: errorMaterias }] = await Promise.all([
-    supabase.from("proveedor").select("id, nombre, cuit, condicion_iva").eq("id", c.proveedor_id).maybeSingle(),
-    materiaIds.length > 0
-      ? supabase.from("materia_prima").select("id, codigo, nombre").in("id", materiaIds)
-      : Promise.resolve({ data: [], error: null }),
-  ]);
+  const [{ data: proveedorData }, { data: materiasData, error: errorMaterias }, facturaAsociada, notas] =
+    await Promise.all([
+      supabase.from("proveedor").select("id, nombre, cuit, condicion_iva").eq("id", c.proveedor_id).maybeSingle(),
+      materiaIds.length > 0
+        ? supabase.from("materia_prima").select("id, codigo, nombre").in("id", materiaIds)
+        : Promise.resolve({ data: [], error: null }),
+      c.comprobante_asociado_id ? cargarFacturaAsociada(supabase, c.comprobante_asociado_id) : Promise.resolve(null),
+      c.tipo === "factura" ? cargarNotasAsociadas(supabase, c.id) : Promise.resolve([]),
+    ]);
   if (errorMaterias) {
     return <p className="text-sm text-red-700">Error al cargar las materias primas: {errorMaterias.message}</p>;
   }
+  if (typeof notas === "string") return <p className="text-sm text-red-700">{notas}</p>;
   const proveedor = proveedorData as { id: string; nombre: string; cuit: string | null; condicion_iva: CondicionIva | null } | null;
   const materias = new Map(
     ((materiasData ?? []) as { id: string; codigo: string; nombre: string }[]).map((m) => [m.id, m]),
@@ -117,9 +138,27 @@ export default async function ComprobanteCompraPage({ params }: { params: Promis
       {migas}
       <Encabezado titulo={titulo} descripcion={descripcion} acciones={pastilla} />
 
-      {permisos.puedeAnular && (
+      {(permisos.puedeAnular || puedeTenerNotas(c)) && (
         <div className="mb-4 flex flex-wrap items-center gap-2">
-          <AnularComprobanteCompra id={c.id} />
+          {puedeTenerNotas(c) && (
+            <>
+              <Link
+                href={`/compras/comprobantes/nuevo?desde=${c.id}&tipo=nota_credito`}
+                className="boton-secundario"
+                title="Nota asociada a esta factura, con sus renglones y precios para ajustar."
+              >
+                Nota de crédito
+              </Link>
+              <Link
+                href={`/compras/comprobantes/nuevo?desde=${c.id}&tipo=nota_debito`}
+                className="boton-secundario"
+                title="Nota asociada a esta factura, con sus renglones y precios para ajustar."
+              >
+                Nota de débito
+              </Link>
+            </>
+          )}
+          {permisos.puedeAnular && <AnularComprobanteCompra id={c.id} />}
         </div>
       )}
 
@@ -134,6 +173,18 @@ export default async function ComprobanteCompraPage({ params }: { params: Promis
             <Dato etiqueta="Vencimiento">{c.fecha_vencimiento ? fecha(c.fecha_vencimiento) : "—"}</Dato>
             <Dato etiqueta="Confirmado">{fechaHora(c.confirmado_en)}</Dato>
             {c.anulado_en && <Dato etiqueta="Anulado">{fechaHora(c.anulado_en)}</Dato>}
+            {c.comprobante_asociado_id && (
+              <div className="col-span-2">
+                <Dato etiqueta="Factura asociada">
+                  <Link href={`/compras/comprobantes/${c.comprobante_asociado_id}`} className="text-marca-700 hover:underline">
+                    {facturaAsociada ? numeroComprobanteCompra(facturaAsociada) : "Ver factura"}
+                  </Link>
+                  {facturaAsociada && facturaAsociada.estado !== "confirmado" && (
+                    <span className="text-stone-500"> ({NOMBRES_ESTADO_COMPROBANTE_COMPRA[facturaAsociada.estado].toLowerCase()})</span>
+                  )}
+                </Dato>
+              </div>
+            )}
             {c.observaciones && (
               <div className="col-span-2">
                 <Dato etiqueta="Observaciones">{c.observaciones}</Dato>
@@ -220,6 +271,41 @@ export default async function ComprobanteCompraPage({ params }: { params: Promis
           </div>
         </dl>
       </Tarjeta>
+
+      {notas.length > 0 && (
+        <Tarjeta titulo="Notas asociadas" className="mt-4">
+          <div className="overflow-x-auto">
+            <table className="tabla">
+              <thead>
+                <tr>
+                  <th>Comprobante</th>
+                  <th>Fecha</th>
+                  <th>Estado</th>
+                  <th className="text-right">Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                {notas.map((n) => (
+                  <tr key={n.id}>
+                    <td>
+                      <Link href={`/compras/comprobantes/${n.id}`} className="text-marca-700 hover:underline">
+                        {numeroComprobanteCompra(n)}
+                      </Link>
+                    </td>
+                    <td>{fecha(n.fecha)}</td>
+                    <td>
+                      <Pastilla tono={TONO_ESTADO_COMPROBANTE_COMPRA[n.estado]}>
+                        {NOMBRES_ESTADO_COMPROBANTE_COMPRA[n.estado]}
+                      </Pastilla>
+                    </td>
+                    <td className="text-right tabular-nums">{pesos(n.total)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Tarjeta>
+      )}
 
       {percepciones.length > 0 && (
         <Tarjeta titulo="Percepciones" className="mt-4">
