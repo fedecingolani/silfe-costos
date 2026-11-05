@@ -19,6 +19,24 @@ export type Proveedor = {
   telefono: string | null;
   notas: string | null;
   activo: boolean;
+  condicion_iva: CondicionIva | null;
+  domicilio: string | null;
+  /** 22 dígitos, sin espacios. */
+  cbu: string | null;
+  alias: string | null;
+};
+
+/** Artículo del catálogo de un proveedor, tal como lo factura. */
+export type ProveedorArticulo = {
+  id: string;
+  proveedor_id: string;
+  codigo: string | null;
+  descripcion: string;
+  unidad: string | null;
+  /** Unidades de compra de la materia prima que equivale una unidad del proveedor. */
+  factor_conversion: number;
+  materia_prima_id: string | null;
+  activo: boolean;
 };
 
 export type ProveedorContacto = {
