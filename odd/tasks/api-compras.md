@@ -84,7 +84,7 @@ Errores: `{ "error": { "codigo": "...", "mensaje": "..." } }` con 400 (JSON inv�
 
 Entrega: un PR por tarea, cada uno sobre la rama de la anterior, como en compras.
 
-- [ ] T1 Esquema: tabla `api_clave` + RLS; `cae`, `cae_vencimiento` y `origen` en `comprobante_compra`; CUIT del proveedor normalizado y único. Rama `feat/api-compras-01-esquema`.
+- [x] T1 Esquema: tabla `api_clave` + RLS; `cae`, `cae_vencimiento` y `origen` en `comprobante_compra`; CUIT del proveedor normalizado y único. Rama `feat/api-compras-01-esquema`.
 - [ ] T2 Base de la API: cliente service-role, validación de clave, middleware que deja pasar `/api/v1`, respuestas de error JSON, secreto documentado. Rama `feat/api-compras-02-base`.
 - [ ] T3 Endpoints de proveedores (GET por CUIT, POST). Rama `feat/api-compras-03-proveedores`.
 - [ ] T4 Endpoint de comprobantes de compra. Rama `feat/api-compras-04-comprobantes`.
@@ -99,8 +99,15 @@ Entrega: un PR por tarea, cada uno sobre la rama de la anterior, como en compras
 
 ## Progreso
 
-(se completa por tarea)
+### T1 Esquema — hecho
+
+- Commit `d844bf1` en `feat/api-compras-01-esquema`. Ruta: delegada (un writer para T1–T4; toca migraciones, helpers, acción del formulario y tipos).
+- Migraciones `20261106000005_api_compras_esquema.sql` y `20261106000006_rls_api_compras.sql`.
+- CUIT: lo normaliza un trigger (`trg_proveedor_normalizar_cuit`) en lugar de sólo un check, para que el seed (CUIT con guiones) y SQL directo sigan andando. Check de 11 dígitos NOT VALID e índice único `proveedor_cuit_uq`. Si al migrar quedan CUIT repetidos, la migración falla y los lista.
+- service_role: la base local no le da permisos por defecto sobre las tablas y funciones del proyecto. Se otorgan explícitamente los que usa `guardar_comprobante_compra` (security invoker): cabecera, renglones, percepciones, catálogo del proveedor, remitos de compra (el `FOR UPDATE` pide UPDATE) y `fn_comprobante_compra_totales`. Probado con `set role service_role` contra la base local.
+- Formulario de proveedores: normaliza el CUIT (`validarCuit`) y traduce el duplicado y el formato inválido.
+- Checks: `npm run typecheck` ok; `npm run lint` ok; `npm test` 1207 pasan (RED observado antes: 9 fallaban). `supabase migration up --local` aplicó las dos migraciones. `supabase test db`: 1 falla, `supabase/tests/cuenta_corriente_proveedor_test.sql` test 15 espera el CUIT con guiones (`30-11111111-1`) y ahora se guarda `30111111111`; hay que actualizar ese valor esperado (archivo fuera del alcance de esta tarea).
 
 ## Próximo paso
 
-T1.
+T2.
