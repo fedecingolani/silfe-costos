@@ -10,6 +10,7 @@ import {
   filaCompraVacia,
   parametrosGuardarComprobanteCompra,
   renglonCalculable,
+  tieneRenglonesDeRemito,
   type ComprobanteCompraEnviado,
   type RenglonEnviado,
 } from "./borrador";
@@ -18,6 +19,7 @@ const PROVEEDOR = "a0000000-0000-0000-0000-000000000001";
 const ARTICULO = "b0000000-0000-0000-0000-000000000001";
 const MATERIA_PRIMA = "c0000000-0000-0000-0000-000000000001";
 const COMPROBANTE = "d0000000-0000-0000-0000-000000000001";
+const RENGLON_REMITO = "90000000-0000-0000-0000-000000000001";
 
 const renglon = (cambios: Partial<RenglonEnviado> = {}): RenglonEnviado => ({
   modo: "libre",
@@ -32,6 +34,7 @@ const renglon = (cambios: Partial<RenglonEnviado> = {}): RenglonEnviado => ({
   descuentoPct: "",
   alicuotaIva: "21",
   exento: false,
+  remitoItemId: null,
   ...cambios,
 });
 
@@ -44,6 +47,7 @@ const enviado = (cambios: Partial<ComprobanteCompraEnviado> = {}): ComprobanteCo
   fecha: "2026-11-05",
   fechaVencimiento: "2026-12-05",
   observaciones: "  Entrega parcial ",
+  comprobanteAsociadoId: "",
   renglones: [
     renglon({
       modo: "articulo",
@@ -99,7 +103,25 @@ describe("armarComprobanteCompra", () => {
       fecha: "2026-11-05",
       fecha_vencimiento: "2026-12-05",
       observaciones: "Entrega parcial",
+      comprobante_asociado_id: null,
     });
+  });
+
+  it("una nota manda su factura asociada; vacía, es una nota suelta", () => {
+    expect(armado({ tipo: "nota_credito", comprobanteAsociadoId: COMPROBANTE }).comprobante.comprobante_asociado_id).toBe(
+      COMPROBANTE,
+    );
+    expect(armado({ tipo: "nota_debito", comprobanteAsociadoId: "" }).comprobante.comprobante_asociado_id).toBeNull();
+  });
+
+  it("una factura no lleva factura asociada aunque el editor la conserve", () => {
+    expect(armado({ tipo: "factura", comprobanteAsociadoId: COMPROBANTE }).comprobante.comprobante_asociado_id).toBeNull();
+  });
+
+  it("rechaza una factura asociada que no es un id", () => {
+    expect(errores(enviado({ tipo: "nota_credito", comprobanteAsociadoId: "otra" }))).toContain(
+      "La factura asociada no es válida.",
+    );
   });
 
   it("un artículo existente va con proveedor_articulo_id y sin articulo_nuevo", () => {
@@ -310,6 +332,7 @@ describe("editorComprobanteCompraNuevo", () => {
       fecha: "2026-11-05",
       fechaVencimiento: "",
       observaciones: "",
+      comprobanteAsociadoId: "",
       percepciones: [],
     });
     expect(editor.filas).toHaveLength(1);
@@ -384,6 +407,7 @@ describe("ida y vuelta: comprobante guardado → editor → lo que se guarda", (
     creado_por: null,
     creado_en: "2026-11-01T10:00:00Z",
     actualizado_en: "2026-11-01T10:00:00Z",
+    comprobante_asociado_id: "d0000000-0000-0000-0000-000000000002",
   };
   const item = (cambios: Partial<ComprobanteCompraItem>): ComprobanteCompraItem => ({
     id: "e0000000-0000-0000-0000-000000000001",
@@ -401,6 +425,7 @@ describe("ida y vuelta: comprobante guardado → editor → lo que se guarda", (
     exento: false,
     importe: 100,
     iva: 0,
+    remito_compra_item_id: null,
     ...cambios,
   });
   const items = [
@@ -440,6 +465,7 @@ describe("ida y vuelta: comprobante guardado → editor → lo que se guarda", (
       fecha: "2026-11-01",
       fechaVencimiento: "",
       observaciones: "",
+      comprobanteAsociadoId: "d0000000-0000-0000-0000-000000000002",
     });
     expect(editor.filas.map((f) => f.modo)).toEqual(["articulo", "libre"]);
     expect(editor.percepciones[0]).toMatchObject({ tipo: "iibb", jurisdiccion: "Neuquén", descripcion: "", importe: "12.34" });
@@ -459,6 +485,7 @@ describe("ida y vuelta: comprobante guardado → editor → lo que se guarda", (
       fecha: "2026-11-01",
       fecha_vencimiento: null,
       observaciones: null,
+      comprobante_asociado_id: "d0000000-0000-0000-0000-000000000002",
     });
     expect(p.p_items).toEqual([
       {
@@ -488,5 +515,123 @@ describe("ida y vuelta: comprobante guardado → editor → lo que se guarda", (
 
   it("sin renglones guardados, el editor arranca con uno vacío", () => {
     expect(editorDeComprobanteCompra(comprobante, [], []).filas).toHaveLength(1);
+  });
+});
+
+describe("renglones que vienen de remitos", () => {
+  const deRemito = (cambios: Partial<RenglonEnviado> = {}) =>
+    renglon({
+      modo: "articulo",
+      articuloId: ARTICULO,
+      codigo: "SOGA8",
+      descripcion: "SOGA PP diam 8MM",
+      remitoItemId: RENGLON_REMITO,
+      ...cambios,
+    });
+
+  it("un renglón vacío no viene de un remito", () => {
+    expect(filaCompraVacia().remitoItemId).toBeNull();
+  });
+
+  it("una factura manda el renglón del remito; los demás renglones no lo llevan", () => {
+    const items = armado({ renglones: [deRemito(), renglon()] }).items;
+    expect(items[0]).toMatchObject({ proveedor_articulo_id: ARTICULO, remito_compra_item_id: RENGLON_REMITO });
+    expect(items[1]).not.toHaveProperty("remito_compra_item_id");
+  });
+
+  it("sólo una factura lleva renglones de remitos", () => {
+    expect(errores(enviado({ tipo: "nota_credito", renglones: [deRemito()] }))).toContain(
+      "Renglón 1: sólo una factura lleva renglones de remitos.",
+    );
+  });
+
+  it("un renglón de remito conserva su artículo del proveedor", () => {
+    expect(errores(enviado({ renglones: [deRemito({ modo: "libre", articuloId: null })] }))).toContain(
+      "Renglón 1: un renglón de remito lleva su artículo del proveedor.",
+    );
+  });
+
+  it("rechaza un renglón de remito que no es un id", () => {
+    expect(errores(enviado({ renglones: [deRemito({ remitoItemId: "otro" })] }))).toContain(
+      "Renglón 1: el renglón del remito no es válido.",
+    );
+  });
+
+  it("comprobanteEnviado manda de qué renglón de remito viene cada renglón", () => {
+    const editor = editorComprobanteCompraNuevo("2026-11-05");
+    editor.filas = [{ ...filaCompraVacia(), remitoItemId: RENGLON_REMITO }];
+    expect(comprobanteEnviado(editor).renglones[0].remitoItemId).toBe(RENGLON_REMITO);
+  });
+
+  it("tieneRenglonesDeRemito dice si algún renglón viene de un remito", () => {
+    const editor = editorComprobanteCompraNuevo("2026-11-05");
+    expect(tieneRenglonesDeRemito(editor)).toBe(false);
+    editor.filas = [filaCompraVacia(), { ...filaCompraVacia(), remitoItemId: RENGLON_REMITO }];
+    expect(tieneRenglonesDeRemito(editor)).toBe(true);
+  });
+
+  it("un borrador armado desde remitos conserva el vínculo al editarlo y volver a guardarlo", () => {
+    const factura: ComprobanteCompra = {
+      id: COMPROBANTE,
+      proveedor_id: PROVEEDOR,
+      tipo: "factura",
+      letra: "A",
+      punto_venta: 1,
+      numero: 10,
+      fecha: "2026-11-05",
+      fecha_vencimiento: null,
+      observaciones: null,
+      neto_gravado: 0,
+      no_gravado: 0,
+      exento: 0,
+      iva: 0,
+      percepcion_iva: 0,
+      percepcion_iibb: 0,
+      otros_impuestos: 0,
+      total: 0,
+      estado: "borrador",
+      confirmado_en: null,
+      anulado_en: null,
+      creado_por: null,
+      creado_en: "2026-11-05T10:00:00Z",
+      actualizado_en: "2026-11-05T10:00:00Z",
+      comprobante_asociado_id: null,
+    };
+    const item: ComprobanteCompraItem = {
+      id: "e0000000-0000-0000-0000-000000000001",
+      comprobante_compra_id: COMPROBANTE,
+      orden: 0,
+      proveedor_articulo_id: ARTICULO,
+      materia_prima_id: MATERIA_PRIMA,
+      codigo_proveedor: "SOGA8",
+      descripcion: "SOGA PP diam 8MM",
+      unidad: "rollo",
+      cantidad: 3,
+      precio_unitario: 10,
+      descuento_pct: 0,
+      alicuota_iva: 21,
+      exento: false,
+      importe: 30,
+      iva: 6.3,
+      remito_compra_item_id: RENGLON_REMITO,
+    };
+    const editor = editorDeComprobanteCompra(factura, [item], []);
+    expect(editor.filas[0].remitoItemId).toBe(RENGLON_REMITO);
+    const resultado = armarComprobanteCompra(comprobanteEnviado({ ...editor, filas: [{ ...editor.filas[0], cantidad: "2" }] }));
+    if ("errores" in resultado) throw new Error(resultado.errores.join(" "));
+    expect(resultado.armado.items).toEqual([
+      {
+        proveedor_articulo_id: ARTICULO,
+        codigo_proveedor: "SOGA8",
+        descripcion: "SOGA PP diam 8MM",
+        unidad: "rollo",
+        cantidad: 2,
+        precio_unitario: 10,
+        descuento_pct: 0,
+        alicuota_iva: 21,
+        exento: false,
+        remito_compra_item_id: RENGLON_REMITO,
+      },
+    ]);
   });
 });

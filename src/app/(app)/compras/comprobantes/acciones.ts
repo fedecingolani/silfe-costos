@@ -5,8 +5,9 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { armarComprobanteCompra, parametrosGuardarComprobanteCompra } from "@/lib/compras/comprobantes/borrador";
 import { mensajeErrorComprobanteCompra } from "@/lib/compras/comprobantes/errores";
-import type { PrecioComprobanteCompra, ProveedorArticulo } from "@/lib/tipos";
-import { cargarArticulos } from "./datos";
+import type { FacturaAsociable } from "@/lib/compras/comprobantes/nota";
+import { LETRAS_COMPRA, type PrecioComprobanteCompra, type ProveedorArticulo } from "@/lib/tipos";
+import { cargarArticulos, cargarFacturasAsociables } from "./datos";
 
 // Como en remitos y comprobantes de venta, las acciones devuelven el mensaje
 // de error en lugar de lanzarlo (Next enmascara en producción los errores de
@@ -139,4 +140,19 @@ export async function articulosDelProveedor(proveedorId: string): Promise<Provee
   const supabase = await createClient();
   const articulos = await cargarArticulos(supabase, proveedorId);
   return typeof articulos === "string" ? [] : articulos;
+}
+
+/**
+ * Facturas confirmadas del proveedor y la letra, para asociar a una nota.
+ * Si no se pudieron leer, el mensaje: el editor distingue una lectura
+ * fallida de una lista vacía.
+ */
+export async function facturasAsociables(
+  proveedorId: string,
+  letra: string,
+): Promise<{ facturas: FacturaAsociable[] } | { error: string }> {
+  if (!UUID.test(proveedorId) || !(LETRAS_COMPRA as readonly string[]).includes(letra)) return { facturas: [] };
+  const supabase = await createClient();
+  const facturas = await cargarFacturasAsociables(supabase, proveedorId, letra);
+  return typeof facturas === "string" ? { error: facturas } : { facturas };
 }
