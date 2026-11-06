@@ -95,7 +95,7 @@ Migraciones nuevas en `supabase/migrations/`, tests pgTAP en `supabase/tests/`, 
   - **Desde la factura:** una factura confirmada tiene botones "Nota de crédito" y "Nota de débito". Abren una nota asociada a esa factura con sus renglones y precios ya cargados, para ajustarlos.
   - **Nota suelta:** se carga con los importes que quiera el usuario.
   - **Precios de costeo:** las notas no los actualizan. El diálogo "Actualizar precios" queda solo para facturas.
-- [ ] **T5 — Remitos de compra: modelo.** Cabecera y renglones, vínculo parcial de renglones de factura con renglones de remito, bloqueo del remito facturado, vista de pendientes. Tests pgTAP.
+- [x] **T5 — Remitos de compra: modelo.** Cabecera y renglones, vínculo parcial de renglones de factura con renglones de remito, bloqueo del remito facturado, vista de pendientes. Tests pgTAP.
 - [ ] **T6 — Remitos de compra: pantallas.** Listado, alta y detalle, y facturar desde remitos. Menú Compras → Remitos.
 - [ ] **T7 — Pagos: modelo.** Orden de pago, medios (efectivo, transferencia, cheques de terceros, cheques propios), imputación a comprobantes y saldo a favor. Tests pgTAP.
 - [ ] **T8 — Pagos: pantallas.** Listado, alta y detalle. Menú Compras → Pagos.
@@ -243,7 +243,10 @@ Migraciones nuevas en `supabase/migrations/`, tests pgTAP en `supabase/tests/`, 
 - **Navegador:** se cargó una FC A 00003-00012400 de Sogas Andinas con SG-8 a $1.450.
   - El diálogo mostró el precio vigente de $6.200 y una diferencia de −76,6%, con la casilla marcada.
   - Al confirmar, la materia prima quedó con $1.450 como preferido, con la observación "Compra FC A 00003-00012400", y el costeo pasó a $74,74 por metro.
-- **Revisión RDD:** pendiente. El usuario interrumpió la pregunta de consentimiento.
+- **Revisión RDD:** concedida más tarde y aprobada, en un worktree temporal parado en `04b72e5`. Hallazgos informativos:
+  - Aviso: una factura con fecha anterior al precio preferido vigente lo desplaza igual, y el costeo vuelve a un precio viejo.
+  - Aviso: las notas pasaban por la actualización de precios. Ya lo cerró T4b con CP013.
+  - Sugerencias: la comparación no descuenta el IVA cuando el precio vigente lo incluye, y no hay tests de notas.
 - **Pendientes y decisiones:**
   - Las notas no actualizan precios (decisión del usuario; se implementa en T4b).
   - Idea a evaluar: resaltar las diferencias grandes, como el −76,6%, que es justo el caso de "precio raro".
@@ -276,8 +279,32 @@ Migraciones nuevas en `supabase/migrations/`, tests pgTAP en `supabase/tests/`, 
   - Desde la FC A 00003-00012345 se abrió una nota de crédito precargada: mismo proveedor y letra, asociada, con el renglón de 10 kg a $1.000. Se cambió la cantidad a 2.
   - Al confirmarla apareció el diálogo simple, sin precios. Quedó la NC A 00003-00000077 por $2.420, con su "Factura asociada".
   - La factura lista la nota. Al intentar anularla aparece "La factura tiene notas de crédito o débito confirmadas: anulá primero las notas.", con el título "No se pudo anular".
-- **Revisión RDD:** pendiente, igual que la de T4.
+- **Revisión RDD:** concedida y aprobada, en un worktree temporal parado en `e86ddb2`. Hallazgos informativos:
+  - Aviso: "Factura asociada" muestra "ya no está confirmada" cuando la factura sigue confirmada pero quedó fuera de las 200 más recientes, o cuando falló la lectura.
+  - Sugerencia: falta un test unitario de que una nota se confirma sin precios.
+
+### T5 — Remitos de compra: modelo
+
+- **Ruta:** delegada a un writer.
+- **Rama:** `feat/compras-05-remitos-modelo`, apilada sobre T4b.
+- **Commits:**
+  - `bd7aec8` SQL y pgTAP
+  - `a5d99bd` tipos y mensajes de error
+- **Migraciones `20261105000007_remitos_compra.sql` y `000008` (RLS):**
+  - `remito_compra` pasa de borrador a recibido y de ahí a anulado.
+  - Cada renglón de `remito_compra_item` tiene que tener un artículo del proveedor. `fn_compras_articulo` busca el artículo o lo crea, y la usan facturas y remitos.
+  - `comprobante_compra_item.remito_compra_item_id` permite facturar en parte, por cantidad.
+  - Vistas `v_remito_compra_item_pendiente` y `v_remito_compra_estado`.
+  - `facturar_remitos_compra` sugiere como precio el vigente por el factor.
+  - Funciones `guardar_remito_compra`, `recibir_remito_compra` y `anular_remito_compra`. Errores RC001 a RC011.
+- **Falta (para T6):** el editor de T3 todavía no manda `remito_compra_item_id`.
+- **Checks:** typecheck y lint OK. Vitest con 1074 tests y pgTAP con 1235, todo en verde (111 nuevos de pgTAP).
+- **Revisión RDD:** riesgo medio, concedida y aprobada. Hallazgos informativos:
+  - Aviso: `guardar_comprobante_compra` bloquea los remitos en el orden de los renglones, mientras que `facturar_remitos_compra` los bloquea por id. Dos guardados concurrentes pueden caer en un deadlock (40P01), que se muestra como un error genérico.
+  - Sugerencia: no hay tests de cambiar el proveedor de una factura que tiene remitos, de un UPDATE directo que supere lo pendiente ni de RC006 en un INSERT directo.
+- **Revisión de la rama entera:** concedida, pero supera el límite de contexto (`lens_context_budget_exceeded`). Quedan cubiertas las revisiones por tarea.
 
 ## Próximo paso
 
-T5 (modelo de remitos de compra), apilada sobre T4b.
+- Corregir los tres avisos de las revisiones: el deadlock de T5, la factura con fecha anterior de T4 y la etiqueta de "Factura asociada" de T4b.
+- Después, T6 (pantallas de remitos de compra).
