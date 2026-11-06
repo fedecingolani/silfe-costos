@@ -87,7 +87,7 @@ Entrega: un PR por tarea, cada uno sobre la rama de la anterior, como en compras
 - [x] T1 Esquema: tabla `api_clave` + RLS; `cae`, `cae_vencimiento` y `origen` en `comprobante_compra`; CUIT del proveedor normalizado y único. Rama `feat/api-compras-01-esquema`.
 - [x] T2 Base de la API: cliente service-role, validación de clave, middleware que deja pasar `/api/v1`, respuestas de error JSON, secreto documentado. Rama `feat/api-compras-02-base`.
 - [x] T3 Endpoints de proveedores (GET por CUIT, POST). Rama `feat/api-compras-03-proveedores`.
-- [ ] T4 Endpoint de comprobantes de compra. Rama `feat/api-compras-04-comprobantes`.
+- [x] T4 Endpoint de comprobantes de compra. Rama `feat/api-compras-04-comprobantes`.
 - [ ] T5 Pantalla Configuración → Integraciones (crear, listar y revocar claves). Rama `feat/api-compras-05-pantalla-claves`.
 - [ ] T6 Documentación de la API y deploy (migraciones, secreto, worker).
 
@@ -123,6 +123,21 @@ Entrega: un PR por tarea, cada uno sobre la rama de la anterior, como en compras
 - POST: 201 `{ proveedor }`; 409 `PROVEEDOR_EXISTE` con `proveedor` si el CUIT ya existe (también si otro pedido lo crea a la vez: lo frena `proveedor_cuit_uq` y se vuelve a buscar); nombre repetido con otro CUIT → 422 `VALIDACION`.
 - Checks: `npm run typecheck` ok; `npm run lint` ok; `npm test` 1227 pasan (RED observado antes: el módulo no existía). Prueba con `curl` contra `next dev` apuntado a la base local y una clave creada a mano: 401 sin clave, GET 200 con coincidencia, 422 CUIT corto, 409 duplicado, 201 alta, 400 JSON inválido, 422 nombre repetido; `/proveedores` sin sesión sigue redirigiendo a `/login`.
 
+### T4 Endpoint de comprobantes — hecho
+
+- Commit `3a65211` en `feat/api-compras-04-comprobantes`. Ruta: delegada.
+- `src/app/api/v1/comprobantes-compra/route.ts`; validación pura en `src/lib/api/comprobantes-compra.ts`, que reutiliza `armarComprobanteCompra` (mismas reglas que la pantalla) y después pasa cada renglón a `articulo_nuevo` sin materia prima (factor 1).
+- Migración `20261106000007_api_compras_guardar.sql`: `guardar_comprobante_compra` guarda `cae`, `cae_vencimiento` y `origen` al crear; al actualizar, el CAE cambia sólo si viene la clave (la pantalla no la manda y lo conserva) y el origen no cambia. Las pantallas siguen creando con `origen = 'manual'`.
+- Decisiones de implementación: en letras B y C la alícuota que mande la integración se valida y se descarta (la base la rechazaría con CP009); el CAE, si viene, tiene que tener 14 dígitos; los errores de datos de la base (CPxxx, RCxxx, 23514, 23503, 22P02, 22003, 22007, 22008) se responden 422 `VALIDACION` con el mensaje de `errores.ts`, el resto 500. `creado_por` queda null (no hay usuario).
+- Checks: `npm run typecheck` ok; `npm run lint` ok; `npm test` 1239 pasan (RED observado antes: el módulo no existía). Contra la base local con `next dev`: 201 al crear (totales, CAE y `origen = api` correctos; artículos creados en el catálogo sin materia prima), 200 `creado:false` al repetir, 201 en letra B con alícuota (IVA 0, mismo artículo reutilizado), 422 `PROVEEDOR_NO_EXISTE`, 422 vencimiento anterior a la fecha, 5 pedidos iguales a la vez → un 201 y cuatro 200 con el mismo id. Desde la pantalla (rol authenticated) editar un borrador de la API conserva su CAE y uno nuevo queda `manual`.
+- Resuelto: el test 15 de `cuenta_corriente_proveedor_test.sql` ahora espera el CUIT normalizado (commit `8bbecc6` en T1, cadena rebaseada). `supabase test db`: 1404 pasan.
+
+### Revisión (RDD)
+
+- T1: riesgo medio, revisión aprobada sin hallazgos (`review-f5c67725989950e3`).
+- T2 + T3: un tramo, riesgo medio, aprobada sin hallazgos (`review-5c8e76bc4db730d9`).
+- T4: riesgo medio, aprobada sin hallazgos.
+
 ## Próximo paso
 
-T4.
+T5 (pantalla de claves).

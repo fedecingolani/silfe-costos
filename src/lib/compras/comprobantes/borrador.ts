@@ -285,7 +285,8 @@ export type ArticuloNuevoGuardado = {
   descripcion: string;
   unidad: string | null;
   factor_conversion: number;
-  materia_prima_id: string;
+  /** null: se asocia después (los renglones que manda la API de compras). */
+  materia_prima_id: string | null;
 };
 
 /** Un elemento de p_items: con proveedor_articulo_id, con articulo_nuevo o con ninguno (libre). */
