@@ -147,6 +147,7 @@ Entrega: un PR por tarea, cada uno sobre la rama de la anterior, como en compras
 - T1: riesgo medio, revisión aprobada sin hallazgos (`review-f5c67725989950e3`).
 - T2 + T3: un tramo, riesgo medio, aprobada sin hallazgos (`review-5c8e76bc4db730d9`).
 - T4: riesgo medio, aprobada sin hallazgos.
+- T5: riesgo medio, aprobada sin hallazgos.
 
 ## Próximo paso
 
