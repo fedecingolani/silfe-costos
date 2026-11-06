@@ -88,7 +88,7 @@ Entrega: un PR por tarea, cada uno sobre la rama de la anterior, como en compras
 - [x] T2 Base de la API: cliente service-role, validación de clave, middleware que deja pasar `/api/v1`, respuestas de error JSON, secreto documentado. Rama `feat/api-compras-02-base`.
 - [x] T3 Endpoints de proveedores (GET por CUIT, POST). Rama `feat/api-compras-03-proveedores`.
 - [x] T4 Endpoint de comprobantes de compra. Rama `feat/api-compras-04-comprobantes`.
-- [ ] T5 Pantalla Configuración → Integraciones (crear, listar y revocar claves). Rama `feat/api-compras-05-pantalla-claves`.
+- [x] T5 Pantalla Configuración → Integraciones (crear, listar y revocar claves). Rama `feat/api-compras-05-pantalla-claves`.
 - [ ] T6 Documentación de la API y deploy (migraciones, secreto, worker).
 
 ## Verificación
@@ -132,6 +132,16 @@ Entrega: un PR por tarea, cada uno sobre la rama de la anterior, como en compras
 - Checks: `npm run typecheck` ok; `npm run lint` ok; `npm test` 1239 pasan (RED observado antes: el módulo no existía). Contra la base local con `next dev`: 201 al crear (totales, CAE y `origen = api` correctos; artículos creados en el catálogo sin materia prima), 200 `creado:false` al repetir, 201 en letra B con alícuota (IVA 0, mismo artículo reutilizado), 422 `PROVEEDOR_NO_EXISTE`, 422 vencimiento anterior a la fecha, 5 pedidos iguales a la vez → un 201 y cuatro 200 con el mismo id. Desde la pantalla (rol authenticated) editar un borrador de la API conserva su CAE y uno nuevo queda `manual`.
 - Resuelto: el test 15 de `cuenta_corriente_proveedor_test.sql` ahora espera el CUIT normalizado (commit `8bbecc6` en T1, cadena rebaseada). `supabase test db`: 1404 pasan.
 
+### T5 Pantalla de claves — hecho
+
+- Commit `def38fd` en `feat/api-compras-05-pantalla-claves`. Ruta: delegada (un writer; página, acciones, componente cliente, helpers y menú).
+- `src/app/(app)/configuracion/integraciones/` (`page.tsx`, `acciones.ts`, `ClavesApi.tsx`) y entrada "Integraciones" en el menú de Configuración. Helpers puros en `src/lib/api/integraciones.ts` (estado de la clave, fila con fechas formateadas, validación del nombre, URL base, referencia de endpoints); tipo `ApiClaveVisible` en `tipos.ts`.
+- Crear: la acción genera la clave con `generarClave`/`hashClave`/`prefijoClave` de `clave.ts`, inserta con el cliente de la sesión y devuelve la clave completa sólo en la respuesta; se muestra una vez en un diálogo con botón de copiar y aviso. Revocar: `revocada_en` con la hora del servidor, sólo si estaba activa, con confirmación; las revocadas siguen listadas. La consulta selecciona columnas explícitas (nunca `hash`).
+- URL base: se arma con `x-forwarded-host`/`host` y `x-forwarded-proto` del pedido (sin protocolo: http en localhost, https en el resto).
+- Las fechas de la tabla se formatean en el servidor: formatearlas en el componente cliente rompía la hidratación (Intl de Node y del navegador difieren en el espacio de "p. m.").
+- Checks: `npm run typecheck` ok; `npm run lint` ok; `npm test` 1251 pasan (RED observado antes: el módulo no existía, y después 3 fallas de `filaClave`). Con `next dev` contra la base local: sin sesión la página redirige a `/login` (307); con sesión 200 y sin hash en el HTML; crear "Factura Digital prueba" mostró la clave una vez y guardó prefijo y hash de 64; con esa clave `GET /api/v1/proveedores` dio 200 (y 401 con una alterada); revocada quedó listada como "Revocada" y la misma clave pasó a 401. La clave no aparece en el log del servidor.
+- Pendiente: el `next dev` local necesita `SUPABASE_SERVICE_ROLE_KEY` en el entorno para que la API responda (sin él da 500); se documenta en T6.
+
 ### Revisión (RDD)
 
 - T1: riesgo medio, revisión aprobada sin hallazgos (`review-f5c67725989950e3`).
@@ -140,4 +150,4 @@ Entrega: un PR por tarea, cada uno sobre la rama de la anterior, como en compras
 
 ## Próximo paso
 
-T5 (pantalla de claves).
+T6 (documentación de la API y deploy: migraciones, secreto y worker).
