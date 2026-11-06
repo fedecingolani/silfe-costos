@@ -27,12 +27,12 @@ const SECCIONES: { titulo: string; items: Item[] }[] = [
   {
     titulo: "Compras",
     items: [
-      { texto: "Comprobantes" },
-      { texto: "Pagos" },
+      { href: "/compras/comprobantes", texto: "Comprobantes" },
+      { href: "/compras/pagos", texto: "Pagos" },
       { href: "/proveedores", texto: "Proveedores" },
-      { texto: "Cuentas corrientes" },
+      { href: "/compras/cuentas-corrientes", texto: "Cuentas corrientes" },
       { texto: "Órdenes de compra" },
-      { texto: "Remitos" },
+      { href: "/compras/remitos", texto: "Remitos" },
     ],
   },
   {

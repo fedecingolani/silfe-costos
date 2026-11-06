@@ -104,7 +104,7 @@ export function AccionesRemito({
           onConfirmar={() => ejecutar(borrarRemito)}
         />
       )}
-      <ModalError estado={resultado} />
+      <ModalError estado={resultado} titulo="No se pudo completar la acción" />
     </>
   );
 }
