@@ -19,7 +19,314 @@ export type Proveedor = {
   telefono: string | null;
   notas: string | null;
   activo: boolean;
+  condicion_iva: CondicionIva | null;
+  domicilio: string | null;
+  /** 22 dígitos, sin espacios. */
+  cbu: string | null;
+  alias: string | null;
 };
+
+/** Artículo del catálogo de un proveedor, tal como lo factura. */
+export type ProveedorArticulo = {
+  id: string;
+  proveedor_id: string;
+  codigo: string | null;
+  descripcion: string;
+  unidad: string | null;
+  /** Unidades de compra de la materia prima que equivale una unidad del proveedor. */
+  factor_conversion: number;
+  materia_prima_id: string | null;
+  activo: boolean;
+};
+
+export const TIPOS_COMPROBANTE_COMPRA = ["factura", "nota_credito", "nota_debito"] as const;
+
+export type TipoComprobanteCompra = (typeof TIPOS_COMPROBANTE_COMPRA)[number];
+
+/** A y M discriminan IVA; B y C no (el precio lo incluye). */
+export const LETRAS_COMPRA = ["A", "B", "C", "M"] as const;
+
+export type LetraCompra = (typeof LETRAS_COMPRA)[number];
+
+export const ESTADOS_COMPROBANTE_COMPRA = ["borrador", "confirmado", "anulado"] as const;
+
+export type EstadoComprobanteCompra = (typeof ESTADOS_COMPROBANTE_COMPRA)[number];
+
+export const TIPOS_PERCEPCION_COMPRA = ["iva", "iibb", "otro"] as const;
+
+export type TipoPercepcionCompra = (typeof TIPOS_PERCEPCION_COMPRA)[number];
+
+/** Factura, nota de crédito o de débito de un proveedor. Los totales los calcula la base. */
+export type ComprobanteCompra = {
+  id: string;
+  proveedor_id: string;
+  tipo: TipoComprobanteCompra;
+  letra: LetraCompra;
+  punto_venta: number;
+  numero: number;
+  fecha: string;
+  fecha_vencimiento: string | null;
+  observaciones: string | null;
+  neto_gravado: number;
+  no_gravado: number;
+  exento: number;
+  iva: number;
+  percepcion_iva: number;
+  percepcion_iibb: number;
+  otros_impuestos: number;
+  total: number;
+  estado: EstadoComprobanteCompra;
+  confirmado_en: string | null;
+  anulado_en: string | null;
+  creado_por: string | null;
+  creado_en: string;
+  actualizado_en: string;
+  /** Nota de crédito o débito: factura que corrige (confirmada, mismo proveedor y letra). Vacía: suelta. */
+  comprobante_asociado_id: string | null;
+};
+
+/** Renglón de un comprobante de compra: un artículo del proveedor o un renglón libre. */
+export type ComprobanteCompraItem = {
+  id: string;
+  comprobante_compra_id: string;
+  orden: number;
+  proveedor_articulo_id: string | null;
+  /** Copiada del artículo por la base; vacía en un renglón libre. */
+  materia_prima_id: string | null;
+  codigo_proveedor: string | null;
+  descripcion: string;
+  unidad: string | null;
+  cantidad: number;
+  precio_unitario: number;
+  descuento_pct: number;
+  /** Vacía: no gravado (y siempre en B y C). */
+  alicuota_iva: AlicuotaIva | null;
+  exento: boolean;
+  importe: number;
+  iva: number;
+  /** Renglón de remito de compra que factura (sólo en facturas); vacío sin remito. */
+  remito_compra_item_id: string | null;
+};
+
+export type ComprobanteCompraPercepcion = {
+  id: string;
+  comprobante_compra_id: string;
+  tipo: TipoPercepcionCompra;
+  /** Provincia; obligatoria en iibb. */
+  jurisdiccion: string | null;
+  descripcion: string | null;
+  importe: number;
+};
+
+/**
+ * Un renglón con materia prima de un comprobante de compra, con el precio
+ * de la factura y el vigente del proveedor (precios_comprobante_compra).
+ */
+export type PrecioComprobanteCompra = {
+  comprobante_compra_item_id: string;
+  orden: number;
+  descripcion: string;
+  materia_prima_id: string;
+  materia_prima_codigo: string;
+  materia_prima_nombre: string;
+  unidad_compra: string;
+  /** Por unidad de compra; sin IVA en A y M, con el IVA no computable en B y C. */
+  precio_factura: number;
+  /** Último precio del proveedor a la fecha del comprobante; null si no tiene. */
+  precio_vigente: number | null;
+  incluye_iva: boolean | null;
+  cambio: boolean;
+};
+
+export const ESTADOS_REMITO_COMPRA = ["borrador", "recibido", "anulado"] as const;
+
+export type EstadoRemitoCompra = (typeof ESTADOS_REMITO_COMPRA)[number];
+
+/** Estado de facturación de un remito de compra (v_remito_compra_estado). */
+export const ESTADOS_FACTURACION_REMITO_COMPRA = ["pendiente", "parcial", "facturado"] as const;
+
+export type EstadoFacturacionRemitoCompra = (typeof ESTADOS_FACTURACION_REMITO_COMPRA)[number];
+
+/** Remito de un proveedor: la mercadería recibida, con su número de remito. No mueve stock. */
+export type RemitoCompra = {
+  id: string;
+  proveedor_id: string;
+  punto_venta: number;
+  numero: number;
+  /** yyyy-mm-dd */
+  fecha: string;
+  observaciones: string | null;
+  estado: EstadoRemitoCompra;
+  recibido_en: string | null;
+  anulado_en: string | null;
+  creado_por: string | null;
+  creado_en: string;
+  actualizado_en: string;
+};
+
+/** Renglón de un remito de compra: siempre un artículo del proveedor. */
+export type RemitoCompraItem = {
+  id: string;
+  remito_compra_id: string;
+  orden: number;
+  proveedor_articulo_id: string;
+  /** Copiada del artículo por la base. */
+  materia_prima_id: string | null;
+  codigo_proveedor: string | null;
+  descripcion: string;
+  unidad: string | null;
+  /** 4 decimales, en la unidad del proveedor. */
+  cantidad: number;
+};
+
+/** Fila de v_remito_compra_item_pendiente: lo facturado y lo pendiente de cada renglón de remito de compra. */
+export type RemitoCompraItemPendiente = {
+  remito_compra_item_id: string;
+  remito_compra_id: string;
+  proveedor_id: string;
+  punto_venta: number;
+  numero: number;
+  /** yyyy-mm-dd, del remito. */
+  fecha: string;
+  estado_remito: EstadoRemitoCompra;
+  orden: number;
+  proveedor_articulo_id: string;
+  materia_prima_id: string | null;
+  codigo_proveedor: string | null;
+  descripcion: string;
+  unidad: string | null;
+  cantidad: number;
+  /** Suma de los renglones de comprobantes no anulados que lo apuntan, borradores incluidos. */
+  facturada: number;
+  /** cantidad − facturada */
+  pendiente: number;
+};
+
+/** Fila de v_remito_compra_estado. */
+export type RemitoCompraEstado = {
+  remito_compra_id: string;
+  proveedor_id: string;
+  punto_venta: number;
+  numero: number;
+  fecha: string;
+  estado: EstadoRemitoCompra;
+  estado_facturacion: EstadoFacturacionRemitoCompra;
+  cantidad: number;
+  facturada: number;
+  pendiente: number;
+};
+
+export const ESTADOS_ORDEN_PAGO = ["borrador", "confirmado", "anulado"] as const;
+
+export type EstadoOrdenPago = (typeof ESTADOS_ORDEN_PAGO)[number];
+
+/** Sin retenciones. Efectivo y transferencia van sin banco ni caja. */
+export const TIPOS_MEDIO_PAGO_COMPRA = ["efectivo", "transferencia", "cheque_tercero", "cheque_propio"] as const;
+
+export type TipoMedioPagoCompra = (typeof TIPOS_MEDIO_PAGO_COMPRA)[number];
+
+export const NOMBRES_MEDIO_PAGO_COMPRA: Record<TipoMedioPagoCompra, string> = {
+  efectivo: "Efectivo",
+  transferencia: "Transferencia",
+  cheque_tercero: "Cheque de terceros",
+  cheque_propio: "Cheque propio",
+};
+
+/** Fila de orden_pago. Una confirmada no se modifica: se anula. */
+export type OrdenPago = {
+  id: string;
+  /** Vacío en borrador. */
+  numero: number | null;
+  /** OP-00000001; vacío en borrador. */
+  numero_texto: string | null;
+  /** yyyy-mm-dd */
+  fecha: string;
+  proveedor_id: string;
+  /** Suma de los medios de pago. */
+  total: number;
+  estado: EstadoOrdenPago;
+  motivo_anulacion: string | null;
+  observaciones: string | null;
+  creado_por: string | null;
+  creado_en: string;
+  actualizado_en: string;
+  confirmado_en: string | null;
+  anulado_en: string | null;
+};
+
+/** Fila de orden_pago_medio. */
+export type OrdenPagoMedio = {
+  id: string;
+  orden_pago_id: string;
+  orden: number;
+  tipo: TipoMedioPagoCompra;
+  importe: number;
+  /** Transferencia: referencia de la operación. */
+  referencia: string | null;
+  /** Cheque de terceros de la cartera. */
+  cheque_id: string | null;
+  /** Cheque propio: banco, número y fecha de pago. */
+  banco: string | null;
+  numero: string | null;
+  fecha_pago: string | null;
+};
+
+/** Fila de imputacion_compra: sale de una orden de pago o de una nota de crédito de compra. */
+export type ImputacionCompra = {
+  id: string;
+  orden_pago_id: string | null;
+  nota_credito_id: string | null;
+  /** Débito (factura o nota de débito de compra confirmada). */
+  comprobante_compra_id: string;
+  importe: number;
+  fecha: string;
+  automatica: boolean;
+  creado_por: string | null;
+  creado_en: string;
+};
+
+/** Fila de v_comprobante_compra_saldo: facturas y notas de débito de compra confirmadas. */
+export type ComprobanteCompraSaldo = {
+  comprobante_compra_id: string;
+  proveedor_id: string;
+  tipo: Exclude<TipoComprobanteCompra, "nota_credito">;
+  letra: LetraCompra;
+  punto_venta: number;
+  numero: number;
+  /** FC A 00003-00012345 */
+  numero_texto: string;
+  fecha: string;
+  fecha_vencimiento: string | null;
+  total: number;
+  imputado: number;
+  saldo: number;
+  estado_pago: EstadoPago;
+};
+
+/** Fila de v_proveedor_saldo_a_favor: créditos del proveedor con algo sin imputar. */
+export type ProveedorSaldoAFavor = {
+  origen: "orden_pago" | "nota_credito";
+  orden_pago_id: string | null;
+  nota_credito_id: string | null;
+  proveedor_id: string;
+  fecha: string;
+  creado_en: string;
+  numero_texto: string;
+  total: number;
+  imputado: number;
+  disponible: number;
+};
+
+/** Medio de pago para guardar_orden_pago (p_medios). */
+export type MedioOrdenPagoGuardar =
+  | { tipo: "efectivo"; importe: number }
+  | { tipo: "transferencia"; importe: number; referencia?: string | null }
+  /** El importe lo pone la base: el del cheque. */
+  | { tipo: "cheque_tercero"; cheque_id: string; importe?: number }
+  | { tipo: "cheque_propio"; importe: number; banco: string; numero: string; fecha_pago: string };
+
+/** Imputación para guardar_orden_pago (p_imputaciones). Los importes en cero se ignoran. */
+export type ImputacionOrdenPagoGuardar = { comprobante_compra_id: string; importe: number };
 
 export type ProveedorContacto = {
   id: string;
@@ -895,6 +1202,10 @@ export type Cheque = {
   entregado_a: string | null;
   /** Nota de débito por el rechazo. */
   nd_comprobante_id: string | null;
+  /** Proveedor al que se entregó con una orden de pago. */
+  proveedor_id: string | null;
+  /** Orden de pago con que se entregó (vuelve a la cartera si se anula). */
+  orden_pago_id: string | null;
   creado_en: string;
 };
 

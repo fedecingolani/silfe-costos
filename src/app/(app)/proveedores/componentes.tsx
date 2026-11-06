@@ -4,64 +4,6 @@ import { Pastilla, BotonEliminar } from "@/components/ui";
 
 type Accion = (formData: FormData) => Promise<void>;
 
-export function FormularioProveedor({
-  accion,
-  proveedor,
-  cancelarHref,
-}: {
-  accion: Accion;
-  proveedor?: Proveedor;
-  cancelarHref?: string;
-}) {
-  return (
-    <form action={accion} className="space-y-3 p-4">
-      {proveedor && <input type="hidden" name="id" value={proveedor.id} />}
-      <div>
-        <label className="etiqueta">Nombre *</label>
-        <input name="nombre" required defaultValue={proveedor?.nombre ?? ""} className="campo" />
-      </div>
-      <div className="grid grid-cols-2 gap-3">
-        <div>
-          <label className="etiqueta">CUIT</label>
-          <input name="cuit" defaultValue={proveedor?.cuit ?? ""} className="campo" />
-        </div>
-        <div>
-          <label className="etiqueta">Contacto</label>
-          <input name="contacto" defaultValue={proveedor?.contacto ?? ""} className="campo" />
-        </div>
-      </div>
-      <div className="grid grid-cols-2 gap-3">
-        <div>
-          <label className="etiqueta">Teléfono</label>
-          <input name="telefono" defaultValue={proveedor?.telefono ?? ""} className="campo" />
-        </div>
-        <div>
-          <label className="etiqueta">Email</label>
-          <input name="email" type="email" defaultValue={proveedor?.email ?? ""} className="campo" />
-        </div>
-      </div>
-      <div>
-        <label className="etiqueta">Notas</label>
-        <textarea name="notas" rows={2} defaultValue={proveedor?.notas ?? ""} className="campo" />
-      </div>
-      <label className="flex items-center gap-2 text-sm text-stone-600">
-        <input type="checkbox" name="activo" defaultChecked={proveedor?.activo ?? true} className="rounded" />
-        Activo
-      </label>
-      <div className="flex gap-2 pt-1">
-        <button type="submit" className="boton-primario">
-          {proveedor ? "Guardar cambios" : "Agregar proveedor"}
-        </button>
-        {cancelarHref && (
-          <Link href={cancelarHref} className="boton-secundario">
-            Cancelar
-          </Link>
-        )}
-      </div>
-    </form>
-  );
-}
-
 export function FilaProveedor({
   proveedor,
   eliminar,

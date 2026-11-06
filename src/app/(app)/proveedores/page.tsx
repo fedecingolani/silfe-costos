@@ -3,7 +3,8 @@ import { Encabezado, Tarjeta, Vacio } from "@/components/ui";
 import { Modal } from "@/components/Modal";
 import type { Proveedor } from "@/lib/tipos";
 import { crearProveedor, actualizarProveedor, eliminarProveedor } from "./acciones";
-import { FilaProveedor, FormularioProveedor } from "./componentes";
+import { FilaProveedor } from "./componentes";
+import { FormularioProveedor } from "./FormularioProveedor";
 
 export const dynamic = "force-dynamic";
 
