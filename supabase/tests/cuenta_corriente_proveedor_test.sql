@@ -174,7 +174,7 @@ select is(
 select is(
   (select pendientes || '|' || nombre || '|' || cuit from v_proveedor_cuenta_resumen
    where proveedor_id = '00000000-0000-4000-8000-0000000009c1'),
-  '1|Proveedor cuenta 1|30-11111111-1',
+  '1|Proveedor cuenta 1|30111111111',
   'El resumen incluye al proveedor con deuda y a favor aunque el neto sea cero'
 );
 select is(
