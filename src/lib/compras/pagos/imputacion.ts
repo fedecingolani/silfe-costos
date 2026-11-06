@@ -61,3 +61,32 @@ export function imputacionInicial(
   const debito = comprobanteId ? debitos.find((d) => d.comprobanteId === comprobanteId) : undefined;
   return debito ? { [debito.comprobanteId]: String(debito.saldo) } : {};
 }
+
+/** Imputación guardada en un borrador. El número del comprobante, si se conoce, para el aviso. */
+export type ImputacionGuardada = { comprobanteId: string; importe: number; numeroTexto?: string | null };
+
+/**
+ * Importes a imputar al reabrir un borrador. Una imputación a un comprobante
+ * que ya no está entre los débitos con saldo (lo pagó otra orden o una nota
+ * de crédito mientras tanto) se quita y se avisa: la tabla no lo muestra, así
+ * que el usuario no podría borrarla y la validación fallaría siempre. Si no
+ * se pudieron leer los pendientes (`debitos` null) se conservan todas.
+ */
+export function imputacionesDelBorrador(
+  imputaciones: readonly ImputacionGuardada[],
+  debitos: readonly Pick<DebitoPendiente, "comprobanteId">[] | null,
+): { aImputar: Record<string, string>; avisos: string[] } {
+  const conSaldo = debitos ? new Set(debitos.map((d) => d.comprobanteId)) : null;
+  const aImputar: Record<string, string> = {};
+  const avisos: string[] = [];
+  for (const i of imputaciones) {
+    if (conSaldo && !conSaldo.has(i.comprobanteId)) {
+      avisos.push(
+        `Se quitó la imputación a ${i.numeroTexto || "un comprobante"} (${textoPesos(i.importe)}) porque ya no tiene saldo pendiente.`,
+      );
+      continue;
+    }
+    aImputar[i.comprobanteId] = String(i.importe);
+  }
+  return { aImputar, avisos };
+}
