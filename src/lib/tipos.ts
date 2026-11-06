@@ -1241,3 +1241,16 @@ export type Imputacion = {
   creado_por: string | null;
   creado_en: string;
 };
+
+/**
+ * Clave de API de una integración (api_clave), como se lista en
+ * Configuración → Integraciones. El hash nunca se lee en la pantalla.
+ */
+export type ApiClaveVisible = {
+  id: string;
+  nombre: string;
+  prefijo: string;
+  creado_en: string;
+  revocada_en: string | null;
+  ultimo_uso_en: string | null;
+};
