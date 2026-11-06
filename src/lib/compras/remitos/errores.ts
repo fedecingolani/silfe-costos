@@ -6,7 +6,7 @@
  * devuelven el mensaje en lugar de lanzarlo.
  */
 
-import type { ErrorBase } from "@/lib/compras/comprobantes/errores";
+import { mensajeErrorComprobanteCompra, type ErrorBase } from "@/lib/compras/comprobantes/errores";
 
 export type { ErrorBase };
 
@@ -89,4 +89,15 @@ export function mensajeErrorRemitoCompra(error: ErrorBase, accion = "guardar el 
   // Object.hasOwn: una pista como "constructor" no tiene que encontrar lo heredado de Object.
   const propio = (clave: string | null | undefined) => (clave && Object.hasOwn(PROPIOS, clave) ? PROPIOS[clave] : undefined);
   return propio(error.code) ?? propio(error.hint) ?? `No se pudo ${accion}: ${error.message}`;
+}
+
+/**
+ * Mensaje de un error de facturar_remitos_compra: los RC (remitos elegidos,
+ * pendiente) se traducen como remitos; el resto viene de guardar la factura
+ * (número repetido, deadlock, controles de la tabla) y se traduce como
+ * comprobante. Se decide por el código: varias pistas se repiten en los dos.
+ */
+export function mensajeErrorFacturarRemitosCompra(error: ErrorBase): string {
+  if (error.code?.startsWith("RC")) return mensajeErrorRemitoCompra(error, "facturar los remitos");
+  return mensajeErrorComprobanteCompra(error, "facturar los remitos");
 }

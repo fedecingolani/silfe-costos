@@ -59,7 +59,8 @@ export function notaDesdeParametros(desde: unknown, tipo: unknown): { facturaId:
 /**
  * Editor de una nota nueva asociada a una factura: mismo proveedor y letra,
  * los renglones con sus precios (artículo o libre, como en la factura) para
- * ajustarlos, sin percepciones, sin número y con fecha de hoy.
+ * ajustarlos (sin el vínculo con los remitos de la factura), sin
+ * percepciones, sin número y con fecha de hoy.
  */
 export function editorNotaDeFactura(
   factura: ComprobanteCompra,
@@ -70,6 +71,8 @@ export function editorNotaDeFactura(
   const base = editorDeComprobanteCompra(factura, items, []);
   return {
     ...base,
+    // Una nota no factura remitos: los renglones dejan de apuntar a los de la factura.
+    filas: base.filas.map((f) => ({ ...f, remitoItemId: null })),
     tipo,
     puntoVenta: "",
     numero: "",

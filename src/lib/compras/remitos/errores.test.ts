@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { mensajeErrorRemitoCompra } from "./errores";
+import { mensajeErrorFacturarRemitosCompra, mensajeErrorRemitoCompra } from "./errores";
 
 describe("mensajeErrorRemitoCompra", () => {
   it("traduce cada código RC001–RC011 a un mensaje propio", () => {
@@ -70,6 +70,35 @@ describe("mensajeErrorRemitoCompra", () => {
   it("un error desconocido dice qué se intentaba", () => {
     expect(mensajeErrorRemitoCompra({ code: "XX000", message: "se cayó" }, "recibir el remito")).toBe(
       "No se pudo recibir el remito: se cayó",
+    );
+  });
+});
+
+describe("mensajeErrorFacturarRemitosCompra", () => {
+  it("los errores de los remitos se traducen como remitos", () => {
+    expect(mensajeErrorFacturarRemitosCompra({ code: "RC010", hint: "excede_pendiente", message: "Del renglón X quedan 2." })).toBe(
+      "Del renglón X quedan 2.",
+    );
+    expect(mensajeErrorFacturarRemitosCompra({ code: "RC004", message: "x" })).toBe(
+      "No se encontró el remito. Puede que lo hayan borrado.",
+    );
+  });
+
+  it("los de la factura que se guarda, como comprobantes", () => {
+    expect(
+      mensajeErrorFacturarRemitosCompra({
+        code: "23505",
+        message: 'duplicate key value violates unique constraint "comprobante_compra_numero_unico"',
+      }),
+    ).toBe("Ese comprobante de ese proveedor ya está cargado.");
+    expect(mensajeErrorFacturarRemitosCompra({ code: "40P01", message: "deadlock detected" })).toBe(
+      "Otra persona estaba guardando un comprobante con los mismos remitos. Probá de nuevo.",
+    );
+  });
+
+  it("sin traducción, dice que no se pudo facturar los remitos", () => {
+    expect(mensajeErrorFacturarRemitosCompra({ code: "XX000", message: "algo" })).toBe(
+      "No se pudo facturar los remitos: algo",
     );
   });
 });
