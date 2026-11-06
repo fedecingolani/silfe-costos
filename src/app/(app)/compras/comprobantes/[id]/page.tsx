@@ -22,6 +22,7 @@ import {
   cargarFacturaAsociada,
   cargarFacturasAsociables,
   cargarNotasAsociadas,
+  cargarRemitosDeRenglones,
 } from "../datos";
 import { EditorComprobanteCompra } from "../EditorComprobanteCompra";
 
@@ -73,13 +74,15 @@ export default async function ComprobanteCompraPage({ params }: { params: Promis
   if (permisos.puedeEditar) {
     // La asociada se lee aparte: puede quedar fuera de la lista (tiene un tope).
     // Si falla alguna de las dos, el editor se abre igual y lo avisa.
-    const [contexto, articulos, facturas, asociada] = await Promise.all([
+    // Si falla la lectura de los remitos, los renglones lo dicen sin el número: el vínculo se conserva igual.
+    const [contexto, articulos, facturas, asociada, remitos] = await Promise.all([
       cargarContextoEditorCompra(supabase),
       cargarArticulos(supabase, c.proveedor_id),
       esNotaCompra(c.tipo)
         ? cargarFacturasAsociables(supabase, c.proveedor_id, c.letra)
         : Promise.resolve([] as FacturaAsociable[]),
       c.comprobante_asociado_id ? cargarFacturaAsociada(supabase, c.comprobante_asociado_id) : Promise.resolve(undefined),
+      cargarRemitosDeRenglones(supabase, items),
     ]);
     if (typeof contexto === "string" || typeof articulos === "string") {
       const error = [contexto, articulos].find((v) => typeof v === "string");
@@ -100,6 +103,7 @@ export default async function ComprobanteCompraPage({ params }: { params: Promis
           facturas={typeof facturas === "string" ? [] : facturas}
           errorFacturas={typeof facturas === "string" ? facturas : null}
           facturaAsociada={typeof asociada === "string" ? undefined : asociada}
+          remitos={typeof remitos === "string" ? {} : remitos}
           hoy={hoyArgentina()}
         />
       </>
@@ -109,7 +113,7 @@ export default async function ComprobanteCompraPage({ params }: { params: Promis
   // ----- Confirmado o anulado: sólo lectura -------------------------------------
 
   const materiaIds = [...new Set(items.map((i) => i.materia_prima_id).filter((v): v is string => v !== null))];
-  const [{ data: proveedorData }, { data: materiasData, error: errorMaterias }, facturaAsociadaLeida, notas] =
+  const [{ data: proveedorData }, { data: materiasData, error: errorMaterias }, facturaAsociadaLeida, notas, remitosLeidos] =
     await Promise.all([
       supabase.from("proveedor").select("id, nombre, cuit, condicion_iva").eq("id", c.proveedor_id).maybeSingle(),
       materiaIds.length > 0
@@ -117,6 +121,7 @@ export default async function ComprobanteCompraPage({ params }: { params: Promis
         : Promise.resolve({ data: [], error: null }),
       c.comprobante_asociado_id ? cargarFacturaAsociada(supabase, c.comprobante_asociado_id) : Promise.resolve(null),
       c.tipo === "factura" ? cargarNotasAsociadas(supabase, c.id) : Promise.resolve([]),
+      cargarRemitosDeRenglones(supabase, items),
     ]);
   if (errorMaterias) {
     return <p className="text-sm text-red-700">Error al cargar las materias primas: {errorMaterias.message}</p>;
@@ -124,6 +129,8 @@ export default async function ComprobanteCompraPage({ params }: { params: Promis
   if (typeof notas === "string") return <p className="text-sm text-red-700">{notas}</p>;
   // Si no se pudo leer, queda el enlace a la factura sin su número.
   const facturaAsociada = typeof facturaAsociadaLeida === "string" ? null : facturaAsociadaLeida;
+  // Igual con los remitos de los renglones: sin número, el renglón dice que viene de un remito.
+  const remitos = typeof remitosLeidos === "string" ? {} : remitosLeidos;
   const proveedor = proveedorData as { id: string; nombre: string; cuit: string | null; condicion_iva: CondicionIva | null } | null;
   const materias = new Map(
     ((materiasData ?? []) as { id: string; codigo: string; nombre: string }[]).map((m) => [m.id, m]),
@@ -240,7 +247,23 @@ export default async function ComprobanteCompraPage({ params }: { params: Promis
                 return (
                   <tr key={i.id}>
                     <td className="tabular-nums">{i.codigo_proveedor ?? "—"}</td>
-                    <td className="whitespace-pre-wrap">{i.descripcion}</td>
+                    <td className="whitespace-pre-wrap">
+                      {i.descripcion}
+                      {i.remito_compra_item_id && (
+                        <p className="text-xs">
+                          {remitos[i.remito_compra_item_id] ? (
+                            <Link
+                              href={`/compras/remitos/${remitos[i.remito_compra_item_id].remitoId}`}
+                              className="text-marca-700 hover:underline"
+                            >
+                              Del remito {remitos[i.remito_compra_item_id].numero}
+                            </Link>
+                          ) : (
+                            <span className="text-stone-500">De un remito de compra</span>
+                          )}
+                        </p>
+                      )}
+                    </td>
                     <td>
                       {materia ? `${materia.codigo} — ${materia.nombre}` : i.proveedor_articulo_id ? "—" : "Renglón libre"}
                     </td>

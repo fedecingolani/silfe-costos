@@ -1,6 +1,7 @@
 import "server-only";
 import type { createClient } from "@/lib/supabase/server";
 import type { FacturaAsociable, NotaAsociada } from "@/lib/compras/comprobantes/nota";
+import { numeroRemitoCompra } from "@/lib/compras/remitos/listado";
 import type {
   ComprobanteCompra,
   ComprobanteCompraItem,
@@ -18,7 +19,7 @@ export const COLUMNAS_COMPROBANTE_COMPRA =
   "anulado_en, creado_por, creado_en, actualizado_en, comprobante_asociado_id";
 const COLUMNAS_ITEM =
   "id, comprobante_compra_id, orden, proveedor_articulo_id, materia_prima_id, codigo_proveedor, descripcion, unidad, " +
-  "cantidad, precio_unitario, descuento_pct, alicuota_iva, exento, importe, iva";
+  "cantidad, precio_unitario, descuento_pct, alicuota_iva, exento, importe, iva, remito_compra_item_id";
 const COLUMNAS_PERCEPCION = "id, comprobante_compra_id, tipo, jurisdiccion, descripcion, importe";
 const COLUMNAS_ARTICULO = "id, proveedor_id, codigo, descripcion, unidad, factor_conversion, materia_prima_id, activo";
 
@@ -104,6 +105,38 @@ export async function cargarNotasAsociadas(supabase: Supabase, facturaId: string
     .order("creado_en");
   if (error) return `No se pudieron leer las notas de la factura: ${error.message}`;
   return ((data ?? []) as unknown as NotaAsociada[]).map(resumen);
+}
+
+/** Remito de compra de cada renglón de remito (por su id), para mostrar de dónde viene un renglón de factura. */
+export type RemitosDeRenglones = Record<string, { remitoId: string; numero: string }>;
+
+/**
+ * Remitos de los renglones de una factura que vienen de remitos. Vacío si
+ * ninguno; el mensaje si falló la lectura.
+ */
+export async function cargarRemitosDeRenglones(
+  supabase: Supabase,
+  items: readonly Pick<ComprobanteCompraItem, "remito_compra_item_id">[],
+): Promise<RemitosDeRenglones | string> {
+  const ids = [...new Set(items.map((i) => i.remito_compra_item_id).filter((v): v is string => v !== null))];
+  if (ids.length === 0) return {};
+  const { data, error } = await supabase
+    .from("remito_compra_item")
+    .select("id, remito_compra_id, remito_compra(punto_venta, numero)")
+    .in("id", ids);
+  if (error) return `No se pudieron leer los remitos de los renglones: ${error.message}`;
+  const remitos: RemitosDeRenglones = {};
+  for (const fila of (data ?? []) as unknown as {
+    id: string;
+    remito_compra_id: string;
+    remito_compra: { punto_venta: number; numero: number } | null;
+  }[]) {
+    remitos[fila.id] = {
+      remitoId: fila.remito_compra_id,
+      numero: fila.remito_compra ? numeroRemitoCompra(fila.remito_compra) : "",
+    };
+  }
+  return remitos;
 }
 
 export type ComprobanteCompraCargado = {
