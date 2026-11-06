@@ -84,9 +84,13 @@ export async function cargarFacturasAsociables(
   return ((data ?? []) as unknown as FacturaAsociable[]).map(resumen);
 }
 
-/** La factura asociada a una nota (cualquier estado: pudo anularse después). */
-export async function cargarFacturaAsociada(supabase: Supabase, id: string): Promise<NotaAsociada | null> {
-  const { data } = await supabase.from("comprobante_compra").select(COLUMNAS_RESUMEN).eq("id", id).maybeSingle();
+/**
+ * La factura asociada a una nota (cualquier estado: pudo anularse después).
+ * null si no existe; el mensaje si falló la lectura.
+ */
+export async function cargarFacturaAsociada(supabase: Supabase, id: string): Promise<NotaAsociada | null | string> {
+  const { data, error } = await supabase.from("comprobante_compra").select(COLUMNAS_RESUMEN).eq("id", id).maybeSingle();
+  if (error) return `No se pudo leer la factura asociada: ${error.message}`;
   return data ? resumen(data as unknown as NotaAsociada) : null;
 }
 

@@ -1,7 +1,16 @@
 import { describe, expect, it } from "vitest";
 import type { ComprobanteCompra, ComprobanteCompraItem } from "@/lib/tipos";
 import { armarComprobanteCompra, comprobanteEnviado } from "./borrador";
-import { editorNotaDeFactura, esNotaCompra, notaDesdeParametros, puedeTenerNotas } from "./nota";
+import {
+  confirmaConPrecios,
+  editorNotaDeFactura,
+  esNotaCompra,
+  facturaAsociadaEnEditor,
+  notaDesdeParametros,
+  puedeTenerNotas,
+  type FacturaAsociable,
+  type NotaAsociada,
+} from "./nota";
 
 const PROVEEDOR = "a0000000-0000-0000-0000-000000000001";
 const ARTICULO = "b0000000-0000-0000-0000-000000000001";
@@ -146,5 +155,60 @@ describe("editorNotaDeFactura", () => {
     expect(resultado.armado.comprobante).toMatchObject({ tipo: "nota_credito", comprobante_asociado_id: FACTURA });
     expect(resultado.armado.items).toHaveLength(3);
     expect(resultado.armado.percepciones).toEqual([]);
+  });
+});
+
+describe("confirmaConPrecios", () => {
+  it("una factura elige precios al confirmarse", () => {
+    expect(confirmaConPrecios("factura")).toBe(true);
+  });
+
+  it("una nota se confirma sin precios", () => {
+    expect(confirmaConPrecios("nota_credito")).toBe(false);
+    expect(confirmaConPrecios("nota_debito")).toBe(false);
+  });
+});
+
+describe("facturaAsociadaEnEditor", () => {
+  const OTRA = "d0000000-0000-0000-0000-000000000002";
+  const listada: FacturaAsociable = {
+    id: OTRA, tipo: "factura", letra: "A", punto_venta: 3, numero: 1, fecha: "2026-10-01", total: 100,
+  };
+  const guardada: NotaAsociada = {
+    id: FACTURA, tipo: "factura", letra: "A", punto_venta: 3, numero: 12345, fecha: "2026-01-20", total: 2100,
+    estado: "confirmado",
+  };
+
+  it("sin factura asociada, ofrece la lista sin aviso", () => {
+    expect(facturaAsociadaEnEditor("", [listada], undefined)).toEqual({ opciones: [listada], aviso: null });
+  });
+
+  it("la asociada que está en la lista no lleva aviso", () => {
+    expect(facturaAsociadaEnEditor(OTRA, [listada], undefined)).toEqual({ opciones: [listada], aviso: null });
+  });
+
+  it("la asociada confirmada que quedó fuera de la lista se agrega a las opciones, sin aviso", () => {
+    const { opciones, aviso } = facturaAsociadaEnEditor(FACTURA, [listada], guardada);
+    expect(aviso).toBeNull();
+    expect(opciones.map((f) => f.id)).toEqual([FACTURA, OTRA]);
+    expect(opciones[0]).toEqual({
+      id: FACTURA, tipo: "factura", letra: "A", punto_venta: 3, numero: 12345, fecha: "2026-01-20", total: 2100,
+    });
+  });
+
+  it("avisa que ya no está confirmada sólo si de verdad no lo está", () => {
+    expect(facturaAsociadaEnEditor(FACTURA, [listada], { ...guardada, estado: "anulado" })).toEqual({
+      opciones: [listada],
+      aviso: "no_confirmada",
+    });
+  });
+
+  it("avisa que no existe si no se encontró", () => {
+    expect(facturaAsociadaEnEditor(FACTURA, [listada], null).aviso).toBe("inexistente");
+  });
+
+  it("sin los datos de la asociada (falló la lectura), el aviso es neutro", () => {
+    expect(facturaAsociadaEnEditor(FACTURA, [], undefined)).toEqual({ opciones: [], aviso: "sin_datos" });
+    expect(facturaAsociadaEnEditor(FACTURA, [], { ...guardada, id: OTRA }).aviso).toBe("sin_datos");
   });
 });

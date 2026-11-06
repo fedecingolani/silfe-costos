@@ -44,9 +44,8 @@ export default async function NuevoComprobanteCompraPage({
       cargarArticulos(supabase, f.proveedor_id),
       cargarFacturasAsociables(supabase, f.proveedor_id, f.letra),
     ]);
-    if (typeof articulos === "string" || typeof facturas === "string") {
-      const error = typeof articulos === "string" ? articulos : facturas;
-      return <p className="text-sm text-red-700">Error al cargar los datos del comprobante: {error as string}</p>;
+    if (typeof articulos === "string") {
+      return <p className="text-sm text-red-700">Error al cargar los datos del comprobante: {articulos}</p>;
     }
     const nombre = NOMBRES_TIPO_COMPROBANTE_COMPRA[pedido.tipo];
     return (
@@ -61,7 +60,18 @@ export default async function NuevoComprobanteCompraPage({
           notaDe={{ factura, tipo: pedido.tipo }}
           contexto={contexto}
           articulos={articulos}
-          facturas={facturas}
+          facturas={typeof facturas === "string" ? [] : facturas}
+          errorFacturas={typeof facturas === "string" ? facturas : null}
+          facturaAsociada={{
+            id: f.id,
+            tipo: f.tipo,
+            letra: f.letra,
+            punto_venta: f.punto_venta,
+            numero: f.numero,
+            fecha: f.fecha,
+            total: f.total,
+            estado: f.estado,
+          }}
           hoy={hoyArgentina()}
         />
       </>

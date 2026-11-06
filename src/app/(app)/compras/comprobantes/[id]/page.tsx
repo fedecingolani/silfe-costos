@@ -71,15 +71,18 @@ export default async function ComprobanteCompraPage({ params }: { params: Promis
   // ----- Borrador: se edita ------------------------------------------------------
 
   if (permisos.puedeEditar) {
-    const [contexto, articulos, facturas] = await Promise.all([
+    // La asociada se lee aparte: puede quedar fuera de la lista (tiene un tope).
+    // Si falla alguna de las dos, el editor se abre igual y lo avisa.
+    const [contexto, articulos, facturas, asociada] = await Promise.all([
       cargarContextoEditorCompra(supabase),
       cargarArticulos(supabase, c.proveedor_id),
       esNotaCompra(c.tipo)
         ? cargarFacturasAsociables(supabase, c.proveedor_id, c.letra)
         : Promise.resolve([] as FacturaAsociable[]),
+      c.comprobante_asociado_id ? cargarFacturaAsociada(supabase, c.comprobante_asociado_id) : Promise.resolve(undefined),
     ]);
-    if (typeof contexto === "string" || typeof articulos === "string" || typeof facturas === "string") {
-      const error = [contexto, articulos, facturas].find((v) => typeof v === "string");
+    if (typeof contexto === "string" || typeof articulos === "string") {
+      const error = [contexto, articulos].find((v) => typeof v === "string");
       return <p className="text-sm text-red-700">Error al cargar los datos del comprobante: {error as string}</p>;
     }
     return (
@@ -94,7 +97,9 @@ export default async function ComprobanteCompraPage({ params }: { params: Promis
           guardado={cargado}
           contexto={contexto}
           articulos={articulos}
-          facturas={facturas}
+          facturas={typeof facturas === "string" ? [] : facturas}
+          errorFacturas={typeof facturas === "string" ? facturas : null}
+          facturaAsociada={typeof asociada === "string" ? undefined : asociada}
           hoy={hoyArgentina()}
         />
       </>
@@ -104,7 +109,7 @@ export default async function ComprobanteCompraPage({ params }: { params: Promis
   // ----- Confirmado o anulado: sólo lectura -------------------------------------
 
   const materiaIds = [...new Set(items.map((i) => i.materia_prima_id).filter((v): v is string => v !== null))];
-  const [{ data: proveedorData }, { data: materiasData, error: errorMaterias }, facturaAsociada, notas] =
+  const [{ data: proveedorData }, { data: materiasData, error: errorMaterias }, facturaAsociadaLeida, notas] =
     await Promise.all([
       supabase.from("proveedor").select("id, nombre, cuit, condicion_iva").eq("id", c.proveedor_id).maybeSingle(),
       materiaIds.length > 0
@@ -117,6 +122,8 @@ export default async function ComprobanteCompraPage({ params }: { params: Promis
     return <p className="text-sm text-red-700">Error al cargar las materias primas: {errorMaterias.message}</p>;
   }
   if (typeof notas === "string") return <p className="text-sm text-red-700">{notas}</p>;
+  // Si no se pudo leer, queda el enlace a la factura sin su número.
+  const facturaAsociada = typeof facturaAsociadaLeida === "string" ? null : facturaAsociadaLeida;
   const proveedor = proveedorData as { id: string; nombre: string; cuit: string | null; condicion_iva: CondicionIva | null } | null;
   const materias = new Map(
     ((materiasData ?? []) as { id: string; codigo: string; nombre: string }[]).map((m) => [m.id, m]),
