@@ -28,6 +28,7 @@ Hoy las facturas de compra se cargan a mano en Charoli, aunque Factura Digital y
 
 - `GET /api/v1/proveedores?cuit=<11 dígitos>` devuelve la lista de coincidencias (vacía si no existe).
 - `POST /api/v1/proveedores` lo crea con nombre, CUIT, condición de IVA y domicilio. Si el CUIT ya existe responde 409 con el proveedor existente.
+- `condicion_iva` acepta sólo los nombres completos: `Responsable Inscripto`, `Monotributista`, `Exento` o `Consumidor Final` (no los códigos `RI`/`CF`).
 - Factura Digital consulta el proveedor y, si no existe en Charoli, le sugiere al usuario crearlo. La API de comprobantes no crea proveedores.
 - El CUIT pasa a guardarse sólo con dígitos y único entre proveedores (antes era texto libre sin índice).
 
@@ -152,3 +153,9 @@ Entrega: un PR por tarea, cada uno sobre la rama de la anterior, como en compras
 ## Próximo paso
 
 T6 (documentación de la API y deploy: migraciones, secreto y worker).
+
+### Prueba extremo a extremo (con Factura Digital)
+
+- Se usó el código real de Factura Digital (`checkSupplier`, `createSupplier`, `deliverExport`) y sus presets contra esta API en `next dev` sobre Supabase local.
+- Pasó: consulta de proveedor (vacío), alta (201) y repetida (409 → existe); factura A con 2 renglones, CAE y percepción `otro` 350 → 201 en borrador, `origen = api`, totales iguales a la factura; repetida → 200 `creado:false`; sin otros impuestos → sin percepciones; factura B → 201; CUIT desconocido → 422 `PROVEEDOR_NO_EXISTE` con el mensaje visible en Factura Digital y sin reintentos.
+- Falló y se corrigió en Factura Digital (commit `a8210ff`): mandaba `condicion_iva` como `RI`/`CF`. Ahora manda los nombres completos.
