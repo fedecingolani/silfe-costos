@@ -5,7 +5,18 @@ type CookieAEscribir = { name: string; value: string; options?: CookieOptions };
 
 const RUTAS_PUBLICAS = ["/login", "/auth"];
 
+// La API de integraciones no usa la sesión: cada ruta valida su clave
+// (src/lib/api/autenticar.ts). Sin esto, un pedido sin sesión se
+// redirigiría a /login.
+const PREFIJO_API = "/api/v1/";
+
+function esRutaApi(pathname: string): boolean {
+  return pathname === "/api/v1" || pathname.startsWith(PREFIJO_API);
+}
+
 export async function middleware(request: NextRequest) {
+  if (esRutaApi(request.nextUrl.pathname)) return NextResponse.next();
+
   let response = NextResponse.next({ request });
 
   const supabase = createServerClient(
