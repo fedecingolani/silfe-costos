@@ -304,7 +304,29 @@ Migraciones nuevas en `supabase/migrations/`, tests pgTAP en `supabase/tests/`, 
   - Sugerencia: no hay tests de cambiar el proveedor de una factura que tiene remitos, de un UPDATE directo que supere lo pendiente ni de RC006 en un INSERT directo.
 - **Revisión de la rama entera:** concedida, pero supera el límite de contexto (`lens_context_budget_exceeded`). Quedan cubiertas las revisiones por tarea.
 
+### Correcciones de las revisiones (T4, T4b y T5)
+
+- **Ruta:** delegada a un writer, sobre la rama de T5.
+- **Migración:** `20261105000009_compras_correcciones_revision.sql`.
+- **Commits:**
+  - `4cee2c7` deadlock:
+    - `guardar_comprobante_compra` ahora bloquea `for update`, ordenados por id, todos los remitos que toca (los de los renglones nuevos y los de los que reemplaza) antes de borrar o insertar.
+    - Los errores 40P01 y 40001 muestran "Otra persona estaba guardando un comprobante con los mismos remitos. Probá de nuevo."
+  - `2b81c8b` factura con fecha anterior: si el precio preferido vigente tiene `vigente_desde` posterior a la fecha de la factura, el precio nuevo queda como histórico (`es_preferido` falso). Con la misma fecha lo reemplaza.
+  - `05daa3f` "Factura asociada":
+    - La página lee la factura asociada por id, y `facturaAsociadaEnEditor` (en `nota.ts`) la suma a las opciones.
+    - El aviso aparece solo si la factura no está confirmada o no existe. Si la lectura falla, el mensaje es neutro.
+    - Se agregó `confirmaConPrecios(tipo)`.
+- **RED → GREEN:**
+  - pgTAP: 1 de 7 en rojo para el deadlock y 2 de 13 para la fecha anterior; después todo en verde.
+  - Vitest: 1 de 10 en `errores` y 8 de 16 en `nota`, en rojo y luego en verde.
+- **Checks:** typecheck y lint OK. Vitest con 1083 tests y pgTAP con 1248, todo en verde. No se probó en el navegador.
+- **Revisión RDD:** riesgo medio, concedida y aprobada.
+  - El aviso de que el helper no compara proveedor ni letra no aplica: el editor vacía la factura asociada al cambiar el proveedor o la letra.
+  - Sugerencia: la prueba del deadlock es textual, porque un test de una sola sesión no puede reproducir concurrencia.
+- **Revisión de la rama entera:** concedida otra vez y vuelve a superar el límite de contexto.
+- **Pendiente:** la acción `facturasAsociables` devuelve `[]` cuando falla la lectura, así que al recargar la lista en el navegador no se distingue un error de una lista vacía.
+
 ## Próximo paso
 
-- Corregir los tres avisos de las revisiones: el deadlock de T5, la factura con fecha anterior de T4 y la etiqueta de "Factura asociada" de T4b.
-- Después, T6 (pantallas de remitos de compra).
+T6 (pantallas de remitos de compra), después de subir T5 con su PR.
