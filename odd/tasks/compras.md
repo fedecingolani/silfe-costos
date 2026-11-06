@@ -1,6 +1,6 @@
 # Compras: comprobantes, remitos, pagos y cuentas corrientes de proveedores
 
-Estado: en curso (T1 a T7 terminadas).
+Estado: en curso (T1 a T8 terminadas).
 
 ## Objetivo
 
@@ -98,7 +98,7 @@ Migraciones nuevas en `supabase/migrations/`, tests pgTAP en `supabase/tests/`, 
 - [x] **T5 — Remitos de compra: modelo.** Cabecera y renglones, vínculo parcial de renglones de factura con renglones de remito, bloqueo del remito facturado, vista de pendientes. Tests pgTAP.
 - [x] **T6 — Remitos de compra: pantallas.** Listado, alta y detalle, y facturar desde remitos. Menú Compras → Remitos.
 - [x] **T7 — Pagos: modelo.** Orden de pago, medios (efectivo, transferencia, cheques de terceros, cheques propios), imputación a comprobantes y saldo a favor. Tests pgTAP.
-- [ ] **T8 — Pagos: pantallas.** Listado, alta y detalle. Menú Compras → Pagos.
+- [x] **T8 — Pagos: pantallas.** Listado, alta y detalle. Menú Compras → Pagos.
 - [ ] **T9 — Cuenta corriente de proveedores.** Vista de movimientos y saldo, aplicación de notas de crédito, y pantalla. Menú Compras → Cuentas corrientes.
 
 ## Checks
@@ -400,7 +400,43 @@ Migraciones nuevas en `supabase/migrations/`, tests pgTAP en `supabase/tests/`, 
   - Sugerencia: traducir 23505 (comprobante o cheque repetido) y testear 40001.
 - **Revisión de la rama entera:** concedida, y vuelve a superar el límite de contexto.
 
+- **PR:** #41, con base en la rama de T6.
+
+### T8 — Pagos: pantallas
+
+- **Ruta:** delegada a un writer. El arreglo de safeupdate lo hice inline.
+- **Rama:** `feat/compras-08-pagos-pantallas`, apilada sobre T7.
+- **Commits:**
+  - `91cd1fa` librería (`src/lib/compras/pagos/{medios,imputacion,guardado,listado,anulacion}.ts`), con los mensajes de 23505 y de OP001 para las notas
+  - `9f6fa26` pantallas y menú
+  - `c890ded` tarjeta "Pagos" y botón "Pagar" en el detalle del comprobante
+  - `5832185` arreglo de safeupdate
+- **Pantallas en `/compras/pagos`:**
+  - Listado con filtros.
+  - `nuevo/`, que acepta `?proveedor=&comprobante=` precargados.
+  - `[id]/`: editor del borrador, o detalle con Anular y motivo.
+- **Menú:** Compras → Pagos.
+- **Bug de T7 encontrado en el navegador:** confirmar una orden fallaba siempre desde la app con "UPDATE requires a WHERE clause".
+  - Causa: las sesiones de PostgREST cargan `pg-safeupdate`, y `confirmar_orden_pago` actualizaba el contador sin WHERE. pgTAP no lo detectaba porque corre sin esa extensión, y el rol de test no puede cargarla.
+  - Arreglo: la migración `20261106000003_pagos_compra_safeupdate.sql` agrega `where n.id`.
+  - El test `compras_safeupdate_test.sql` revisa todas las funciones de `public` y falla con cualquier UPDATE o DELETE sin WHERE. Falló antes del arreglo y pasó después.
+- **RED → GREEN:** Vitest: 6 archivos en rojo (5 módulos que no existían y 2 tests de errores), después 45 tests en verde. pgTAP: el guard en rojo y luego en verde.
+- **Checks:** typecheck y lint OK. Vitest con 1178 tests y pgTAP con 1367, todo en verde.
+- **Navegador:**
+  - Desde la FC A 00003-00012400 ("Pendiente"), "Pagar" abrió la orden precargada, con el aviso de $2.420 a favor.
+  - Pagué con un cheque propio (Banco Nación N° 445566): quedó la OP-00000001 y la factura pasó a "Cancelado".
+  - Anular sin motivo no se permite. Con motivo la orden se anula y la factura vuelve a "Pendiente".
+  - El pago con cheque de terceros no se probó en el navegador porque no hay cheques en cartera en la base local. Lo cubre pgTAP.
+- **Revisión RDD:** riesgo medio, concedida y aprobada.
+  - El aviso de que la redefinición pierde la entrega de cheques no aplica: la hace el trigger `trg_orden_pago_confirmada`, y el cuerpo de la función es el mismo salvo el WHERE.
+  - Aviso pendiente: al reabrir un borrador cuya factura ya se pagó por otra orden, su imputación queda oculta y bloquea la validación.
+  - Sugerencia: el guard acepta un WHERE dentro de una subconsulta.
+- **Pendientes menores:**
+  - Los campos banco, número y fecha del cheque propio no tienen etiqueta accesible.
+  - No hay PDF de la orden de pago.
+
 ## Próximo paso
 
-- Subir T7 con su PR.
-- Seguir con T8 (pantallas de pagos), que también traduce 23505 y aclara el mensaje de OP001 para las notas.
+- Subir T8 con su PR.
+- Seguir con T9 (cuenta corriente de proveedores).
+- Arreglar la imputación oculta del borrador al reabrirlo.
