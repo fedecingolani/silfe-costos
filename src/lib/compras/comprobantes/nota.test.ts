@@ -145,6 +145,16 @@ describe("editorNotaDeFactura", () => {
     expect(editor.filas[2]).toMatchObject({ modo: "libre", exento: true });
   });
 
+  it("los renglones de la nota no vienen de remitos aunque la factura sí", () => {
+    const deRemito = item({
+      proveedor_articulo_id: ARTICULO,
+      descripcion: "SOGA PP diam 8MM",
+      remito_compra_item_id: "90000000-0000-0000-0000-000000000001",
+    });
+    const nota = editorNotaDeFactura(factura, [deRemito], "nota_debito", "2026-11-05");
+    expect(nota.filas[0].remitoItemId).toBeNull();
+  });
+
   it("cada renglón tiene su propia clave", () => {
     expect(new Set(editor.filas.map((f) => f.clave)).size).toBe(editor.filas.length);
   });

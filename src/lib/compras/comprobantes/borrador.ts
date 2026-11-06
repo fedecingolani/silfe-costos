@@ -9,6 +9,10 @@
  *   - nuevo: un artículo que todavía no está en el catálogo (articulo_nuevo,
  *     la base lo busca o lo crea con su materia prima);
  *   - libre: sin artículo ni materia prima (flete, servicio).
+ *
+ * Un renglón de una factura puede venir de un renglón de remito de compra
+ * (facturar_remitos_compra): conserva su remito_compra_item_id al editarlo
+ * y volver a guardarlo, y su artículo no cambia.
  */
 import { esObjeto, esUuid, texto } from "@/lib/comprobantes/borrador";
 import { esFechaValida } from "@/lib/comprobantes/validacion";
@@ -57,6 +61,8 @@ export type FilaCompra = {
   /** "21", "10.5"… o NO_GRAVADO. */
   alicuotaIva: string;
   exento: boolean;
+  /** Renglón de remito de compra que factura, o null. */
+  remitoItemId: string | null;
 };
 
 export type FilaPercepcion = {
@@ -103,6 +109,7 @@ export function filaCompraVacia(): FilaCompra {
     descuentoPct: "",
     alicuotaIva: "21",
     exento: false,
+    remitoItemId: null,
   };
 }
 
@@ -148,6 +155,7 @@ export function editorDeComprobanteCompra(
         descuentoPct: Number(i.descuento_pct) === 0 ? "" : String(i.descuento_pct),
         alicuotaIva: i.alicuota_iva === null ? NO_GRAVADO : String(i.alicuota_iva),
         exento: i.exento,
+        remitoItemId: i.remito_compra_item_id ?? null,
       }),
     );
   return {
@@ -169,6 +177,11 @@ export function editorDeComprobanteCompra(
       importe: String(p.importe),
     })),
   };
+}
+
+/** Si algún renglón viene de un remito: la factura ya no cambia de proveedor ni de tipo. */
+export function tieneRenglonesDeRemito(editor: Pick<EditorComprobanteCompra, "filas">): boolean {
+  return editor.filas.some((f) => f.remitoItemId !== null);
 }
 
 // ----- Artículos del proveedor ----------------------------------------------
@@ -240,6 +253,7 @@ export function comprobanteEnviado(editor: EditorComprobanteCompra): Comprobante
       descuentoPct: f.descuentoPct,
       alicuotaIva: conIva && !f.exento ? f.alicuotaIva : NO_GRAVADO,
       exento: f.exento,
+      remitoItemId: f.remitoItemId,
     })),
     percepciones: percepciones.map((p) => ({
       tipo: p.tipo,
@@ -286,6 +300,8 @@ export type ItemCompraGuardado = {
   descuento_pct: number;
   alicuota_iva: AlicuotaIva | null;
   exento: boolean;
+  /** Sólo en una factura: el renglón de remito de compra que factura. */
+  remito_compra_item_id?: string;
 };
 
 export type PercepcionGuardada = {
@@ -308,11 +324,11 @@ export type ParametrosGuardarComprobanteCompra = {
   p_percepciones: PercepcionGuardada[];
 };
 
-const MAXIMO_PUNTO_VENTA = 99999;
-const MAXIMO_NUMERO = 99999999;
+export const MAXIMO_PUNTO_VENTA = 99999;
+export const MAXIMO_NUMERO = 99999999;
 
 /** Entero de 1 a `maximo`, o null. */
-function enteroEntre(valor: unknown, maximo: number): number | null {
+export function enteroEntre(valor: unknown, maximo: number): number | null {
   const t = typeof valor === "string" ? valor.trim() : typeof valor === "number" ? String(valor) : "";
   if (!/^\d+$/.test(t)) return null;
   const n = Number(t);
@@ -336,6 +352,7 @@ function armarRenglon(
   r: Record<string, unknown>,
   indice: number,
   letra: LetraCompra | null,
+  tipo: TipoComprobanteCompra | null,
 ): { item: ItemCompraGuardado } | { errores: string[] } {
   const prefijo = `Renglón ${indice + 1}: `;
   const errores: string[] = [];
@@ -389,6 +406,15 @@ function armarRenglon(
     errores.push(`${prefijo}los comprobantes B y C no discriminan IVA: el renglón no lleva alícuota.`);
   }
 
+  // Vínculo con un renglón de remito: sólo en una factura y con su artículo.
+  let remito: Pick<ItemCompraGuardado, "remito_compra_item_id"> = {};
+  if (r.remitoItemId != null && r.remitoItemId !== "") {
+    if (esUuid(r.remitoItemId)) remito = { remito_compra_item_id: r.remitoItemId };
+    else errores.push(`${prefijo}el renglón del remito no es válido.`);
+    if (tipo !== null && tipo !== "factura") errores.push(`${prefijo}sólo una factura lleva renglones de remitos.`);
+    if (modo !== "articulo") errores.push(`${prefijo}un renglón de remito lleva su artículo del proveedor.`);
+  }
+
   if (errores.length > 0) return { errores };
   return {
     item: {
@@ -401,6 +427,7 @@ function armarRenglon(
       descuento_pct: desescalar(descuento!, 2),
       alicuota_iva: alicuota!,
       exento,
+      ...remito,
     },
   };
 }
@@ -460,7 +487,7 @@ export function armarComprobanteCompra(
   if (enviado.renglones.length === 0) errores.push("Agregá al menos un renglón.");
   const items: ItemCompraGuardado[] = [];
   enviado.renglones.forEach((r: unknown, i: number) => {
-    const armado = armarRenglon(esObjeto(r) ? r : {}, i, letra);
+    const armado = armarRenglon(esObjeto(r) ? r : {}, i, letra, tipo);
     if ("errores" in armado) errores.push(...armado.errores);
     else items.push(armado.item);
   });
