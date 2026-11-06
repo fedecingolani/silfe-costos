@@ -130,8 +130,14 @@ Entrega: un PR por tarea, cada uno sobre la rama de la anterior, como en compras
 - Migración `20261106000007_api_compras_guardar.sql`: `guardar_comprobante_compra` guarda `cae`, `cae_vencimiento` y `origen` al crear; al actualizar, el CAE cambia sólo si viene la clave (la pantalla no la manda y lo conserva) y el origen no cambia. Las pantallas siguen creando con `origen = 'manual'`.
 - Decisiones de implementación: en letras B y C la alícuota que mande la integración se valida y se descarta (la base la rechazaría con CP009); el CAE, si viene, tiene que tener 14 dígitos; los errores de datos de la base (CPxxx, RCxxx, 23514, 23503, 22P02, 22003, 22007, 22008) se responden 422 `VALIDACION` con el mensaje de `errores.ts`, el resto 500. `creado_por` queda null (no hay usuario).
 - Checks: `npm run typecheck` ok; `npm run lint` ok; `npm test` 1239 pasan (RED observado antes: el módulo no existía). Contra la base local con `next dev`: 201 al crear (totales, CAE y `origen = api` correctos; artículos creados en el catálogo sin materia prima), 200 `creado:false` al repetir, 201 en letra B con alícuota (IVA 0, mismo artículo reutilizado), 422 `PROVEEDOR_NO_EXISTE`, 422 vencimiento anterior a la fecha, 5 pedidos iguales a la vez → un 201 y cuatro 200 con el mismo id. Desde la pantalla (rol authenticated) editar un borrador de la API conserva su CAE y uno nuevo queda `manual`.
-- Pendiente: `supabase test db` sigue con la falla de T1 (`cuenta_corriente_proveedor_test.sql` test 15, CUIT esperado con guiones).
+- Resuelto: el test 15 de `cuenta_corriente_proveedor_test.sql` ahora espera el CUIT normalizado (commit `8bbecc6` en T1, cadena rebaseada). `supabase test db`: 1404 pasan.
+
+### Revisión (RDD)
+
+- T1: riesgo medio, revisión aprobada sin hallazgos (`review-f5c67725989950e3`).
+- T2 + T3: un tramo, riesgo medio, aprobada sin hallazgos (`review-5c8e76bc4db730d9`).
+- T4: riesgo medio, aprobada sin hallazgos.
 
 ## Próximo paso
 
-T5 (pantalla de claves). Antes, actualizar el valor esperado en `supabase/tests/cuenta_corriente_proveedor_test.sql` (test 15).
+T5 (pantalla de claves).
