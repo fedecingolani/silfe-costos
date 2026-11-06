@@ -9,7 +9,13 @@ import { fecha as textoFecha, pesos } from "@/lib/formato";
 import { aDecimal } from "@/lib/comprobantes/borrador";
 import { aCentavos, sumarPesos } from "@/lib/cobranzas/dinero";
 import { erroresImporteImputado, leerImputacionesEditor } from "@/lib/cobranzas/editor";
-import { completarEnOrden, saldoAFavor, validarImputacionesPago } from "@/lib/compras/pagos/imputacion";
+import {
+  completarEnOrden,
+  imputacionesDelBorrador,
+  saldoAFavor,
+  validarImputacionesPago,
+  type ImputacionGuardada,
+} from "@/lib/compras/pagos/imputacion";
 import {
   buscarCheques,
   chequesElegibles,
@@ -32,7 +38,7 @@ export type OrdenEditable = {
   fecha: string;
   observaciones: string | null;
   medios: MedioBorrador[];
-  imputaciones: { comprobanteId: string; importe: number }[];
+  imputaciones: ImputacionGuardada[];
 };
 
 type FilaMedio = {
@@ -154,11 +160,12 @@ export function EditorOrdenPago({
   const [errorCuenta, setErrorCuenta] = useState<string | null>(null);
   // Cada elección de proveedor tiene su número: sólo la respuesta del último pedido cambia la pantalla.
   const pedidoCuenta = useRef(0);
-  const [aImputar, setAImputar] = useState<Record<string, string>>(() =>
-    orden
-      ? Object.fromEntries(orden.imputaciones.map((i) => [i.comprobanteId, String(i.importe)]))
-      : aImputarInicial,
+  // Al reabrir un borrador se quitan (y se avisan) las imputaciones a comprobantes que ya no tienen saldo.
+  const [borrador] = useState(() =>
+    orden ? imputacionesDelBorrador(orden.imputaciones, cuentaInicial?.debitos ?? null) : null,
   );
+  const [aImputar, setAImputar] = useState<Record<string, string>>(() => borrador?.aImputar ?? aImputarInicial);
+  const [imputacionesQuitadas, setImputacionesQuitadas] = useState<string[]>(borrador?.avisos ?? []);
 
   const proveedoresOfrecidos = proveedores.filter((p) => p.activo || p.id === proveedorId);
   const proveedor = proveedores.find((p) => p.id === proveedorId) ?? null;
@@ -192,6 +199,7 @@ export function EditorOrdenPago({
     const pedido = ++pedidoCuenta.current;
     setProveedorId(nuevo);
     setAImputar({});
+    setImputacionesQuitadas([]);
     setCuenta(null);
     setErrorCuenta(null);
     if (!nuevo) {
@@ -491,6 +499,14 @@ export function EditorOrdenPago({
           </button>
         }
       >
+        {imputacionesQuitadas.length > 0 && (
+          <div role="status" className="border-b border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-800">
+            {imputacionesQuitadas.map((aviso) => (
+              <p key={aviso}>{aviso}</p>
+            ))}
+            <p>Guardá el borrador para que el cambio quede registrado.</p>
+          </div>
+        )}
         <div className="overflow-x-auto">
           <table className="tabla">
             <thead>

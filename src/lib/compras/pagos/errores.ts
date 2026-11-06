@@ -1,8 +1,10 @@
 /**
  * Mensajes legibles de los errores de la base al guardar, confirmar o anular
- * órdenes de pago, al imputar notas de crédito de compra y al anular un
+ * órdenes de pago, al imputar notas de crédito de compra, al anular un
  * comprobante de compra con imputaciones (SQLSTATE OP001–OP017, ver
- * 20261106000001_pagos_compra.sql). Cada código trae su pista (HINT) con el
+ * 20261106000001_pagos_compra.sql) y al aplicar el saldo a favor desde la
+ * cuenta corriente del proveedor (OP018–OP019, ver
+ * 20261106000004_cuenta_corriente_proveedor.sql). Cada código trae su pista (HINT) con el
  * motivo: se busca por las dos, por si llega sólo una. Un deadlock (40P01) o
  * un conflicto de serialización (40001) se resuelve probando de nuevo. Un
  * comprobante o un cheque repetido en la misma orden choca con un índice
@@ -30,6 +32,8 @@ const CON_IMPUTACIONES =
 const VINCULO = "El cheque se entrega y se devuelve sólo confirmando o anulando su orden de pago.";
 const INMUTABLE_NOTA =
   "Las imputaciones de una nota de crédito no se cambian: para deshacerlas, anulá la nota de crédito.";
+const SIN_SALDO_A_FAVOR = "El proveedor ya no tiene saldo a favor para aplicar. Recargá la página.";
+const DEBITO_SIN_SALDO = "El comprobante ya no tiene saldo pendiente. Recargá la página.";
 const REINTENTAR = "Otra persona estaba usando los mismos comprobantes o cheques. Probá de nuevo.";
 
 const PROPIOS: Record<string, string> = {
@@ -59,6 +63,10 @@ const PROPIOS: Record<string, string> = {
   comprobante_con_imputaciones: CON_IMPUTACIONES,
   OP017: VINCULO,
   cheque_vinculo_invalido: VINCULO,
+  OP018: SIN_SALDO_A_FAVOR,
+  sin_saldo_a_favor: SIN_SALDO_A_FAVOR,
+  OP019: DEBITO_SIN_SALDO,
+  debito_sin_saldo: DEBITO_SIN_SALDO,
   "40P01": REINTENTAR,
   "40001": REINTENTAR,
   "23503": "El proveedor, un comprobante o un cheque ya no existen. Recargá la página.",

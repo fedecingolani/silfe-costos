@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { completarEnOrden, imputacionInicial, saldoAFavor, validarImputacionesPago } from "./imputacion";
+import {
+  completarEnOrden,
+  imputacionInicial,
+  imputacionesDelBorrador,
+  saldoAFavor,
+  validarImputacionesPago,
+} from "./imputacion";
 
 const debitos = [
   { comprobanteId: "b", fecha: "2026-10-15", saldo: 300 },
@@ -62,5 +68,47 @@ describe("imputacionInicial", () => {
   it("nada si no llega comprobante o no tiene saldo pendiente", () => {
     expect(imputacionInicial(debitos, null)).toEqual({});
     expect(imputacionInicial(debitos, "z")).toEqual({});
+  });
+});
+
+describe("imputacionesDelBorrador", () => {
+  it("conserva las imputaciones a comprobantes que siguen con saldo", () => {
+    expect(
+      imputacionesDelBorrador(
+        [
+          { comprobanteId: "a", importe: 100.5 },
+          { comprobanteId: "b", importe: 50 },
+        ],
+        debitos,
+      ),
+    ).toEqual({ aImputar: { a: "100.5", b: "50" }, avisos: [] });
+  });
+
+  it("quita la imputación a un comprobante que ya no tiene saldo y lo avisa", () => {
+    expect(
+      imputacionesDelBorrador(
+        [
+          { comprobanteId: "a", importe: 100.5 },
+          { comprobanteId: "pagado", importe: 1754.5, numeroTexto: "FC A 00003-00012400" },
+        ],
+        debitos,
+      ),
+    ).toEqual({
+      aImputar: { a: "100.5" },
+      avisos: ["Se quitó la imputación a FC A 00003-00012400 ($ 1.754,50) porque ya no tiene saldo pendiente."],
+    });
+  });
+
+  it("sin el número del comprobante, el aviso igual dice el importe", () => {
+    expect(imputacionesDelBorrador([{ comprobanteId: "pagado", importe: 20 }], debitos).avisos).toEqual([
+      "Se quitó la imputación a un comprobante ($ 20,00) porque ya no tiene saldo pendiente.",
+    ]);
+  });
+
+  it("si no se pudieron leer los pendientes, no quita nada", () => {
+    expect(imputacionesDelBorrador([{ comprobanteId: "pagado", importe: 20 }], null)).toEqual({
+      aImputar: { pagado: "20" },
+      avisos: [],
+    });
   });
 });
