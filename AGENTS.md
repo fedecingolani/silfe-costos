@@ -31,7 +31,7 @@ Patrón de carpetas por feature, sin capas hexagonales ni `hooks/`/`types/` sepa
 
 ```
 src/
-├── middleware.ts          # guard de auth (Supabase SSR), redirige a /login. Sigue como middleware (edge) y no `proxy.ts`: en Next 16 proxy corre sólo en Node y OpenNext lo soporta en Workers como experimental
+├── middleware.ts          # guard de auth (Supabase SSR), redirige a /login; deja pasar /api/v1 (cada ruta valida su clave de API). Sigue como middleware (edge) y no `proxy.ts`: en Next 16 proxy corre sólo en Node y OpenNext lo soporta en Workers como experimental
 ├── app/
 │   ├── login/             # única ruta pública
 │   └── (app)/              # todo lo demás, requiere sesión
@@ -48,7 +48,8 @@ src/
 └── lib/
     ├── tipos.ts            # tipos TS compartidos (centralizado, no hay carpeta types/)
     ├── empresa/            # validación, logo (lectura y PDF) e identidad para el menú
-    └── supabase/           # client.ts (browser) y server.ts (SSR/cookies)
+    ├── api/                # API de integraciones: claves, autenticación y respuestas JSON
+    └── supabase/           # client.ts (browser), server.ts (SSR/cookies) y servicio.ts (service-role, sólo /api/v1)
 ```
 
 Convención por feature: `page.tsx` + `acciones.ts` (Server Actions) + componentes/formularios propios + `[id]/` para el detalle. Seguí este patrón al agregar una feature nueva, no inventes una capa distinta.
@@ -89,6 +90,11 @@ Secreto del Worker (no va en `.env.local` ni en `wrangler.jsonc`):
   - Se lee sólo en `src/lib/arca/secreto.ts`. Si falta, la pantalla de ARCA muestra un error de configuración.
   - Si se pierde o se cambia, las claves guardadas quedan irrecuperables: hay que volver a subir las credenciales de cada ambiente.
   - La clave privada nunca sale del servidor: las consultas de la pantalla no seleccionan `clave_cifrada` ni `ta_cifrado`, y las Server Actions no devuelven clave, token ni sign.
+- `SUPABASE_SERVICE_ROLE_KEY`: la service-role key del proyecto de Supabase (Dashboard → Project Settings → API). La usan sólo las rutas de la API de integraciones (`/api/v1/*`), que no tienen sesión: validan su clave de API (tabla `api_clave`) y escriben con este cliente.
+  - Local: en `.dev.vars` (con `supabase start`, es la `SERVICE_ROLE_KEY` de `supabase status`).
+  - Producción: `npx wrangler secret put SUPABASE_SERVICE_ROLE_KEY`.
+  - Se lee sólo en `src/lib/supabase/servicio.ts`. Si falta, la API responde 500 y el log del Worker dice qué falta.
+  - Saltea la RLS: no la uses fuera de `/api/v1`. Los permisos que tiene `service_role` sobre tablas y funciones se otorgan explícitamente en `supabase/migrations/20261106000006_rls_api_compras.sql`; si la API pasa a llamar otra función o tabla, hay que otorgárselos en una migración nueva.
 
 ## Estado del proyecto (a la fecha de este archivo)
 

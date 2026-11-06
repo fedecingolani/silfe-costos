@@ -85,7 +85,7 @@ Errores: `{ "error": { "codigo": "...", "mensaje": "..." } }` con 400 (JSON inv�
 Entrega: un PR por tarea, cada uno sobre la rama de la anterior, como en compras.
 
 - [x] T1 Esquema: tabla `api_clave` + RLS; `cae`, `cae_vencimiento` y `origen` en `comprobante_compra`; CUIT del proveedor normalizado y único. Rama `feat/api-compras-01-esquema`.
-- [ ] T2 Base de la API: cliente service-role, validación de clave, middleware que deja pasar `/api/v1`, respuestas de error JSON, secreto documentado. Rama `feat/api-compras-02-base`.
+- [x] T2 Base de la API: cliente service-role, validación de clave, middleware que deja pasar `/api/v1`, respuestas de error JSON, secreto documentado. Rama `feat/api-compras-02-base`.
 - [ ] T3 Endpoints de proveedores (GET por CUIT, POST). Rama `feat/api-compras-03-proveedores`.
 - [ ] T4 Endpoint de comprobantes de compra. Rama `feat/api-compras-04-comprobantes`.
 - [ ] T5 Pantalla Configuración → Integraciones (crear, listar y revocar claves). Rama `feat/api-compras-05-pantalla-claves`.
@@ -108,6 +108,14 @@ Entrega: un PR por tarea, cada uno sobre la rama de la anterior, como en compras
 - Formulario de proveedores: normaliza el CUIT (`validarCuit`) y traduce el duplicado y el formato inválido.
 - Checks: `npm run typecheck` ok; `npm run lint` ok; `npm test` 1207 pasan (RED observado antes: 9 fallaban). `supabase migration up --local` aplicó las dos migraciones. `supabase test db`: 1 falla, `supabase/tests/cuenta_corriente_proveedor_test.sql` test 15 espera el CUIT con guiones (`30-11111111-1`) y ahora se guarda `30111111111`; hay que actualizar ese valor esperado (archivo fuera del alcance de esta tarea).
 
+### T2 Base de la API — hecho
+
+- Commit `b6524a0` en `feat/api-compras-02-base`. Ruta: delegada.
+- `src/lib/supabase/servicio.ts` (cliente service-role sin sesión; `ErrorConfiguracion` si falta el secreto), `src/lib/api/clave.ts` (generar, hash SHA-256 con Web Crypto, prefijo de 12 caracteres, Bearer), `src/lib/api/respuestas.ts` (errores del contrato y lectura del JSON), `src/lib/api/autenticar.ts`.
+- Middleware: `/api/v1` pasa sin consultar la sesión.
+- Códigos de error: `JSON_INVALIDO` (400), `NO_AUTORIZADO` (401), `NO_ENCONTRADO` (404), `PROVEEDOR_EXISTE` (409), `VALIDACION` y `PROVEEDOR_NO_EXISTE` (422), `ERROR_INTERNO` (500).
+- Checks: `npm run typecheck` ok; `npm run lint` ok; `npm test` 1220 pasan (RED observado antes: los módulos no existían). Contra la base local, por PostgREST con la service-role key: buscar la clave por hash con `revocada_en is null` y anotar `ultimo_uso_en` responden bien.
+
 ## Próximo paso
 
-T2.
+T3.

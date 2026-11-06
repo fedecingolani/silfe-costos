@@ -7,3 +7,9 @@
 # En producción va como secreto del Worker: `npx wrangler secret put ARCA_CLAVE_CIFRADO`.
 # Si se pierde o se cambia, las claves guardadas no se pueden descifrar: hay que volver a subir las credenciales.
 ARCA_CLAVE_CIFRADO=
+
+# Service-role key de Supabase. La usan sólo las rutas de la API de integraciones (/api/v1/*).
+# Saltea la RLS: no la compartas ni la pongas en .env.local con prefijo NEXT_PUBLIC_.
+# Con `supabase start`, es la SERVICE_ROLE_KEY de `supabase status`.
+# En producción va como secreto del Worker: `npx wrangler secret put SUPABASE_SERVICE_ROLE_KEY`.
+SUPABASE_SERVICE_ROLE_KEY=
