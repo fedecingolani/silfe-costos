@@ -5,6 +5,8 @@ import { Encabezado, Tarjeta, Vacio, Pastilla, Migas, BotonEliminar } from "@/co
 import { Modal } from "@/components/Modal";
 import { numero } from "@/lib/formato";
 import { MENSAJE_ARTICULO_EN_USO } from "@/lib/proveedores/errores";
+import { hoyArgentina } from "@/lib/clientes/seguimiento";
+import { rangoMovimientos } from "@/lib/compras/cuenta-corriente/cuenta-corriente";
 import type { MateriaPrimaCosto, Proveedor, ProveedorArticulo, ProveedorContacto } from "@/lib/tipos";
 import {
   eliminarProveedor,
@@ -23,6 +25,7 @@ import {
   CampoEmailContacto,
   FormularioContacto,
 } from "./formularios";
+import { CuentaCorriente } from "./CuentaCorriente";
 
 export const dynamic = "force-dynamic";
 
@@ -39,10 +42,10 @@ export default async function ProveedorPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ articulo?: string; aviso?: string }>;
+  searchParams: Promise<{ articulo?: string; aviso?: string; cc_desde?: string; cc_hasta?: string }>;
 }) {
   const { id } = await params;
-  const { articulo: articuloEditar, aviso } = await searchParams;
+  const { articulo: articuloEditar, aviso, cc_desde, cc_hasta } = await searchParams;
   const mensajeAviso = aviso && Object.hasOwn(AVISOS, aviso) ? AVISOS[aviso] : undefined;
   const supabase = await createClient();
 
@@ -68,6 +71,8 @@ export default async function ProveedorPage({
   const materiaPorId = new Map(materias.map((m) => [m.id, m]));
   const enEdicion = articulos.find((a) => a.id === articuloEditar);
   const hrefDetalle = `/proveedores/${proveedor.id}`;
+  const hoy = hoyArgentina();
+  const rangoCuenta = rangoMovimientos({ desde: cc_desde, hasta: cc_hasta }, hoy);
 
   // Se ofrecen las materias primas activas, más la del artículo en edición
   // aunque se haya desactivado, para no perder la asociación al guardar.
@@ -102,6 +107,8 @@ export default async function ProveedorPage({
           <Dato titulo="Alias" valor={proveedor.alias} />
         </dl>
       </Tarjeta>
+
+      <CuentaCorriente proveedorId={proveedor.id} desde={rangoCuenta.desde} hasta={rangoCuenta.hasta} hoy={hoy} />
 
       <Tarjeta titulo="Contactos" descripcion="Personas de contacto en este proveedor.">
         <div className="overflow-x-auto">

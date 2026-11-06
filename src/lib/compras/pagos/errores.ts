@@ -1,11 +1,16 @@
 /**
  * Mensajes legibles de los errores de la base al guardar, confirmar o anular
- * órdenes de pago, al imputar notas de crédito de compra y al anular un
+ * órdenes de pago, al imputar notas de crédito de compra, al anular un
  * comprobante de compra con imputaciones (SQLSTATE OP001–OP017, ver
- * 20261106000001_pagos_compra.sql). Cada código trae su pista (HINT) con el
+ * 20261106000001_pagos_compra.sql) y al aplicar el saldo a favor desde la
+ * cuenta corriente del proveedor (OP018–OP019, ver
+ * 20261106000004_cuenta_corriente_proveedor.sql). Cada código trae su pista (HINT) con el
  * motivo: se busca por las dos, por si llega sólo una. Un deadlock (40P01) o
- * un conflicto de serialización (40001) se resuelve probando de nuevo. Las
- * acciones devuelven el mensaje en lugar de lanzarlo.
+ * un conflicto de serialización (40001) se resuelve probando de nuevo. Un
+ * comprobante o un cheque repetido en la misma orden choca con un índice
+ * único (23505). OP001 también salta al tocar las imputaciones de una nota de
+ * crédito: se distingue por el mensaje de la base. Las acciones devuelven el
+ * mensaje en lugar de lanzarlo.
  */
 
 /** Lo que importa de un error de Supabase (PostgREST). */
@@ -25,6 +30,10 @@ const MOTIVO = "Para anular la orden de pago, indicá el motivo.";
 const CON_IMPUTACIONES =
   "El comprobante tiene pagos o notas de crédito imputados: anulá primero esas órdenes de pago o notas de crédito.";
 const VINCULO = "El cheque se entrega y se devuelve sólo confirmando o anulando su orden de pago.";
+const INMUTABLE_NOTA =
+  "Las imputaciones de una nota de crédito no se cambian: para deshacerlas, anulá la nota de crédito.";
+const SIN_SALDO_A_FAVOR = "El proveedor ya no tiene saldo a favor para aplicar. Recargá la página.";
+const DEBITO_SIN_SALDO = "El comprobante ya no tiene saldo pendiente. Recargá la página.";
 const REINTENTAR = "Otra persona estaba usando los mismos comprobantes o cheques. Probá de nuevo.";
 
 const PROPIOS: Record<string, string> = {
@@ -54,6 +63,10 @@ const PROPIOS: Record<string, string> = {
   comprobante_con_imputaciones: CON_IMPUTACIONES,
   OP017: VINCULO,
   cheque_vinculo_invalido: VINCULO,
+  OP018: SIN_SALDO_A_FAVOR,
+  sin_saldo_a_favor: SIN_SALDO_A_FAVOR,
+  OP019: DEBITO_SIN_SALDO,
+  debito_sin_saldo: DEBITO_SIN_SALDO,
   "40P01": REINTENTAR,
   "40001": REINTENTAR,
   "23503": "El proveedor, un comprobante o un cheque ya no existen. Recargá la página.",
@@ -82,6 +95,20 @@ const MENSAJES_CONTROL: [restriccion: string, mensaje: string][] = [
   ["imputacion_compra_importe_check", "El importe de cada imputación tiene que ser mayor que cero."],
 ];
 
+/** Índices únicos (23505), por nombre. */
+const MENSAJES_UNICO: [indice: string, mensaje: string][] = [
+  [
+    "imputacion_compra_orden_pago_unica",
+    "La orden imputa dos veces el mismo comprobante: dejá una sola imputación por comprobante.",
+  ],
+  [
+    "orden_pago_medio_cheque_unico",
+    "La orden usa dos veces el mismo cheque de terceros: cada cheque se entrega una sola vez.",
+  ],
+];
+const REPETIDO =
+  "La orden repite un comprobante o un cheque de terceros. Revisá las imputaciones y los medios de pago.";
+
 /**
  * Mensaje legible de un error de la base.
  * @param accion lo que se intentaba, para un error sin traducción («confirmar la orden de pago»).
@@ -91,6 +118,11 @@ export function mensajeErrorOrdenPago(error: ErrorBase, accion = "guardar la ord
     const control = MENSAJES_CONTROL.find(([nombre]) => error.message.includes(nombre))?.[1];
     if (control) return control;
   }
+  if (error.code === "23505") {
+    return MENSAJES_UNICO.find(([nombre]) => error.message.includes(nombre))?.[1] ?? REPETIDO;
+  }
+  const inmutable = error.code === "OP001" || error.hint === "orden_pago_inmutable";
+  if (inmutable && /nota de cr[eé]dito/i.test(error.message)) return INMUTABLE_NOTA;
   if ((error.code && MENSAJE_DE_LA_BASE.has(error.code)) || (error.hint && MENSAJE_DE_LA_BASE.has(error.hint))) {
     return error.message;
   }

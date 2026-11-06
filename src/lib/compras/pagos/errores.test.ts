@@ -19,10 +19,12 @@ const CODIGOS: [code: string, hint: string][] = [
   ["OP015", "motivo_requerido"],
   ["OP016", "comprobante_con_imputaciones"],
   ["OP017", "cheque_vinculo_invalido"],
+  ["OP018", "sin_saldo_a_favor"],
+  ["OP019", "debito_sin_saldo"],
 ];
 
 describe("mensajeErrorOrdenPago", () => {
-  it("traduce cada código OP001–OP017 a un mensaje propio (salvo los que muestran el de la base)", () => {
+  it("traduce cada código OP001–OP019 a un mensaje propio (salvo los que muestran el de la base)", () => {
     const propios = CODIGOS.filter(([code]) => !["OP006", "OP007", "OP009", "OP010"].includes(code));
     const mensajes = propios.map(([code]) => mensajeErrorOrdenPago({ code, message: "texto de la base" }));
     for (const mensaje of mensajes) expect(mensaje).not.toMatch(/^No se pudo/);
@@ -62,6 +64,51 @@ describe("mensajeErrorOrdenPago", () => {
     );
     expect(mensajeErrorOrdenPago({ code: "40P01", message: "deadlock detected" })).toBe(
       "Otra persona estaba usando los mismos comprobantes o cheques. Probá de nuevo.",
+    );
+  });
+
+  it("un conflicto de serialización (40001) pide probar de nuevo", () => {
+    expect(mensajeErrorOrdenPago({ code: "40001", message: "could not serialize access" })).toBe(
+      "Otra persona estaba usando los mismos comprobantes o cheques. Probá de nuevo.",
+    );
+  });
+
+  it("un comprobante o un cheque repetido en la orden (23505) dice cuál de los dos", () => {
+    expect(
+      mensajeErrorOrdenPago({
+        code: "23505",
+        message: 'duplicate key value violates unique constraint "imputacion_compra_orden_pago_unica"',
+      }),
+    ).toBe("La orden imputa dos veces el mismo comprobante: dejá una sola imputación por comprobante.");
+    expect(
+      mensajeErrorOrdenPago({
+        code: "23505",
+        message: 'duplicate key value violates unique constraint "orden_pago_medio_cheque_unico"',
+      }),
+    ).toBe("La orden usa dos veces el mismo cheque de terceros: cada cheque se entrega una sola vez.");
+    expect(mensajeErrorOrdenPago({ code: "23505", message: "duplicate key value" })).toBe(
+      "La orden repite un comprobante o un cheque de terceros. Revisá las imputaciones y los medios de pago.",
+    );
+  });
+
+  it("OP001 al tocar las imputaciones de una nota de crédito habla de la nota, no de la orden", () => {
+    const nota = mensajeErrorOrdenPago({
+      code: "OP001",
+      hint: "orden_pago_inmutable",
+      message: "Las imputaciones de una nota de crédito no se modifican ni se borran: se deshacen anulando la nota.",
+    });
+    expect(nota).toBe("Las imputaciones de una nota de crédito no se cambian: para deshacerlas, anulá la nota de crédito.");
+    expect(
+      mensajeErrorOrdenPago({ code: "OP001", message: "La orden de pago está confirmada: no se puede modificar." }),
+    ).toBe("La orden de pago está confirmada o anulada: no se puede modificar.");
+  });
+
+  it("aplicar el saldo a favor sin nada a favor (OP018) o a un débito ya cancelado (OP019)", () => {
+    expect(mensajeErrorOrdenPago({ code: "OP018", message: "x" }, "aplicar el saldo a favor")).toBe(
+      "El proveedor ya no tiene saldo a favor para aplicar. Recargá la página.",
+    );
+    expect(mensajeErrorOrdenPago({ code: "OP019", message: "x" }, "aplicar el saldo a favor")).toBe(
+      "El comprobante ya no tiene saldo pendiente. Recargá la página.",
     );
   });
 
