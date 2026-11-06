@@ -1,6 +1,6 @@
 # Compras: comprobantes, remitos, pagos y cuentas corrientes de proveedores
 
-Estado: en curso (T1 a T5 terminadas).
+Estado: en curso (T1 a T6 terminadas).
 
 ## Objetivo
 
@@ -96,7 +96,7 @@ Migraciones nuevas en `supabase/migrations/`, tests pgTAP en `supabase/tests/`, 
   - **Nota suelta:** se carga con los importes que quiera el usuario.
   - **Precios de costeo:** las notas no los actualizan. El diálogo "Actualizar precios" queda solo para facturas.
 - [x] **T5 — Remitos de compra: modelo.** Cabecera y renglones, vínculo parcial de renglones de factura con renglones de remito, bloqueo del remito facturado, vista de pendientes. Tests pgTAP.
-- [ ] **T6 — Remitos de compra: pantallas.** Listado, alta y detalle, y facturar desde remitos. Menú Compras → Remitos.
+- [x] **T6 — Remitos de compra: pantallas.** Listado, alta y detalle, y facturar desde remitos. Menú Compras → Remitos.
 - [ ] **T7 — Pagos: modelo.** Orden de pago, medios (efectivo, transferencia, cheques de terceros, cheques propios), imputación a comprobantes y saldo a favor. Tests pgTAP.
 - [ ] **T8 — Pagos: pantallas.** Listado, alta y detalle. Menú Compras → Pagos.
 - [ ] **T9 — Cuenta corriente de proveedores.** Vista de movimientos y saldo, aplicación de notas de crédito, y pantalla. Menú Compras → Cuentas corrientes.
@@ -327,6 +327,41 @@ Migraciones nuevas en `supabase/migrations/`, tests pgTAP en `supabase/tests/`, 
 - **Revisión de la rama entera:** concedida otra vez y vuelve a superar el límite de contexto.
 - **Pendiente:** la acción `facturasAsociables` devuelve `[]` cuando falla la lectura, así que al recargar la lista en el navegador no se distingue un error de una lista vacía.
 
+- **PR:** #39, con base en la rama de T4b (incluye las correcciones).
+
+### T6 — Remitos de compra: pantallas
+
+- **Ruta:** delegada a un writer. Sin migraciones.
+- **Rama:** `feat/compras-06-remitos-pantallas`, apilada sobre T5.
+- **Commits:**
+  - `3dde32b` librería con tests (`src/lib/compras/remitos/{borrador,listado,facturacion}.ts`)
+  - `fea1993` pantallas y menú
+  - `664ac67` facturar desde remitos y vínculo en el editor de facturas
+- **Pantallas:** en `/compras/remitos`:
+  - listado con filtros por proveedor y estado;
+  - `nuevo/`;
+  - `[id]/`, con las acciones Recibir, Anular, Borrar y Facturar, más las facturas que cubren el remito;
+  - `facturar/`, que elige renglones y cantidades parciales, carga la cabecera de la factura y crea el borrador.
+- **Menú:** Compras → Remitos.
+- **Editor de facturas:**
+  - Guarda y envía `remito_compra_item_id`, y muestra la marca "Del remito …" con un enlace.
+  - Con renglones de remitos, el proveedor y el tipo quedan bloqueados.
+  - Una nota abierta desde una factura no copia esos vínculos.
+- **`facturasAsociables`:** devuelve `{facturas}` o `{error}`. El editor distingue una lectura fallida de una lista vacía.
+- **RED → GREEN:** 9 tests nuevos del borrador y de la nota, 3 módulos nuevos de remitos y el mapeo de errores, todos en rojo y luego en verde.
+- **Checks:** typecheck y lint OK. Vitest con 1133 tests y pgTAP con 1248, todo en verde.
+- **Navegador:**
+  - Se creó y recibió el remito 00003-00000501 de Sogas Andinas, con 10 kg de SG-8.
+  - Desde ahí se facturaron 6 kg y quedó el borrador de la FC A 00003-00012500, con precio sugerido de $1.450 y la marca del remito.
+  - Se cambió la cantidad a 5 y se guardó: el vínculo se mantuvo. El remito quedó "Facturado en parte" (5 y 5), sin Anular y con la factura listada.
+  - Al intentar facturar 6 de los 5 pendientes, la pantalla lo frena.
+  - Sin errores en la consola.
+- **Revisión RDD:** riesgo medio, concedida y aprobada. Quedan dos sugerencias:
+  - la lista de errores de validación usa el mensaje como `key` y puede repetirse;
+  - falta un test de la forma `{facturas}` / `{error}`.
+- **Revisión de la rama entera:** concedida, y supera otra vez el límite de contexto.
+- **Nota de comportamiento:** una factura en borrador cuenta como facturada, así que el remito no se anula hasta borrarla.
+
 ## Próximo paso
 
-T6 (pantallas de remitos de compra), después de subir T5 con su PR.
+Subir T6 con su PR y seguir con T7 (modelo de pagos).
