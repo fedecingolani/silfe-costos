@@ -65,6 +65,42 @@ describe("mensajeErrorOrdenPago", () => {
     );
   });
 
+  it("un conflicto de serialización (40001) pide probar de nuevo", () => {
+    expect(mensajeErrorOrdenPago({ code: "40001", message: "could not serialize access" })).toBe(
+      "Otra persona estaba usando los mismos comprobantes o cheques. Probá de nuevo.",
+    );
+  });
+
+  it("un comprobante o un cheque repetido en la orden (23505) dice cuál de los dos", () => {
+    expect(
+      mensajeErrorOrdenPago({
+        code: "23505",
+        message: 'duplicate key value violates unique constraint "imputacion_compra_orden_pago_unica"',
+      }),
+    ).toBe("La orden imputa dos veces el mismo comprobante: dejá una sola imputación por comprobante.");
+    expect(
+      mensajeErrorOrdenPago({
+        code: "23505",
+        message: 'duplicate key value violates unique constraint "orden_pago_medio_cheque_unico"',
+      }),
+    ).toBe("La orden usa dos veces el mismo cheque de terceros: cada cheque se entrega una sola vez.");
+    expect(mensajeErrorOrdenPago({ code: "23505", message: "duplicate key value" })).toBe(
+      "La orden repite un comprobante o un cheque de terceros. Revisá las imputaciones y los medios de pago.",
+    );
+  });
+
+  it("OP001 al tocar las imputaciones de una nota de crédito habla de la nota, no de la orden", () => {
+    const nota = mensajeErrorOrdenPago({
+      code: "OP001",
+      hint: "orden_pago_inmutable",
+      message: "Las imputaciones de una nota de crédito no se modifican ni se borran: se deshacen anulando la nota.",
+    });
+    expect(nota).toBe("Las imputaciones de una nota de crédito no se cambian: para deshacerlas, anulá la nota de crédito.");
+    expect(
+      mensajeErrorOrdenPago({ code: "OP001", message: "La orden de pago está confirmada: no se puede modificar." }),
+    ).toBe("La orden de pago está confirmada o anulada: no se puede modificar.");
+  });
+
   it("una pista o un código que coincide con una clave heredada de Object no rompe el mensaje", () => {
     expect(mensajeErrorOrdenPago({ message: "x", hint: "constructor" })).toBe("No se pudo guardar la orden de pago: x");
   });
