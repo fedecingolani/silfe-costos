@@ -15,16 +15,27 @@ import {
   filaCompraVacia,
   filaPercepcionVacia,
   renglonCalculable,
+  tieneRenglonesDeRemito,
   type EditorComprobanteCompra as EstadoEditor,
   type FilaCompra,
   type FilaPercepcion,
   type ModoRenglon,
 } from "@/lib/compras/comprobantes/borrador";
 import { discriminaIva, letraSugerida } from "@/lib/compras/comprobantes/letra";
-import { NOMBRES_TIPO_COMPROBANTE_COMPRA } from "@/lib/compras/comprobantes/numero";
+import {
+  confirmaConPrecios,
+  editorNotaDeFactura,
+  esNotaCompra,
+  facturaAsociadaEnEditor,
+  type AvisoFacturaAsociada,
+  type FacturaAsociable,
+  type NotaAsociada,
+  type TipoNotaCompra,
+} from "@/lib/compras/comprobantes/nota";
+import { NOMBRES_TIPO_COMPROBANTE_COMPRA, numeroComprobanteCompra } from "@/lib/compras/comprobantes/numero";
 import { calcularRenglonCompra, totalesComprobanteCompra } from "@/lib/compras/comprobantes/totales";
 import { PROVINCIAS } from "@/lib/compras/provincias";
-import { numero, pesos } from "@/lib/formato";
+import { fecha, numero, pesos } from "@/lib/formato";
 import {
   ALICUOTAS_IVA,
   LETRAS_COMPRA,
@@ -33,17 +44,21 @@ import {
   type LetraCompra,
   type ProveedorArticulo,
   type TipoComprobanteCompra,
+  type PrecioComprobanteCompra,
   type TipoPercepcionCompra,
 } from "@/lib/tipos";
 import { Confirmacion } from "../../remitos/Confirmacion";
+import { ActualizarPrecios } from "./ActualizarPrecios";
 import {
   articulosDelProveedor,
   borrarComprobanteCompra,
   confirmarComprobanteCompra,
+  facturasAsociables,
   guardarComprobanteCompra,
+  preciosComprobanteCompra,
   type ResultadoComprobanteCompra,
 } from "./acciones";
-import type { ComprobanteCompraCargado, ContextoEditorCompra, MateriaPrimaOfrecida } from "./datos";
+import type { ComprobanteCompraCargado, ContextoEditorCompra, MateriaPrimaOfrecida, RemitosDeRenglones } from "./datos";
 
 const RUTA = "/compras/comprobantes";
 
@@ -64,18 +79,40 @@ const NOMBRES_PERCEPCION: Record<TipoPercepcionCompra, string> = {
  * renglones (artículo del proveedor, artículo nuevo o renglón libre),
  * percepciones y vista previa de los totales. Guarda el borrador, lo
  * confirma (guarda y después confirma) o lo borra. Los totales que valen los
- * calcula la base al guardar.
+ * calcula la base al guardar. Una nota puede indicar la factura que corrige;
+ * abierta desde una factura (notaDe), arranca con sus renglones y precios.
+ * Los renglones de una factura armada desde remitos de compra conservan el
+ * renglón de remito que facturan (se ve de qué remito vienen): su artículo
+ * no cambia, y la factura no cambia de proveedor ni de tipo.
  */
 export function EditorComprobanteCompra({
   guardado,
+  notaDe = null,
   contexto,
   articulos: articulosIniciales,
+  facturas: facturasIniciales = [],
+  errorFacturas = null,
+  facturaAsociada,
+  remitos = {},
   hoy,
 }: {
   guardado: ComprobanteCompraCargado | null;
+  /** Nota nueva desde una factura confirmada: copia sus renglones y precios. */
+  notaDe?: { factura: ComprobanteCompraCargado; tipo: TipoNotaCompra } | null;
   contexto: ContextoEditorCompra;
-  /** Catálogo del proveedor del comprobante guardado. */
+  /** Catálogo del proveedor del comprobante guardado (o de la factura de notaDe). */
   articulos: ProveedorArticulo[];
+  /** Facturas confirmadas del proveedor y la letra, para asociar a una nota. */
+  facturas?: FacturaAsociable[];
+  /** Si no se pudo leer la lista de facturas: el mensaje. */
+  errorFacturas?: string | null;
+  /**
+   * La factura asociada guardada (o la de notaDe), leída por id: puede no
+   * estar en la lista. null si no existe; undefined si no se leyó.
+   */
+  facturaAsociada?: NotaAsociada | null;
+  /** Remito de cada renglón de remito que facturan los renglones guardados. */
+  remitos?: RemitosDeRenglones;
   hoy: string;
 }) {
   const router = useRouter();
@@ -84,19 +121,36 @@ export function EditorComprobanteCompra({
   // actualiza en vez de crear otro, aunque el editor siga montado.
   const [id, setId] = useState<string | null>(guardado?.comprobante.id ?? null);
   // Último proveedor elegido: descarta catálogos que llegan tarde de uno anterior.
-  const proveedorPedido = useRef<string>(guardado?.comprobante.proveedor_id ?? "");
+  const proveedorPedido = useRef<string>(
+    guardado?.comprobante.proveedor_id ?? notaDe?.factura.comprobante.proveedor_id ?? "",
+  );
   const [resultado, setResultado] = useState<ResultadoComprobanteCompra | undefined>(undefined);
   const [aviso, setAviso] = useState<string | null>(null);
+  // Editor abierto en «nuevo»: al confirmar se navega a la dirección del
+  // comprobante (la de history.replaceState no la conoce el router).
+  const abiertoComoNuevo = useRef(guardado === null);
+  // Comprobante guardado a punto de confirmarse, con sus precios para elegir.
+  const [porConfirmar, setPorConfirmar] = useState<{ id: string; lineas: PrecioComprobanteCompra[] } | null>(null);
 
   // Las filas se arman en el navegador: sus claves salen de un contador del módulo.
   const [editor, setEditor] = useState<EstadoEditor>(() =>
     guardado
       ? editorDeComprobanteCompra(guardado.comprobante, guardado.items, guardado.percepciones)
-      : editorComprobanteCompraNuevo(hoy),
+      : notaDe
+        ? editorNotaDeFactura(notaDe.factura.comprobante, notaDe.factura.items, notaDe.tipo, hoy)
+        : editorComprobanteCompraNuevo(hoy),
   );
   // Mientras no se elija la letra a mano, sigue a la condición del proveedor.
-  const [letraElegida, setLetraElegida] = useState(guardado !== null);
+  const [letraElegida, setLetraElegida] = useState(guardado !== null || notaDe !== null);
   const [articulos, setArticulos] = useState(articulosIniciales);
+  const [facturas, setFacturas] = useState(facturasIniciales);
+  // Si no se pudo leer la lista de facturas (al abrir o al volver a leerla): el mensaje.
+  const [errorLista, setErrorLista] = useState<string | null>(errorFacturas);
+  // Último proveedor y letra pedidos: descarta listas de facturas que llegan tarde.
+  const facturasPedidas = useRef("");
+  const esNota = esNotaCompra(editor.tipo);
+  // Con renglones de remitos, la base no deja cambiar el proveedor ni el tipo.
+  const conRemitos = tieneRenglonesDeRemito(editor);
 
   const conIva = discriminaIva(editor.letra);
   const proveedores = contexto.proveedores.filter((p) => p.activo || p.id === editor.proveedorId);
@@ -126,22 +180,56 @@ export function EditorComprobanteCompra({
     }));
   }
 
+  /** Lee las facturas que se pueden asociar a una nota de ese proveedor y letra. */
+  async function leerFacturas(proveedorId: string, letra: LetraCompra, tipo: TipoComprobanteCompra) {
+    const clave = `${proveedorId}|${letra}`;
+    facturasPedidas.current = clave;
+    setErrorLista(null);
+    if (!proveedorId || !esNotaCompra(tipo)) {
+      setFacturas([]);
+      return;
+    }
+    const leidas = await facturasAsociables(proveedorId, letra);
+    if (facturasPedidas.current !== clave) return;
+    if ("error" in leidas) {
+      setFacturas([]);
+      setErrorLista(leidas.error);
+    } else {
+      setFacturas(leidas.facturas);
+    }
+  }
+
   /**
    * Otro proveedor: se lee su catálogo y los renglones pierden el artículo
    * elegido (era del anterior). Si la letra no se eligió a mano, se sugiere
-   * la de su condición frente al IVA.
+   * la de su condición frente al IVA. La factura asociada era del anterior.
    */
   async function cambiarProveedor(proveedorId: string) {
     const elegido = contexto.proveedores.find((p) => p.id === proveedorId);
+    const letra = letraElegida ? editor.letra : letraSugerida(elegido?.condicion_iva);
     setEditor((actual) => ({
       ...actual,
       proveedorId,
-      letra: letraElegida ? actual.letra : letraSugerida(elegido?.condicion_iva),
+      letra,
+      comprobanteAsociadoId: "",
       filas: actual.filas.map((f) => (f.modo === "articulo" ? { ...f, articuloId: null } : f)),
     }));
     proveedorPedido.current = proveedorId;
+    void leerFacturas(proveedorId, letra, editor.tipo);
     const catalogo = proveedorId ? await articulosDelProveedor(proveedorId) : [];
     if (proveedorPedido.current === proveedorId) setArticulos(catalogo);
+  }
+
+  /** La factura asociada tiene la letra de la nota: con otra letra se elige de nuevo. */
+  function cambiarLetra(letra: LetraCompra) {
+    setLetraElegida(true);
+    cambiar({ letra, comprobanteAsociadoId: "" });
+    void leerFacturas(editor.proveedorId, letra, editor.tipo);
+  }
+
+  function cambiarTipo(tipo: TipoComprobanteCompra) {
+    cambiar({ tipo });
+    if (esNotaCompra(tipo) && !esNota) void leerFacturas(editor.proveedorId, editor.letra, tipo);
   }
 
   // ----- Acciones -----------------------------------------------------------
@@ -178,21 +266,44 @@ export function EditorComprobanteCompra({
     });
   }
 
-  /** Guarda y confirma. Si la confirmación falla, el borrador queda guardado. */
-  function confirmar() {
+  /**
+   * Guarda y abre la confirmación con los precios de la factura para elegir
+   * cuáles se actualizan. Si algo falla, el borrador queda guardado. Sin
+   * navegar (desmontaría el editor y se perdería el error): sólo se ajusta
+   * la dirección al comprobante.
+   */
+  function prepararConfirmacion() {
     setAviso(null);
     iniciar(async () => {
       const guardadoId = await guardar();
       if (!guardadoId) return;
-      const r = await confirmarComprobanteCompra(guardadoId);
-      if (r.error) {
-        // El borrador quedó guardado. Sin navegar (desmontaría el editor y
-        // se perdería el error): sólo se ajusta la dirección al comprobante.
-        setResultado({ error: r.error });
-        if (id === null) window.history.replaceState(null, "", `${RUTA}/${guardadoId}`);
+      if (id === null) window.history.replaceState(null, "", `${RUTA}/${guardadoId}`);
+      // Las notas no actualizan precios: confirmación común.
+      if (!confirmaConPrecios(editor.tipo)) {
+        setPorConfirmar({ id: guardadoId, lineas: [] });
         return;
       }
-      if (id === null) router.replace(`${RUTA}/${guardadoId}`);
+      const r = await preciosComprobanteCompra(guardadoId);
+      if ("error" in r) {
+        setResultado({ error: r.error });
+        return;
+      }
+      setPorConfirmar({ id: guardadoId, lineas: r.lineas });
+    });
+  }
+
+  /** Confirma el comprobante guardado y actualiza los precios elegidos, todo junto. */
+  function confirmar(actualizarPrecios: string[]) {
+    if (!porConfirmar) return;
+    const guardadoId = porConfirmar.id;
+    setPorConfirmar(null);
+    iniciar(async () => {
+      const r = await confirmarComprobanteCompra(guardadoId, actualizarPrecios);
+      if (r.error) {
+        setResultado({ error: r.error });
+        return;
+      }
+      if (abiertoComoNuevo.current) router.replace(`${RUTA}/${guardadoId}`);
       else router.refresh();
     });
   }
@@ -225,6 +336,8 @@ export function EditorComprobanteCompra({
               id="proveedor"
               value={editor.proveedorId}
               onChange={(e) => cambiarProveedor(e.target.value)}
+              disabled={conRemitos}
+              title={conRemitos ? "La factura tiene renglones de remitos de este proveedor." : undefined}
               className="campo"
             >
               <option value="">Elegí el proveedor</option>
@@ -248,7 +361,9 @@ export function EditorComprobanteCompra({
             <select
               id="tipo"
               value={editor.tipo}
-              onChange={(e) => cambiar({ tipo: e.target.value as TipoComprobanteCompra })}
+              onChange={(e) => cambiarTipo(e.target.value as TipoComprobanteCompra)}
+              disabled={conRemitos}
+              title={conRemitos ? "Sólo una factura lleva renglones de remitos." : undefined}
               className="campo"
             >
               {TIPOS_COMPROBANTE_COMPRA.map((t) => (
@@ -265,10 +380,7 @@ export function EditorComprobanteCompra({
             <select
               id="letra"
               value={editor.letra}
-              onChange={(e) => {
-                setLetraElegida(true);
-                cambiar({ letra: e.target.value as LetraCompra });
-              }}
+              onChange={(e) => cambiarLetra(e.target.value as LetraCompra)}
               className="campo"
             >
               {LETRAS_COMPRA.map((l) => (
@@ -328,6 +440,16 @@ export function EditorComprobanteCompra({
               className="campo"
             />
           </div>
+          {esNota && (
+            <FacturaAsociada
+              valor={editor.comprobanteAsociadoId}
+              facturas={facturas}
+              asociada={facturaAsociada}
+              error={errorLista}
+              proveedorElegido={editor.proveedorId !== ""}
+              onCambiar={(comprobanteAsociadoId) => cambiar({ comprobanteAsociadoId })}
+            />
+          )}
           <div className="sm:col-span-6">
             <label className="etiqueta" htmlFor="observaciones">
               Observaciones
@@ -340,6 +462,12 @@ export function EditorComprobanteCompra({
               className="campo"
             />
           </div>
+          {conRemitos && (
+            <p className="text-xs text-stone-500 sm:col-span-6">
+              Factura armada desde remitos: no cambia el proveedor ni el tipo. Quitar un renglón de remito lo deja otra vez
+              pendiente en su remito.
+            </p>
+          )}
           <p className="text-xs text-stone-500 sm:col-span-6">
             {conIva
               ? "Las letras A y M discriminan IVA: los precios van sin IVA y cada renglón lleva su alícuota."
@@ -392,6 +520,7 @@ export function EditorComprobanteCompra({
                         articulosPorId={articulosPorId}
                         materias={materias}
                         materiasPrimas={contexto.materiasPrimas}
+                        remito={f.remitoItemId ? (remitos[f.remitoItemId] ?? null) : null}
                         onCambiar={(cambios) => cambiarFila(f.clave, cambios)}
                       />
                     </td>
@@ -598,15 +727,19 @@ export function EditorComprobanteCompra({
         <button type="button" disabled={pendiente} onClick={guardarBorrador} className="boton-primario">
           {pendiente ? "Guardando…" : "Guardar borrador"}
         </button>
-        <Confirmacion
-          boton="Confirmar"
-          clase="boton-secundario"
-          titulo="¿Confirmar el comprobante?"
-          mensaje="Se guarda y se confirma. Después no se puede modificar ni borrar: sólo anular."
-          confirmar="Confirmar"
-          deshabilitado={pendiente}
-          onConfirmar={confirmar}
-        />
+        <button
+          type="button"
+          disabled={pendiente}
+          onClick={prepararConfirmacion}
+          title={
+            esNota
+              ? "Se guarda y se confirma. Las notas no actualizan precios de materias primas."
+              : "Se guarda y se confirma; antes elegís qué precios de materias primas se actualizan."
+          }
+          className="boton-secundario"
+        >
+          Confirmar
+        </button>
         {id && (
           <Confirmacion
             boton="Borrar"
@@ -620,6 +753,13 @@ export function EditorComprobanteCompra({
           />
         )}
       </div>
+      {porConfirmar && (
+        <ActualizarPrecios
+          lineas={porConfirmar.lineas}
+          onCancelar={() => setPorConfirmar(null)}
+          onConfirmar={confirmar}
+        />
+      )}
       <ModalError estado={resultado} />
     </div>
   );
@@ -634,15 +774,79 @@ function Linea({ etiqueta, valor }: { etiqueta: string; valor: number }) {
   );
 }
 
+const TEXTOS_AVISO_FACTURA: Record<AvisoFacturaAsociada, string> = {
+  no_confirmada: "Factura que ya no está confirmada: elegí otra",
+  inexistente: "Factura que ya no existe: elegí otra",
+  sin_datos: "Factura guardada (no se pudieron leer sus datos)",
+};
+
+/**
+ * Factura que corrige una nota (opcional). Elegirla no cambia los renglones:
+ * los copia sólo el botón de la factura. La guardada se ofrece aunque quede
+ * fuera de la lista; si ya no está confirmada o no existe, se muestra igual
+ * para que se elija otra.
+ */
+function FacturaAsociada({
+  valor,
+  facturas,
+  asociada,
+  error,
+  proveedorElegido,
+  onCambiar,
+}: {
+  valor: string;
+  facturas: FacturaAsociable[];
+  asociada: NotaAsociada | null | undefined;
+  error: string | null;
+  proveedorElegido: boolean;
+  onCambiar: (id: string) => void;
+}) {
+  const { opciones, aviso } = facturaAsociadaEnEditor(valor, facturas, asociada);
+  const elegida = opciones.find((f) => f.id === valor);
+  return (
+    <div className="sm:col-span-3">
+      <label className="etiqueta" htmlFor="factura-asociada">
+        Factura asociada
+      </label>
+      <select
+        id="factura-asociada"
+        value={valor}
+        onChange={(e) => onCambiar(e.target.value)}
+        disabled={!proveedorElegido}
+        className="campo"
+      >
+        <option value="">Sin factura asociada (nota suelta)</option>
+        {aviso && <option value={valor}>{TEXTOS_AVISO_FACTURA[aviso]}</option>}
+        {opciones.map((f) => (
+          <option key={f.id} value={f.id}>
+            {numeroComprobanteCompra(f)} · {fecha(f.fecha)} · {pesos(f.total)}
+          </option>
+        ))}
+      </select>
+      {error && <p className="mt-1 text-xs text-red-700">{error}</p>}
+      {valor !== "" ? (
+        <Link href={`${RUTA}/${valor}`} className="mt-1 inline-block text-xs text-marca-700 hover:underline">
+          Ver factura{elegida ? ` ${numeroComprobanteCompra(elegida)}` : ""}
+        </Link>
+      ) : (
+        <p className="mt-1 text-xs text-stone-500">
+          Facturas confirmadas del proveedor con la misma letra. Elegirla no cambia los renglones.
+        </p>
+      )}
+    </div>
+  );
+}
+
 /** «código — nombre (unidad de compra)» */
-function nombreMateria(m: MateriaPrimaOfrecida): string {
+export function nombreMateria(m: MateriaPrimaOfrecida): string {
   return `${m.codigo} — ${m.nombre} (${m.unidad_compra})`;
 }
 
 /**
  * Primera celda del renglón: qué es (artículo del proveedor, artículo nuevo
  * o libre), el artículo o los datos del nuevo, y el código y la descripción
- * tal como los escribió el proveedor.
+ * tal como los escribió el proveedor. Un renglón que viene de un remito
+ * muestra el remito y no cambia de artículo.
  */
 function CeldaArticulo({
   fila: f,
@@ -652,6 +856,7 @@ function CeldaArticulo({
   articulosPorId,
   materias,
   materiasPrimas,
+  remito,
   onCambiar,
 }: {
   fila: FilaCompra;
@@ -661,26 +866,42 @@ function CeldaArticulo({
   articulosPorId: ReadonlyMap<string, ProveedorArticulo>;
   materias: ReadonlyMap<string, MateriaPrimaOfrecida>;
   materiasPrimas: MateriaPrimaOfrecida[];
+  /** Remito del que viene el renglón (null si no se pudo leer o no viene de uno). */
+  remito: RemitosDeRenglones[string] | null;
   onCambiar: (cambios: Partial<FilaCompra>) => void;
 }) {
+  const deRemito = f.remitoItemId !== null;
   const articulo = f.articuloId ? articulosPorId.get(f.articuloId) : undefined;
   const materia = articulo?.materia_prima_id ? materias.get(articulo.materia_prima_id) : undefined;
   const ofrecidas = materiasPrimas.filter((m) => m.activo || m.id === f.materiaPrimaId);
 
   return (
     <div className="space-y-1">
-      <select
-        value={f.modo}
-        onChange={(e) => onCambiar({ modo: e.target.value as ModoRenglon, articuloId: null, busqueda: "" })}
-        className="campo text-xs"
-        aria-label={`Tipo de renglón ${i + 1}`}
-      >
-        {(Object.keys(NOMBRES_MODO) as ModoRenglon[]).map((m) => (
-          <option key={m} value={m}>
-            {NOMBRES_MODO[m]}
-          </option>
-        ))}
-      </select>
+      {deRemito ? (
+        <p className="text-xs">
+          <Pastilla tono="azul">Remito</Pastilla>{" "}
+          {remito ? (
+            <Link href={`/compras/remitos/${remito.remitoId}`} className="text-marca-700 hover:underline">
+              Del remito {remito.numero}
+            </Link>
+          ) : (
+            <span className="text-stone-500">De un remito de compra</span>
+          )}
+        </p>
+      ) : (
+        <select
+          value={f.modo}
+          onChange={(e) => onCambiar({ modo: e.target.value as ModoRenglon, articuloId: null, busqueda: "" })}
+          className="campo text-xs"
+          aria-label={`Tipo de renglón ${i + 1}`}
+        >
+          {(Object.keys(NOMBRES_MODO) as ModoRenglon[]).map((m) => (
+            <option key={m} value={m}>
+              {NOMBRES_MODO[m]}
+            </option>
+          ))}
+        </select>
+      )}
 
       {f.modo === "articulo" &&
         (f.articuloId ? (
@@ -698,13 +919,15 @@ function CeldaArticulo({
                   <span className="text-stone-500">Artículo del catálogo</span>
                 )}
               </span>
-              <button
-                type="button"
-                onClick={() => onCambiar({ articuloId: null })}
-                className="text-marca-700 hover:underline"
-              >
-                Cambiar
-              </button>
+              {!deRemito && (
+                <button
+                  type="button"
+                  onClick={() => onCambiar({ articuloId: null })}
+                  className="text-marca-700 hover:underline"
+                >
+                  Cambiar
+                </button>
+              )}
             </div>
             {articulo &&
               (materia ? (
@@ -785,8 +1008,8 @@ function CeldaArticulo({
   );
 }
 
-/** Buscador de los artículos activos del proveedor por código o descripción (filtra en el navegador). */
-function BuscadorArticulo({
+/** Buscador de los artículos activos del proveedor por código o descripción (filtra en el navegador). También lo usa el editor de remitos de compra. */
+export function BuscadorArticulo({
   articulos,
   texto,
   onTexto,
