@@ -5,8 +5,9 @@
  * 20261105000005_compras_actualizar_precios.sql; CP012–CP014, ver
  * 20261105000006_compras_notas_asociadas.sql; y RC004, RC009 y RC010 del vínculo
  * con los remitos de compra, ver 20261105000007_remitos_compra.sql). Cada código trae su pista (HINT)
- * con el motivo: se busca por las dos, por si llega sólo una. Las acciones
- * devuelven el mensaje en lugar de lanzarlo.
+ * con el motivo: se busca por las dos, por si llega sólo una. Un deadlock
+ * (40P01) o un conflicto de serialización (40001) se resuelve probando de
+ * nuevo. Las acciones devuelven el mensaje en lugar de lanzarlo.
  */
 
 /** Lo que importa de un error de Supabase (PostgREST). */
@@ -26,6 +27,7 @@ const ASOCIADO =
 const NOTA_SIN_PRECIOS = "Las notas de crédito y débito no actualizan precios de materias primas.";
 const CON_NOTAS = "La factura tiene notas de crédito o débito confirmadas: anulá primero las notas.";
 const REMITO_INEXISTENTE = "No se encontró un renglón de remito. Puede que lo hayan borrado: recargá la página.";
+const REINTENTAR = "Otra persona estaba guardando un comprobante con los mismos remitos. Probá de nuevo.";
 const FACTURACION =
   "Los renglones de remitos van sólo en una factura del mismo proveedor, de remitos recibidos y con el mismo artículo.";
 
@@ -58,6 +60,8 @@ const PROPIOS: Record<string, string> = {
   remito_inexistente: REMITO_INEXISTENTE,
   RC009: FACTURACION,
   facturacion_invalida: FACTURACION,
+  "40P01": REINTENTAR,
+  "40001": REINTENTAR,
   "23503": "El proveedor, un artículo o una materia prima ya no existen. Recargá la página.",
 };
 

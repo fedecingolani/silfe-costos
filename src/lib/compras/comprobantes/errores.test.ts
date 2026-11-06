@@ -89,6 +89,13 @@ describe("mensajeErrorComprobanteCompra", () => {
     expect(mensajeErrorComprobanteCompra({ code: "toString", message: "x" })).toBe("No se pudo guardar el comprobante: x");
   });
 
+  it("un deadlock (40P01) o un conflicto de serialización (40001) pide probar de nuevo", () => {
+    const mensaje =
+      "Otra persona estaba guardando un comprobante con los mismos remitos. Probá de nuevo.";
+    expect(mensajeErrorComprobanteCompra({ code: "40P01", message: "deadlock detected" })).toBe(mensaje);
+    expect(mensajeErrorComprobanteCompra({ code: "40001", message: "could not serialize access" })).toBe(mensaje);
+  });
+
   it("un error desconocido dice qué se intentaba", () => {
     expect(mensajeErrorComprobanteCompra({ code: "XX000", message: "se cayó" }, "confirmar el comprobante")).toBe(
       "No se pudo confirmar el comprobante: se cayó",
