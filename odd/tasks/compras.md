@@ -1,6 +1,6 @@
 # Compras: comprobantes, remitos, pagos y cuentas corrientes de proveedores
 
-Estado: implementada (T1 a T9 terminadas); falta mergear y desplegar.
+Estado: en producción desde el 2026-11-06 (T1 a T9).
 
 ## Objetivo
 
@@ -473,11 +473,24 @@ Migraciones nuevas en `supabase/migrations/`, tests pgTAP en `supabase/tests/`, 
   - Sugerencia: con más proveedores que el límite del listado, los totales y el orden por antigüedad quedan incompletos.
 - **Revisión de la rama entera:** concedida, y otra vez supera el límite de contexto.
 
+- **PR:** #43, con base en la rama de T8.
+
+## Deploy (2026-11-06)
+
+- **Merge:**
+  - La cadena se mergeó de arriba hacia abajo, con merge commit: #43 → … → #35, cada uno en su rama padre.
+  - Al final, #34 en `main` (`c21c01d`), con el título "comprobantes, remitos, pagos y cuentas corrientes de proveedores".
+  - Después se borraron las ramas de compras.
+- **Migraciones:**
+  - `supabase migration list --linked` mostró el historial remoto igual al local hasta `20261104000004`.
+  - `supabase db push --linked` aplicó las 13 migraciones nuevas, de `20261105000001` a `20261106000004`, sin errores.
+- **Worker:** `silfe-costos` quedó desplegado, versión `1ae57166-3743-4894-8d75-5ed3a7c698d3`.
+- **Verificación:** sin sesión, `/compras/remitos`, `/compras/pagos` y `/compras/cuentas-corrientes` redirigen a `/login` (307).
+- **Falta probar en producción con un usuario:** sobre todo confirmar una orden de pago, el caso del bug de `pg-safeupdate`.
+
 ## Próximo paso
 
-- Subir T9 con su PR.
-- Mergear la cadena #34 → … → T9 en orden, sin `--delete-branch` hasta el final.
-- Aplicar en producción las migraciones `20261105000001` a `20261106000004`, después de correr `supabase migration list --linked`.
+- Probar los flujos de compras en producción con un usuario real.
 - Pendientes menores:
   - el try/catch de `AplicarSaldoAFavor`;
   - las etiquetas accesibles de los campos del cheque propio;
