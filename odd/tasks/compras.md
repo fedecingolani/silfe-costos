@@ -1,6 +1,6 @@
 # Compras: comprobantes, remitos, pagos y cuentas corrientes de proveedores
 
-Estado: en curso (T1, T2 y T3 terminadas).
+Estado: en curso (T1 a T5 terminadas).
 
 ## Objetivo
 
