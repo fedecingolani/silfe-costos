@@ -45,6 +45,32 @@ export function normalizarCbu(valor: string | null | undefined): string | null {
   return limpiar((valor ?? "").replace(/\s+/g, ""));
 }
 
+const CUIT = /^[0-9]{11}$/;
+
+export const MENSAJE_CUIT_INVALIDO = "El CUIT tiene que tener 11 dígitos.";
+
+/**
+ * El CUIT sólo con dígitos (sin guiones, puntos ni espacios); null si no
+ * queda ninguno. Es la forma en que se guarda en `proveedor.cuit`. No valida
+ * el largo.
+ */
+export function normalizarCuit(valor: string | null | undefined): string | null {
+  const digitos = (valor ?? "").replace(/[^0-9]/g, "");
+  return digitos === "" ? null : digitos;
+}
+
+/** 11 dígitos, sin separadores (lo que exige proveedor_cuit_check). */
+export function esCuitValido(valor: string): boolean {
+  return CUIT.test(valor);
+}
+
+/** Normaliza el CUIT; vacío es null y cualquier otra cosa tiene que dar 11 dígitos. */
+export function validarCuit(valor: string | null | undefined): Resultado<string | null> {
+  const cuit = normalizarCuit(valor);
+  if (cuit !== null && !esCuitValido(cuit)) return { error: MENSAJE_CUIT_INVALIDO };
+  return { datos: cuit };
+}
+
 export function esAliasValido(valor: string): boolean {
   return ALIAS.test(valor);
 }

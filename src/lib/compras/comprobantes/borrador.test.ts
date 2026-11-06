@@ -408,6 +408,9 @@ describe("ida y vuelta: comprobante guardado → editor → lo que se guarda", (
     creado_en: "2026-11-01T10:00:00Z",
     actualizado_en: "2026-11-01T10:00:00Z",
     comprobante_asociado_id: "d0000000-0000-0000-0000-000000000002",
+    cae: null,
+    cae_vencimiento: null,
+    origen: "manual",
   };
   const item = (cambios: Partial<ComprobanteCompraItem>): ComprobanteCompraItem => ({
     id: "e0000000-0000-0000-0000-000000000001",
@@ -596,6 +599,9 @@ describe("renglones que vienen de remitos", () => {
       creado_en: "2026-11-05T10:00:00Z",
       actualizado_en: "2026-11-05T10:00:00Z",
       comprobante_asociado_id: null,
+      cae: null,
+      cae_vencimiento: null,
+      origen: "manual",
     };
     const item: ComprobanteCompraItem = {
       id: "e0000000-0000-0000-0000-000000000001",

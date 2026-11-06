@@ -13,6 +13,7 @@ export type UnidadMedida = {
 export type Proveedor = {
   id: string;
   nombre: string;
+  /** 11 dígitos, sin guiones (lo normaliza la base). Único entre proveedores. */
   cuit: string | null;
   contacto: string | null;
   email: string | null;
@@ -83,7 +84,14 @@ export type ComprobanteCompra = {
   actualizado_en: string;
   /** Nota de crédito o débito: factura que corrige (confirmada, mismo proveedor y letra). Vacía: suelta. */
   comprobante_asociado_id: string | null;
+  /** CAE (o CAI) del comprobante del proveedor, si se conoce. */
+  cae: string | null;
+  cae_vencimiento: string | null;
+  origen: OrigenComprobanteCompra;
 };
+
+/** manual: cargado en la pantalla; api: enviado por una integración (Factura Digital). */
+export type OrigenComprobanteCompra = "manual" | "api";
 
 /** Renglón de un comprobante de compra: un artículo del proveedor o un renglón libre. */
 export type ComprobanteCompraItem = {

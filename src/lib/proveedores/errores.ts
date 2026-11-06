@@ -5,6 +5,8 @@
  * por uno genérico.
  */
 
+import { MENSAJE_CUIT_INVALIDO } from "./validacion";
+
 /** Lo que importa de un error de Supabase (PostgREST). */
 export type ErrorBase = { code?: string; message: string };
 
@@ -14,6 +16,7 @@ export const MENSAJE_ARTICULO_EN_USO =
 /** Índice único (nombre en la base) → mensaje. */
 const UNICOS: Record<string, string> = {
   proveedor_nombre_uq: "Ya existe un proveedor con ese nombre.",
+  proveedor_cuit_uq: "Ya existe un proveedor con ese CUIT.",
   proveedor_articulo_codigo_uq: "Este proveedor ya tiene un artículo con ese código.",
   proveedor_articulo_descripcion_uq: "Este proveedor ya tiene un artículo sin código con esa descripción.",
 };
@@ -25,6 +28,8 @@ function mensajeUnico(error: ErrorBase): string | null {
 }
 
 export function mensajeErrorProveedor(accion: string, error: ErrorBase): string {
+  // Un CUIT viejo que no tiene 11 dígitos se rechaza al guardar el proveedor.
+  if (error.code === "23514" && error.message.includes('"proveedor_cuit_check"')) return MENSAJE_CUIT_INVALIDO;
   return mensajeUnico(error) ?? `No se pudo ${accion} el proveedor: ${error.message}`;
 }
 
