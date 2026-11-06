@@ -11,6 +11,24 @@ describe("mensajeErrorProveedor", () => {
     ).toBe("Ya existe un proveedor con ese nombre.");
   });
 
+  it("avisa si ya hay un proveedor con ese CUIT", () => {
+    expect(
+      mensajeErrorProveedor("crear", {
+        code: "23505",
+        message: 'duplicate key value violates unique constraint "proveedor_cuit_uq"',
+      }),
+    ).toBe("Ya existe un proveedor con ese CUIT.");
+  });
+
+  it("avisa si el CUIT no tiene 11 dígitos", () => {
+    expect(
+      mensajeErrorProveedor("actualizar", {
+        code: "23514",
+        message: 'new row for relation "proveedor" violates check constraint "proveedor_cuit_check"',
+      }),
+    ).toBe("El CUIT tiene que tener 11 dígitos.");
+  });
+
   it("si no lo reconoce, dice qué acción falló", () => {
     expect(mensajeErrorProveedor("actualizar", { message: "sin conexión" })).toBe(
       "No se pudo actualizar el proveedor: sin conexión",

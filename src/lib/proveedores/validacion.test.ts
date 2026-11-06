@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { esAliasValido, normalizarCbu, parsearFactor, validarArticulo, validarDatosFiscales } from "./validacion";
+import {
+  esAliasValido,
+  esCuitValido,
+  normalizarCbu,
+  normalizarCuit,
+  parsearFactor,
+  validarArticulo,
+  validarCuit,
+  validarDatosFiscales,
+} from "./validacion";
 
 describe("normalizarCbu", () => {
   it("quita los espacios", () => {
@@ -131,5 +140,46 @@ describe("validarArticulo", () => {
     expect(validarArticulo({ ...base, factor: "0.000000001" })).toEqual({ error });
     expect(validarArticulo({ ...base, factor: "1e12" })).toEqual({ error });
     expect(validarArticulo({ ...base, factor: "0.00000001" })).toMatchObject({ datos: { factor_conversion: 0.00000001 } });
+  });
+});
+
+describe("normalizarCuit", () => {
+  it("deja sólo los dígitos", () => {
+    expect(normalizarCuit("30-69876543-2")).toBe("30698765432");
+    expect(normalizarCuit(" 30 69876543 2 ")).toBe("30698765432");
+    expect(normalizarCuit("30.698.765.432")).toBe("30698765432");
+  });
+
+  it("vacío o sin dígitos es null", () => {
+    expect(normalizarCuit("")).toBeNull();
+    expect(normalizarCuit("  - ")).toBeNull();
+    expect(normalizarCuit(null)).toBeNull();
+    expect(normalizarCuit(undefined)).toBeNull();
+  });
+});
+
+describe("esCuitValido", () => {
+  it("acepta 11 dígitos", () => {
+    expect(esCuitValido("30698765432")).toBe(true);
+  });
+
+  it("rechaza otros largos y los guiones", () => {
+    expect(esCuitValido("3069876543")).toBe(false);
+    expect(esCuitValido("306987654321")).toBe(false);
+    expect(esCuitValido("30-69876543-2")).toBe(false);
+  });
+});
+
+describe("validarCuit", () => {
+  it("normaliza y acepta un CUIT de 11 dígitos", () => {
+    expect(validarCuit("30-69876543-2")).toEqual({ datos: "30698765432" });
+  });
+
+  it("vacío es válido y queda en null", () => {
+    expect(validarCuit("  ")).toEqual({ datos: null });
+  });
+
+  it("rechaza un CUIT que no tiene 11 dígitos", () => {
+    expect(validarCuit("30-1234-5")).toEqual({ error: "El CUIT tiene que tener 11 dígitos." });
   });
 });

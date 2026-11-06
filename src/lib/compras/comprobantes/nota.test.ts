@@ -41,6 +41,9 @@ const factura: ComprobanteCompra = {
   creado_en: "2026-10-20T10:00:00Z",
   actualizado_en: "2026-10-20T10:00:00Z",
   comprobante_asociado_id: null,
+  cae: null,
+  cae_vencimiento: null,
+  origen: "manual",
 };
 
 const item = (cambios: Partial<ComprobanteCompraItem>): ComprobanteCompraItem => ({

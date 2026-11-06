@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { aNumero, aTexto } from "@/lib/formato";
 import { mensajeErrorArticulo, mensajeErrorProveedor } from "@/lib/proveedores/errores";
-import { validarArticulo, validarDatosFiscales } from "@/lib/proveedores/validacion";
+import { validarArticulo, validarCuit, validarDatosFiscales } from "@/lib/proveedores/validacion";
 
 /** Estado de los formularios con modal de error (proveedor y artículo). */
 export type EstadoFormularioProveedor = { error?: string } | undefined;
@@ -28,10 +28,13 @@ function datos(formData: FormData) {
     alias: texto(formData, "alias"),
   });
   if ("error" in fiscales) return fiscales;
+  // Se guarda sólo con dígitos: así se encuentra por CUIT (API de compras) y no se repite.
+  const cuit = validarCuit(texto(formData, "cuit"));
+  if ("error" in cuit) return cuit;
   return {
     datos: {
       nombre: String(formData.get("nombre") ?? "").trim(),
-      cuit: aTexto(formData.get("cuit")),
+      cuit: cuit.datos,
       contacto: aTexto(formData.get("contacto")),
       email: aTexto(formData.get("email")),
       telefono: aTexto(formData.get("telefono")),
