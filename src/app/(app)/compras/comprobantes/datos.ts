@@ -1,13 +1,17 @@
 import "server-only";
 import type { createClient } from "@/lib/supabase/server";
 import type { FacturaAsociable, NotaAsociada } from "@/lib/compras/comprobantes/nota";
+import { numeroComprobanteCompra } from "@/lib/compras/comprobantes/numero";
 import { numeroRemitoCompra } from "@/lib/compras/remitos/listado";
 import type {
   ComprobanteCompra,
   ComprobanteCompraItem,
   ComprobanteCompraPercepcion,
   CondicionIva,
+  EstadoPago,
+  LetraCompra,
   ProveedorArticulo,
+  TipoComprobanteCompra,
 } from "@/lib/tipos";
 
 type Supabase = Awaited<ReturnType<typeof createClient>>;
@@ -187,4 +191,74 @@ export async function cargarComprobanteCompra(
     importe: Number(p.importe),
   }));
   return { comprobante, items, percepciones };
+}
+
+/** Saldo y estado de pago de una factura o nota de débito confirmada (v_comprobante_compra_saldo). */
+export type SaldoCompra = { total: number; imputado: number; saldo: number; estadoPago: EstadoPago };
+
+/** null si no es un débito confirmado (borrador, anulado o nota de crédito); el mensaje si falló la lectura. */
+export async function cargarSaldoCompra(supabase: Supabase, id: string): Promise<SaldoCompra | null | string> {
+  const { data, error } = await supabase
+    .from("v_comprobante_compra_saldo")
+    .select("total, imputado, saldo, estado_pago")
+    .eq("comprobante_compra_id", id)
+    .maybeSingle();
+  if (error) return `No se pudo leer el saldo del comprobante: ${error.message}`;
+  if (!data) return null;
+  return {
+    total: Number(data.total),
+    imputado: Number(data.imputado),
+    saldo: Number(data.saldo),
+    estadoPago: data.estado_pago as EstadoPago,
+  };
+}
+
+/** Imputación vigente recibida por un débito de compra: de una orden de pago confirmada o de una nota de crédito. */
+export type PagoRecibidoCompra = {
+  id: string;
+  importe: number;
+  fecha: string;
+  automatica: boolean;
+  texto: string;
+  href: string;
+};
+
+type FilaPagoRecibido = {
+  id: string;
+  importe: number | string;
+  fecha: string;
+  automatica: boolean;
+  orden: { id: string; numero_texto: string | null; estado: string } | null;
+  nota: { id: string; tipo: TipoComprobanteCompra; letra: LetraCompra; punto_venta: number; numero: number } | null;
+};
+
+/** Órdenes de pago confirmadas y notas de crédito imputadas a un débito de compra, por fecha. */
+export async function cargarPagosRecibidosCompra(
+  supabase: Supabase,
+  comprobanteId: string,
+): Promise<PagoRecibidoCompra[] | string> {
+  const { data, error } = await supabase
+    .from("imputacion_compra")
+    .select(
+      "id, importe, fecha, automatica, orden:orden_pago_id(id, numero_texto, estado), " +
+        "nota:nota_credito_id(id, tipo, letra, punto_venta, numero)",
+    )
+    .eq("comprobante_compra_id", comprobanteId)
+    .order("fecha")
+    .order("creado_en");
+  if (error) return `No se pudieron leer los pagos del comprobante: ${error.message}`;
+  return ((data ?? []) as unknown as FilaPagoRecibido[])
+    .filter((i) => i.nota || i.orden?.estado === "confirmado")
+    .map((i) => ({
+      id: i.id,
+      importe: Number(i.importe),
+      fecha: i.fecha,
+      automatica: i.automatica,
+      texto: i.orden
+        ? `Orden de pago ${i.orden.numero_texto ?? ""}`.trim()
+        : i.nota
+          ? numeroComprobanteCompra({ ...i.nota, punto_venta: Number(i.nota.punto_venta) })
+          : "Nota de crédito",
+      href: i.orden ? `/compras/pagos/${i.orden.id}` : `/compras/comprobantes/${i.nota?.id}`,
+    }));
 }
