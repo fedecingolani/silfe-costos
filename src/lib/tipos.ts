@@ -216,6 +216,118 @@ export type RemitoCompraEstado = {
   pendiente: number;
 };
 
+export const ESTADOS_ORDEN_PAGO = ["borrador", "confirmado", "anulado"] as const;
+
+export type EstadoOrdenPago = (typeof ESTADOS_ORDEN_PAGO)[number];
+
+/** Sin retenciones. Efectivo y transferencia van sin banco ni caja. */
+export const TIPOS_MEDIO_PAGO_COMPRA = ["efectivo", "transferencia", "cheque_tercero", "cheque_propio"] as const;
+
+export type TipoMedioPagoCompra = (typeof TIPOS_MEDIO_PAGO_COMPRA)[number];
+
+export const NOMBRES_MEDIO_PAGO_COMPRA: Record<TipoMedioPagoCompra, string> = {
+  efectivo: "Efectivo",
+  transferencia: "Transferencia",
+  cheque_tercero: "Cheque de terceros",
+  cheque_propio: "Cheque propio",
+};
+
+/** Fila de orden_pago. Una confirmada no se modifica: se anula. */
+export type OrdenPago = {
+  id: string;
+  /** Vacío en borrador. */
+  numero: number | null;
+  /** OP-00000001; vacío en borrador. */
+  numero_texto: string | null;
+  /** yyyy-mm-dd */
+  fecha: string;
+  proveedor_id: string;
+  /** Suma de los medios de pago. */
+  total: number;
+  estado: EstadoOrdenPago;
+  motivo_anulacion: string | null;
+  observaciones: string | null;
+  creado_por: string | null;
+  creado_en: string;
+  actualizado_en: string;
+  confirmado_en: string | null;
+  anulado_en: string | null;
+};
+
+/** Fila de orden_pago_medio. */
+export type OrdenPagoMedio = {
+  id: string;
+  orden_pago_id: string;
+  orden: number;
+  tipo: TipoMedioPagoCompra;
+  importe: number;
+  /** Transferencia: referencia de la operación. */
+  referencia: string | null;
+  /** Cheque de terceros de la cartera. */
+  cheque_id: string | null;
+  /** Cheque propio: banco, número y fecha de pago. */
+  banco: string | null;
+  numero: string | null;
+  fecha_pago: string | null;
+};
+
+/** Fila de imputacion_compra: sale de una orden de pago o de una nota de crédito de compra. */
+export type ImputacionCompra = {
+  id: string;
+  orden_pago_id: string | null;
+  nota_credito_id: string | null;
+  /** Débito (factura o nota de débito de compra confirmada). */
+  comprobante_compra_id: string;
+  importe: number;
+  fecha: string;
+  automatica: boolean;
+  creado_por: string | null;
+  creado_en: string;
+};
+
+/** Fila de v_comprobante_compra_saldo: facturas y notas de débito de compra confirmadas. */
+export type ComprobanteCompraSaldo = {
+  comprobante_compra_id: string;
+  proveedor_id: string;
+  tipo: Exclude<TipoComprobanteCompra, "nota_credito">;
+  letra: LetraCompra;
+  punto_venta: number;
+  numero: number;
+  /** FC A 00003-00012345 */
+  numero_texto: string;
+  fecha: string;
+  fecha_vencimiento: string | null;
+  total: number;
+  imputado: number;
+  saldo: number;
+  estado_pago: EstadoPago;
+};
+
+/** Fila de v_proveedor_saldo_a_favor: créditos del proveedor con algo sin imputar. */
+export type ProveedorSaldoAFavor = {
+  origen: "orden_pago" | "nota_credito";
+  orden_pago_id: string | null;
+  nota_credito_id: string | null;
+  proveedor_id: string;
+  fecha: string;
+  creado_en: string;
+  numero_texto: string;
+  total: number;
+  imputado: number;
+  disponible: number;
+};
+
+/** Medio de pago para guardar_orden_pago (p_medios). */
+export type MedioOrdenPagoGuardar =
+  | { tipo: "efectivo"; importe: number }
+  | { tipo: "transferencia"; importe: number; referencia?: string | null }
+  /** El importe lo pone la base: el del cheque. */
+  | { tipo: "cheque_tercero"; cheque_id: string; importe?: number }
+  | { tipo: "cheque_propio"; importe: number; banco: string; numero: string; fecha_pago: string };
+
+/** Imputación para guardar_orden_pago (p_imputaciones). Los importes en cero se ignoran. */
+export type ImputacionOrdenPagoGuardar = { comprobante_compra_id: string; importe: number };
+
 export type ProveedorContacto = {
   id: string;
   proveedor_id: string;
@@ -1090,6 +1202,10 @@ export type Cheque = {
   entregado_a: string | null;
   /** Nota de débito por el rechazo. */
   nd_comprobante_id: string | null;
+  /** Proveedor al que se entregó con una orden de pago. */
+  proveedor_id: string | null;
+  /** Orden de pago con que se entregó (vuelve a la cartera si se anula). */
+  orden_pago_id: string | null;
   creado_en: string;
 };
 
