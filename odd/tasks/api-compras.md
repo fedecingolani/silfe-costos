@@ -86,7 +86,7 @@ Entrega: un PR por tarea, cada uno sobre la rama de la anterior, como en compras
 
 - [x] T1 Esquema: tabla `api_clave` + RLS; `cae`, `cae_vencimiento` y `origen` en `comprobante_compra`; CUIT del proveedor normalizado y único. Rama `feat/api-compras-01-esquema`.
 - [x] T2 Base de la API: cliente service-role, validación de clave, middleware que deja pasar `/api/v1`, respuestas de error JSON, secreto documentado. Rama `feat/api-compras-02-base`.
-- [ ] T3 Endpoints de proveedores (GET por CUIT, POST). Rama `feat/api-compras-03-proveedores`.
+- [x] T3 Endpoints de proveedores (GET por CUIT, POST). Rama `feat/api-compras-03-proveedores`.
 - [ ] T4 Endpoint de comprobantes de compra. Rama `feat/api-compras-04-comprobantes`.
 - [ ] T5 Pantalla Configuración → Integraciones (crear, listar y revocar claves). Rama `feat/api-compras-05-pantalla-claves`.
 - [ ] T6 Documentación de la API y deploy (migraciones, secreto, worker).
@@ -116,6 +116,13 @@ Entrega: un PR por tarea, cada uno sobre la rama de la anterior, como en compras
 - Códigos de error: `JSON_INVALIDO` (400), `NO_AUTORIZADO` (401), `NO_ENCONTRADO` (404), `PROVEEDOR_EXISTE` (409), `VALIDACION` y `PROVEEDOR_NO_EXISTE` (422), `ERROR_INTERNO` (500).
 - Checks: `npm run typecheck` ok; `npm run lint` ok; `npm test` 1220 pasan (RED observado antes: los módulos no existían). Contra la base local, por PostgREST con la service-role key: buscar la clave por hash con `revocada_en is null` y anotar `ultimo_uso_en` responden bien.
 
+### T3 Endpoints de proveedores — hecho
+
+- Commit `7d98256` en `feat/api-compras-03-proveedores`. Ruta: delegada.
+- `src/app/api/v1/proveedores/route.ts` y validación pura en `src/lib/api/proveedores.ts`. El CUIT de la consulta y del alta acepta guiones y se normaliza a 11 dígitos.
+- POST: 201 `{ proveedor }`; 409 `PROVEEDOR_EXISTE` con `proveedor` si el CUIT ya existe (también si otro pedido lo crea a la vez: lo frena `proveedor_cuit_uq` y se vuelve a buscar); nombre repetido con otro CUIT → 422 `VALIDACION`.
+- Checks: `npm run typecheck` ok; `npm run lint` ok; `npm test` 1227 pasan (RED observado antes: el módulo no existía). Prueba con `curl` contra `next dev` apuntado a la base local y una clave creada a mano: 401 sin clave, GET 200 con coincidencia, 422 CUIT corto, 409 duplicado, 201 alta, 400 JSON inválido, 422 nombre repetido; `/proveedores` sin sesión sigue redirigiendo a `/login`.
+
 ## Próximo paso
 
-T3.
+T4.
