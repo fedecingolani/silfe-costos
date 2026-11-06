@@ -107,7 +107,11 @@ export default async function OrdenPagoPage({
             fecha: orden.fecha,
             observaciones: orden.observaciones,
             medios: medios.map(medioEditable),
-            imputaciones: imputaciones.map((i) => ({ comprobanteId: i.comprobante_compra_id, importe: i.importe })),
+            imputaciones: imputaciones.map((i) => ({
+              comprobanteId: i.comprobante_compra_id,
+              importe: i.importe,
+              numeroTexto: i.comprobante ? numeroComprobanteCompra(i.comprobante) : null,
+            })),
           }}
           proveedores={proveedores}
           cartera={cartera}
