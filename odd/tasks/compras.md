@@ -1,6 +1,6 @@
 # Compras: comprobantes, remitos, pagos y cuentas corrientes de proveedores
 
-Estado: en curso (T1 a T6 terminadas).
+Estado: en curso (T1 a T7 terminadas).
 
 ## Objetivo
 
@@ -97,7 +97,7 @@ Migraciones nuevas en `supabase/migrations/`, tests pgTAP en `supabase/tests/`, 
   - **Precios de costeo:** las notas no los actualizan. El diálogo "Actualizar precios" queda solo para facturas.
 - [x] **T5 — Remitos de compra: modelo.** Cabecera y renglones, vínculo parcial de renglones de factura con renglones de remito, bloqueo del remito facturado, vista de pendientes. Tests pgTAP.
 - [x] **T6 — Remitos de compra: pantallas.** Listado, alta y detalle, y facturar desde remitos. Menú Compras → Remitos.
-- [ ] **T7 — Pagos: modelo.** Orden de pago, medios (efectivo, transferencia, cheques de terceros, cheques propios), imputación a comprobantes y saldo a favor. Tests pgTAP.
+- [x] **T7 — Pagos: modelo.** Orden de pago, medios (efectivo, transferencia, cheques de terceros, cheques propios), imputación a comprobantes y saldo a favor. Tests pgTAP.
 - [ ] **T8 — Pagos: pantallas.** Listado, alta y detalle. Menú Compras → Pagos.
 - [ ] **T9 — Cuenta corriente de proveedores.** Vista de movimientos y saldo, aplicación de notas de crédito, y pantalla. Menú Compras → Cuentas corrientes.
 
@@ -362,6 +362,45 @@ Migraciones nuevas en `supabase/migrations/`, tests pgTAP en `supabase/tests/`, 
 - **Revisión de la rama entera:** concedida, y supera otra vez el límite de contexto.
 - **Nota de comportamiento:** una factura en borrador cuenta como facturada, así que el remito no se anula hasta borrarla.
 
+- **PR:** #40, con base en la rama de T5.
+
+### T7 — Pagos: modelo
+
+- **Ruta:** delegada a un writer.
+- **Rama:** `feat/compras-07-pagos-modelo`, apilada sobre T6.
+- **Commits:**
+  - `206fd48` SQL y pgTAP
+  - `88e0346` tipos y mensajes de error
+- **Migraciones:** `20261106000001_pagos_compra.sql` y `20261106000002_rls_pagos_compra.sql`.
+- **Tablas:**
+  - `orden_pago_numeracion`
+  - `orden_pago`, con número OP-00000001 y estados borrador, confirmado y anulado
+  - `orden_pago_medio`: efectivo, transferencia, cheque_tercero y cheque_propio
+  - `imputacion_compra`, que viene de una orden o de una nota de crédito
+  - `cheque` suma `proveedor_id` y `orden_pago_id`.
+- **Vistas:**
+  - `v_comprobante_compra_saldo`: saldo y `estado_pago` de facturas y notas de débito confirmadas.
+  - `v_proveedor_saldo_a_favor`
+- **RPC:**
+  - `guardar_orden_pago(p_id, p_orden, p_medios, p_imputaciones)`
+  - `confirmar_orden_pago(p_id)`, que devuelve el número
+  - `anular_orden_pago(p_id, p_motivo)`
+- **Errores:** OP001 a OP017, en `src/lib/compras/pagos/errores.ts`.
+- **Decisiones tomadas siguiendo a ventas:**
+  - Numeración propia sin punto de venta, y motivo obligatorio para anular.
+  - El saldo a favor se aplica solo al confirmar una factura o nota de débito, de la más vieja a la más nueva. Si la aplicación falla, la confirmación se cancela.
+  - La nota de crédito asociada se aplica a su factura hasta el saldo, y el resto queda como saldo a favor.
+  - Una factura o nota de débito con imputaciones no se anula (OP016). Una nota de crédito sí, y se deshacen sus aplicaciones.
+  - El cheque de tercero va siempre por su importe. Lo entrega o lo devuelve solo la confirmación o la anulación de la orden (OP017).
+- **RED → GREEN:** pgTAP falló porque faltaban las tablas y después dio 118 tests nuevos en verde. Vitest falló porque faltaba el módulo y después pasó.
+- **Checks:** typecheck y lint OK. Vitest con 1140 tests y pgTAP con 1366, todo en verde.
+- **Revisión RDD:** riesgo medio, concedida y aprobada. Hallazgos informativos:
+  - Aviso: insertar a mano en `imputacion_compra` con `automatica = true` permite imputar el saldo de una orden confirmada. Ventas tiene el mismo patrón en `imputacion`. Dentro de una app interna con `authenticated` de acceso completo, no se corrige por ahora.
+  - Aviso: OP001 también salta al tocar imputaciones de una nota de crédito, pero el mensaje habla de la orden de pago.
+  - Sugerencia: traducir 23505 (comprobante o cheque repetido) y testear 40001.
+- **Revisión de la rama entera:** concedida, y vuelve a superar el límite de contexto.
+
 ## Próximo paso
 
-Subir T6 con su PR y seguir con T7 (modelo de pagos).
+- Subir T7 con su PR.
+- Seguir con T8 (pantallas de pagos), que también traduce 23505 y aclara el mensaje de OP001 para las notas.
