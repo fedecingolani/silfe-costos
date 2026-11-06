@@ -142,10 +142,17 @@ export async function articulosDelProveedor(proveedorId: string): Promise<Provee
   return typeof articulos === "string" ? [] : articulos;
 }
 
-/** Facturas confirmadas del proveedor y la letra, para asociar a una nota. Vacío si no se pudieron leer. */
-export async function facturasAsociables(proveedorId: string, letra: string): Promise<FacturaAsociable[]> {
-  if (!UUID.test(proveedorId) || !(LETRAS_COMPRA as readonly string[]).includes(letra)) return [];
+/**
+ * Facturas confirmadas del proveedor y la letra, para asociar a una nota.
+ * Si no se pudieron leer, el mensaje: el editor distingue una lectura
+ * fallida de una lista vacía.
+ */
+export async function facturasAsociables(
+  proveedorId: string,
+  letra: string,
+): Promise<{ facturas: FacturaAsociable[] } | { error: string }> {
+  if (!UUID.test(proveedorId) || !(LETRAS_COMPRA as readonly string[]).includes(letra)) return { facturas: [] };
   const supabase = await createClient();
   const facturas = await cargarFacturasAsociables(supabase, proveedorId, letra);
-  return typeof facturas === "string" ? [] : facturas;
+  return typeof facturas === "string" ? { error: facturas } : { facturas };
 }

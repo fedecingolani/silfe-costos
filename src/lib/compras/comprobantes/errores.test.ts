@@ -45,6 +45,18 @@ describe("mensajeErrorComprobanteCompra", () => {
     expect(mensajeErrorComprobanteCompra({ hint: "materia_prima_repetida", message: base })).toBe(base);
   });
 
+  it("errores del vínculo con remitos de compra (RC004, RC009, RC010)", () => {
+    for (const code of ["RC004", "RC009"]) {
+      expect(mensajeErrorComprobanteCompra({ code, message: "x" })).not.toMatch(/^No se pudo/);
+    }
+    expect(mensajeErrorComprobanteCompra({ hint: "facturacion_invalida", message: "x" })).toBe(
+      mensajeErrorComprobanteCompra({ code: "RC009", message: "x" }),
+    );
+    const excede = 'Del renglón "Soga" del remito 00009-00000001 quedan 4 pendientes: no se pueden facturar 5.';
+    expect(mensajeErrorComprobanteCompra({ code: "RC010", message: excede })).toBe(excede);
+    expect(mensajeErrorComprobanteCompra({ hint: "excede_pendiente", message: excede })).toBe(excede);
+  });
+
   it("número repetido y claves foráneas", () => {
     expect(
       mensajeErrorComprobanteCompra({
@@ -75,6 +87,13 @@ describe("mensajeErrorComprobanteCompra", () => {
   it("una pista o un código que coincide con una clave heredada de Object no rompe el mensaje", () => {
     expect(mensajeErrorComprobanteCompra({ message: "x", hint: "constructor" })).toBe("No se pudo guardar el comprobante: x");
     expect(mensajeErrorComprobanteCompra({ code: "toString", message: "x" })).toBe("No se pudo guardar el comprobante: x");
+  });
+
+  it("un deadlock (40P01) o un conflicto de serialización (40001) pide probar de nuevo", () => {
+    const mensaje =
+      "Otra persona estaba guardando un comprobante con los mismos remitos. Probá de nuevo.";
+    expect(mensajeErrorComprobanteCompra({ code: "40P01", message: "deadlock detected" })).toBe(mensaje);
+    expect(mensajeErrorComprobanteCompra({ code: "40001", message: "could not serialize access" })).toBe(mensaje);
   });
 
   it("un error desconocido dice qué se intentaba", () => {
