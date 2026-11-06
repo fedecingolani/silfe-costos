@@ -9,6 +9,10 @@
 --     id: dos guardados a la vez con los mismos remitos en distinto orden
 --     podían trabarse (deadlock, 40P01). El trigger sigue bloqueando (ya
 --     tiene el bloqueo, no espera) y controlando el tope.
+--   - confirmar_comprobante_compra: el precio de una factura con fecha
+--     anterior a la del precio preferido vigente de la materia prima no
+--     pasa a ser el preferido ni desplaza al vigente (el costeo volvía a
+--     un precio viejo); queda como fila histórica.
 --
 -- Todo es create or replace: se puede volver a correr.
 -- =====================================================================
@@ -153,8 +157,152 @@ $$;
 comment on function public.guardar_comprobante_compra(uuid, jsonb, jsonb, jsonb) is
   'Crea o actualiza un comprobante de compra en borrador (con su factura asociada, si es una nota, y el renglón de remito de cada renglón) y reemplaza sus renglones y percepciones; da de alta en el catálogo los artículos nuevos. Bloquea los remitos de los renglones en orden de id. Devuelve el id';
 
+-- ----- Confirmar ---------------------------------------------------------
+
+-- Igual que en 20261105000006; el precio nuevo no pasa a ser el preferido
+-- si el preferido vigente tiene vigente_desde posterior a la fecha de la
+-- factura (una factura del mismo día sí lo reemplaza).
+create or replace function public.confirmar_comprobante_compra(
+  p_id uuid,
+  p_actualizar_precios uuid[] default '{}'
+)
+returns public.comprobante_compra
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+declare
+  v_c public.comprobante_compra;
+  v_descripcion text;
+  v_observaciones text;
+  v_precio record;
+  v_preferido boolean;
+begin
+  select * into v_c
+  from public.comprobante_compra c
+  where c.id = p_id
+  for update;
+  if not found then
+    raise exception 'No se encontró el comprobante de compra.'
+      using errcode = 'CP004', hint = 'comprobante_inexistente';
+  end if;
+  if v_c.estado <> 'borrador' then
+    raise exception 'Sólo se confirma un comprobante en borrador (el comprobante está %).', v_c.estado
+      using errcode = 'CP002', hint = 'transicion_invalida';
+  end if;
+  -- Las notas no cambian precios de costeo: sólo las facturas.
+  if v_c.tipo <> 'factura' and cardinality(coalesce(p_actualizar_precios, '{}')) > 0 then
+    raise exception 'Las notas de crédito y débito no actualizan precios de materias primas.'
+      using errcode = 'CP013', hint = 'nota_sin_precios';
+  end if;
+  if not exists (select 1 from public.comprobante_compra_item i where i.comprobante_compra_id = v_c.id) then
+    raise exception 'El comprobante no tiene renglones.'
+      using errcode = 'CP005', hint = 'comprobante_sin_items';
+  end if;
+
+  select i.descripcion into v_descripcion
+  from public.comprobante_compra_item i
+  join public.proveedor_articulo a on a.id = i.proveedor_articulo_id
+  where i.comprobante_compra_id = v_c.id and a.materia_prima_id is null
+  order by i.orden
+  limit 1;
+  if found then
+    raise exception 'El artículo "%" no tiene materia prima asociada.', v_descripcion
+      using errcode = 'CP007', hint = 'articulo_sin_materia_prima';
+  end if;
+
+  -- El trigger del renglón copia la materia prima vigente del artículo.
+  update public.comprobante_compra_item i
+  set materia_prima_id = a.materia_prima_id
+  from public.proveedor_articulo a
+  where a.id = i.proveedor_articulo_id
+    and i.comprobante_compra_id = v_c.id
+    and i.materia_prima_id is distinct from a.materia_prima_id;
+
+  select * into v_c from public.comprobante_compra c where c.id = p_id;
+  if v_c.total <= 0 then
+    raise exception 'El total del comprobante tiene que ser mayor que cero.'
+      using errcode = 'CP006', hint = 'total_no_positivo';
+  end if;
+
+  -- El trigger sólo deja pasar a confirmado con esta marca de la transacción.
+  perform set_config('compras.confirmando', v_c.id::text, true);
+  update public.comprobante_compra
+  set estado = 'confirmado',
+      confirmado_en = now()
+  where id = v_c.id
+  returning * into v_c;
+  perform set_config('compras.confirmando', '', true);
+
+  -- ----- Precios elegidos ------------------------------------------------
+  p_actualizar_precios := coalesce(p_actualizar_precios, '{}');
+
+  if exists (
+    select 1
+    from unnest(p_actualizar_precios) as e(item_id)
+    where not exists (
+      select 1 from public.precios_comprobante_compra(v_c.id) p
+      where p.comprobante_compra_item_id = e.item_id
+    )
+  ) then
+    raise exception 'Sólo se actualiza el precio de un renglón del comprobante con materia prima.'
+      using errcode = 'CP010', hint = 'renglon_sin_precio';
+  end if;
+
+  select p.materia_prima_nombre into v_descripcion
+  from public.precios_comprobante_compra(v_c.id) p
+  where p.comprobante_compra_item_id = any (p_actualizar_precios)
+  group by p.materia_prima_id, p.materia_prima_nombre
+  having count(*) > 1
+  limit 1;
+  if found then
+    raise exception 'Elegiste dos renglones de "%": el precio se actualiza con uno solo.', v_descripcion
+      using errcode = 'CP011', hint = 'materia_prima_repetida';
+  end if;
+
+  v_observaciones := 'Compra '
+    || case v_c.tipo when 'factura' then 'FC' when 'nota_credito' then 'NC' else 'ND' end
+    || ' ' || v_c.letra || ' '
+    || lpad(v_c.punto_venta::text, 5, '0') || '-' || lpad(v_c.numero::text, 8, '0');
+
+  for v_precio in
+    select p.materia_prima_id, p.precio_factura
+    from public.precios_comprobante_compra(v_c.id) p
+    where p.comprobante_compra_item_id = any (p_actualizar_precios)
+  loop
+    -- Preferido: si era de este proveedor o no había, pasa al precio nuevo.
+    -- Con una factura de fecha anterior a la del preferido vigente, el
+    -- precio nuevo queda como histórico y el preferido no cambia.
+    v_preferido := not exists (
+      select 1 from public.precio_materia_prima pr
+      where pr.materia_prima_id = v_precio.materia_prima_id
+        and pr.es_preferido
+        and (pr.proveedor_id is distinct from v_c.proveedor_id or pr.vigente_desde > v_c.fecha)
+    );
+    if v_preferido then
+      update public.precio_materia_prima
+      set es_preferido = false
+      where materia_prima_id = v_precio.materia_prima_id
+        and es_preferido;
+    end if;
+
+    insert into public.precio_materia_prima
+      (materia_prima_id, proveedor_id, precio, incluye_iva, vigente_desde, es_preferido, observaciones)
+    values
+      (v_precio.materia_prima_id, v_c.proveedor_id, v_precio.precio_factura, false, v_c.fecha, v_preferido, v_observaciones);
+  end loop;
+
+  return v_c;
+end;
+$$;
+
+comment on function public.confirmar_comprobante_compra(uuid, uuid[]) is
+  'Confirma un comprobante de compra en borrador (con renglones, total mayor que cero y artículos con materia prima) y, si es una factura, carga el precio de los renglones elegidos (como preferido salvo que el preferido sea de otro proveedor o de fecha posterior a la factura). Devuelve el comprobante';
+
 -- ----- Permisos -----------------------------------------------------------------
 
 -- create or replace conserva los permisos; se repiten por claridad.
 revoke execute on function public.guardar_comprobante_compra(uuid, jsonb, jsonb, jsonb) from public, anon;
+revoke execute on function public.confirmar_comprobante_compra(uuid, uuid[]) from public, anon;
 grant execute on function public.guardar_comprobante_compra(uuid, jsonb, jsonb, jsonb) to authenticated;
+grant execute on function public.confirmar_comprobante_compra(uuid, uuid[]) to authenticated;

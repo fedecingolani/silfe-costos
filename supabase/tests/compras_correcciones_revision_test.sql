@@ -4,14 +4,17 @@
 --   - guardar_comprobante_compra bloquea los remitos de los renglones en
 --     orden de id antes de insertarlos (sin deadlock con
 --     facturar_remitos_compra), y lo pendiente queda bien aunque los
---     renglones vengan en orden inverso.
+--     renglones vengan en orden inverso;
+--   - confirmar_comprobante_compra no cambia el precio preferido con una
+--     factura de fecha anterior a la del preferido vigente: el precio
+--     nuevo queda como histórico.
 -- Corre con `supabase test db`. Todo se deshace al final.
 -- =====================================================================
 
 begin;
 create extension if not exists pgtap with schema extensions;
 
-select plan(7);
+select plan(13);
 
 -- ---------------------------------------------------------------------
 -- Datos de prueba
@@ -22,6 +25,8 @@ insert into unidad_medida (id, codigo, nombre, magnitud) values
 
 insert into materia_prima (id, codigo, nombre, unidad_compra_id, unidad_uso_id) values
   ('00000000-0000-4000-8000-0000000009b1', 'TEST-CCR-MP-1', 'Soga CCR',
+   '00000000-0000-4000-8000-0000000009a1', '00000000-0000-4000-8000-0000000009a1'),
+  ('00000000-0000-4000-8000-0000000009b2', 'TEST-CCR-MP-2', 'Malla CCR',
    '00000000-0000-4000-8000-0000000009a1', '00000000-0000-4000-8000-0000000009a1');
 
 insert into proveedor (id, nombre) values
@@ -29,7 +34,13 @@ insert into proveedor (id, nombre) values
 
 insert into proveedor_articulo (id, proveedor_id, codigo, descripcion, unidad, factor_conversion, materia_prima_id) values
   ('00000000-0000-4000-8000-0000000009d1', '00000000-0000-4000-8000-0000000009c1',
-   'SG-CCR', 'SOGA CCR', 'm', 1, '00000000-0000-4000-8000-0000000009b1');
+   'SG-CCR', 'SOGA CCR', 'm', 1, '00000000-0000-4000-8000-0000000009b1'),
+  ('00000000-0000-4000-8000-0000000009d2', '00000000-0000-4000-8000-0000000009c1',
+   'ML-CCR', 'MALLA CCR', 'm', 1, '00000000-0000-4000-8000-0000000009b2');
+
+-- La malla tiene como preferido un precio del mismo proveedor vigente desde el 2026-10-20.
+insert into precio_materia_prima (materia_prima_id, proveedor_id, precio, vigente_desde, es_preferido) values
+  ('00000000-0000-4000-8000-0000000009b2', '00000000-0000-4000-8000-0000000009c1', 50, '2026-10-20', true);
 
 select set_config(
   'request.jwt.claims',
@@ -110,6 +121,63 @@ select lives_ok(
 );
 select is(pg_temp.pendiente('alto'), 9.0000, 'Del remito de id mayor quedan 9 pendientes tras reemplazar');
 select is(pg_temp.pendiente('bajo'), 0.0000, 'Del remito de id menor no queda nada pendiente tras reemplazar');
+
+-- ---------------------------------------------------------------------
+-- Precio preferido: una factura con fecha anterior no lo desplaza
+-- ---------------------------------------------------------------------
+
+create function pg_temp.factura_malla(p_numero bigint, p_fecha date, p_precio numeric) returns uuid language sql as $$
+  select guardar_comprobante_compra(null,
+    jsonb_build_object('proveedor_id', '00000000-0000-4000-8000-0000000009c1', 'tipo', 'factura',
+      'letra', 'A', 'punto_venta', 5, 'numero', p_numero, 'fecha', p_fecha),
+    jsonb_build_array(jsonb_build_object('proveedor_articulo_id', '00000000-0000-4000-8000-0000000009d2',
+      'cantidad', 1, 'precio_unitario', p_precio, 'alicuota_iva', 21)),
+    '[]'::jsonb);
+$$;
+
+create function pg_temp.confirmar_con_precios(p_id uuid) returns void language sql as $$
+  select null from confirmar_comprobante_compra(p_id,
+    array(select i.id from comprobante_compra_item i where i.comprobante_compra_id = p_id));
+$$;
+
+create function pg_temp.preferido_malla() returns text language sql as $$
+  select string_agg(precio::text || '|' || vigente_desde, ',')
+  from precio_materia_prima
+  where materia_prima_id = '00000000-0000-4000-8000-0000000009b2' and es_preferido;
+$$;
+
+-- Factura del 2026-10-01, anterior al preferido del 2026-10-20.
+insert into x values ('vieja', pg_temp.factura_malla(501, '2026-10-01', 40));
+select lives_ok(
+  $$ select pg_temp.confirmar_con_precios(pg_temp.id('vieja')) $$,
+  'Se confirma una factura de fecha anterior al preferido actualizando su precio'
+);
+select is(pg_temp.preferido_malla(), '50.0000|2026-10-20',
+  'El preferido sigue siendo el vigente desde el 2026-10-20');
+select is(
+  (select es_preferido::text || '|' || precio from precio_materia_prima
+   where materia_prima_id = '00000000-0000-4000-8000-0000000009b2' and vigente_desde = '2026-10-01'),
+  'false|40.0000',
+  'El precio de la factura vieja queda como histórico, no preferido'
+);
+
+-- Factura de la misma fecha que el preferido: no es anterior, pasa a ser el preferido.
+insert into x values ('mismo_dia', pg_temp.factura_malla(502, '2026-10-20', 55));
+select pg_temp.confirmar_con_precios(pg_temp.id('mismo_dia'));
+select is(pg_temp.preferido_malla(), '55.0000|2026-10-20',
+  'Una factura del mismo día que el preferido lo reemplaza');
+
+-- Factura posterior: pasa a ser el preferido (como antes).
+insert into x values ('nueva', pg_temp.factura_malla(503, '2026-11-02', 60));
+select pg_temp.confirmar_con_precios(pg_temp.id('nueva'));
+select is(pg_temp.preferido_malla(), '60.0000|2026-11-02',
+  'Una factura posterior al preferido pasa a ser el preferido');
+select is(
+  (select count(*)::integer from precio_materia_prima
+   where materia_prima_id = '00000000-0000-4000-8000-0000000009b2'),
+  4,
+  'La malla tiene los cuatro precios (el inicial y los tres de las facturas)'
+);
 
 select * from finish();
 rollback;
