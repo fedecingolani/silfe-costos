@@ -20,7 +20,7 @@ from unnest(array['comprobante_compra', 'comprobante_compra_item', 'comprobante_
 
 select has_function('public', 'guardar_comprobante_compra', array['uuid', 'jsonb', 'jsonb', 'jsonb'],
   'Existe guardar_comprobante_compra');
-select has_function('public', 'confirmar_comprobante_compra', array['uuid'], 'Existe confirmar_comprobante_compra');
+select has_function('public', 'confirmar_comprobante_compra', array['uuid', 'uuid[]'], 'Existe confirmar_comprobante_compra');
 select has_function('public', 'anular_comprobante_compra', array['uuid'], 'Existe anular_comprobante_compra');
 select has_index('public', 'comprobante_compra', 'comprobante_compra_numero_unico',
   'Índice único del número del proveedor');
@@ -50,7 +50,7 @@ select ok(
 )
 from unnest(array[
   'public.guardar_comprobante_compra(uuid, jsonb, jsonb, jsonb)',
-  'public.confirmar_comprobante_compra(uuid)',
+  'public.confirmar_comprobante_compra(uuid, uuid[])',
   'public.anular_comprobante_compra(uuid)'
 ]) as f;
 
