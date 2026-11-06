@@ -32,7 +32,7 @@ const SECCIONES: { titulo: string; items: Item[] }[] = [
       { href: "/proveedores", texto: "Proveedores" },
       { texto: "Cuentas corrientes" },
       { texto: "Órdenes de compra" },
-      { texto: "Remitos" },
+      { href: "/compras/remitos", texto: "Remitos" },
     ],
   },
   {

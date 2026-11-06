@@ -812,7 +812,7 @@ function FacturaAsociada({
 }
 
 /** «código — nombre (unidad de compra)» */
-function nombreMateria(m: MateriaPrimaOfrecida): string {
+export function nombreMateria(m: MateriaPrimaOfrecida): string {
   return `${m.codigo} — ${m.nombre} (${m.unidad_compra})`;
 }
 
@@ -962,8 +962,8 @@ function CeldaArticulo({
   );
 }
 
-/** Buscador de los artículos activos del proveedor por código o descripción (filtra en el navegador). */
-function BuscadorArticulo({
+/** Buscador de los artículos activos del proveedor por código o descripción (filtra en el navegador). También lo usa el editor de remitos de compra. */
+export function BuscadorArticulo({
   articulos,
   texto,
   onTexto,
