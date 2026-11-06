@@ -1,6 +1,6 @@
 # Compras: comprobantes, remitos, pagos y cuentas corrientes de proveedores
 
-Estado: en curso (T1 a T8 terminadas).
+Estado: implementada (T1 a T9 terminadas); falta mergear y desplegar.
 
 ## Objetivo
 
@@ -99,7 +99,7 @@ Migraciones nuevas en `supabase/migrations/`, tests pgTAP en `supabase/tests/`, 
 - [x] **T6 — Remitos de compra: pantallas.** Listado, alta y detalle, y facturar desde remitos. Menú Compras → Remitos.
 - [x] **T7 — Pagos: modelo.** Orden de pago, medios (efectivo, transferencia, cheques de terceros, cheques propios), imputación a comprobantes y saldo a favor. Tests pgTAP.
 - [x] **T8 — Pagos: pantallas.** Listado, alta y detalle. Menú Compras → Pagos.
-- [ ] **T9 — Cuenta corriente de proveedores.** Vista de movimientos y saldo, aplicación de notas de crédito, y pantalla. Menú Compras → Cuentas corrientes.
+- [x] **T9 — Cuenta corriente de proveedores.** Vista de movimientos y saldo, aplicación de notas de crédito, y pantalla. Menú Compras → Cuentas corrientes.
 
 ## Checks
 
@@ -435,8 +435,52 @@ Migraciones nuevas en `supabase/migrations/`, tests pgTAP en `supabase/tests/`, 
   - Los campos banco, número y fecha del cheque propio no tienen etiqueta accesible.
   - No hay PDF de la orden de pago.
 
+- **PR:** #42, con base en la rama de T7.
+
+### T9 — Cuenta corriente de proveedores
+
+- **Ruta:** delegada a un writer. El número del comprobante en el aviso del borrador lo agregué inline.
+- **Rama:** `feat/compras-09-cuenta-corriente`, apilada sobre T8.
+- **Commits:**
+  - `281fde6` vistas y aplicación manual del saldo a favor, con pgTAP
+  - `fe20558` librería y mensajes OP018/OP019
+  - `87747a2` pantallas y menú
+  - `1d6fa75` arreglo del borrador con una imputación oculta
+  - `c0cdc9d` el aviso nombra el comprobante
+- **Migración:** `20261106000004_cuenta_corriente_proveedor.sql`.
+  - Vistas `v_proveedor_cuenta_corriente` (movimientos con saldo acumulado), `v_proveedor_saldo` y `v_proveedor_cuenta_resumen`.
+  - `aplicar_saldo_a_favor_compra(p_comprobante_compra_id)`: aplica los créditos del proveedor a un débito, del más viejo al más nuevo, y devuelve lo aplicado.
+  - Errores nuevos: OP018 (sin saldo a favor) y OP019 (débito sin saldo).
+- **Pantallas:**
+  - `/compras/cuentas-corrientes`: proveedores con lo que les debemos, el saldo a favor y la deuda más vieja.
+  - En la ficha del proveedor, la sección "Cuenta corriente" con pendientes, saldo a favor, movimientos, "Aplicar saldo a favor" y "Pagar".
+  - Menú Compras → Cuentas corrientes.
+- **Decisiones:**
+  - Columnas `debito` y `credito`.
+  - Se aplica débito por débito, empezando por el crédito más viejo.
+  - No hay forma de desaplicar, igual que en ventas: se anula la nota de crédito o la orden de pago.
+- **RED → GREEN:**
+  - pgTAP: 37 tests en rojo y luego en verde.
+  - Vitest: 15 tests de cuenta corriente, 2 de errores y 11 del borrador, en rojo y luego en verde.
+- **Checks:** typecheck y lint OK. Vitest con 1198 tests y pgTAP con 1404, todo en verde.
+- **Navegador:**
+  - En Sogas Andinas se aplicó el saldo a favor a la FC A 00003-00012400. Quedó cancelada, el saldo a favor bajó de $2.420 a $665,50 y el saldo siguió en $11.734,50.
+  - Los errores de hidratación del menú venían de un servidor de desarrollo desactualizado: tras reiniciarlo desaparecieron.
+  - El arreglo del borrador no se probó en el navegador; lo cubre Vitest.
+- **Revisión RDD:** riesgo medio, concedida y aprobada.
+  - El aviso de la carrera con una anulación no aplica: el trigger de `imputacion_compra` vuelve a leer el débito `for update` y rechaza uno anulado.
+  - Aviso pendiente: si la Server Action rechaza (por ejemplo, un error de red), `AplicarSaldoAFavor` no lo atrapa y el error no llega a `ModalError`.
+  - Sugerencia: con más proveedores que el límite del listado, los totales y el orden por antigüedad quedan incompletos.
+- **Revisión de la rama entera:** concedida, y otra vez supera el límite de contexto.
+
 ## Próximo paso
 
-- Subir T8 con su PR.
-- Seguir con T9 (cuenta corriente de proveedores).
-- Arreglar la imputación oculta del borrador al reabrirlo.
+- Subir T9 con su PR.
+- Mergear la cadena #34 → … → T9 en orden, sin `--delete-branch` hasta el final.
+- Aplicar en producción las migraciones `20261105000001` a `20261106000004`, después de correr `supabase migration list --linked`.
+- Pendientes menores:
+  - el try/catch de `AplicarSaldoAFavor`;
+  - las etiquetas accesibles de los campos del cheque propio;
+  - el PDF de la orden de pago;
+  - el resaltado de diferencias grandes de precio;
+  - el ancho de la tabla de renglones.
