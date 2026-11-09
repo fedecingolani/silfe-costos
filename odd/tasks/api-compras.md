@@ -1,6 +1,6 @@
 # API de compras para Factura Digital
 
-Estado: en curso.
+Estado: en producción desde el 2026-11-09 (T1 a T6).
 
 ## Objetivo
 
@@ -90,7 +90,7 @@ Entrega: un PR por tarea, cada uno sobre la rama de la anterior, como en compras
 - [x] T3 Endpoints de proveedores (GET por CUIT, POST). Rama `feat/api-compras-03-proveedores`.
 - [x] T4 Endpoint de comprobantes de compra. Rama `feat/api-compras-04-comprobantes`.
 - [x] T5 Pantalla Configuración → Integraciones (crear, listar y revocar claves). Rama `feat/api-compras-05-pantalla-claves`.
-- [ ] T6 Documentación de la API y deploy (migraciones, secreto, worker).
+- [x] T6 Documentación de la API y deploy (migraciones, secreto, worker).
 
 ## Verificación
 
@@ -150,12 +150,23 @@ Entrega: un PR por tarea, cada uno sobre la rama de la anterior, como en compras
 - T4: riesgo medio, aprobada sin hallazgos.
 - T5: riesgo medio, aprobada sin hallazgos.
 
-## Próximo paso
-
-T6 (documentación de la API y deploy: migraciones, secreto y worker).
 
 ### Prueba extremo a extremo (con Factura Digital)
 
 - Se usó el código real de Factura Digital (`checkSupplier`, `createSupplier`, `deliverExport`) y sus presets contra esta API en `next dev` sobre Supabase local.
 - Pasó: consulta de proveedor (vacío), alta (201) y repetida (409 → existe); factura A con 2 renglones, CAE y percepción `otro` 350 → 201 en borrador, `origen = api`, totales iguales a la factura; repetida → 200 `creado:false`; sin otros impuestos → sin percepciones; factura B → 201; CUIT desconocido → 422 `PROVEEDOR_NO_EXISTE` con el mensaje visible en Factura Digital y sin reintentos.
 - Falló y se corrigió en Factura Digital (commit `a8210ff`): mandaba `condicion_iva` como `RI`/`CF`. Ahora manda los nombres completos.
+
+### T6: deploy
+
+- PRs mergeados a main: #45 a #49 (Charoli) y #1 a #3 en `fedecingolani/factura_digital`.
+- Secreto `SUPABASE_SERVICE_ROLE_KEY` cargado en el Worker `silfe-costos` con `wrangler secret put` (leído del CLI de Supabase, sin pasar por pantalla).
+- `supabase db push --linked`: aplicó `20261106000005`, `...06` y `...07` sin errores (no había CUIT duplicados).
+- `npm run deploy`: versión `c1537be6-d826-470c-9ed4-f94f8c0b3f59`.
+- Prueba en producción: `/api/v1/proveedores` sin clave → 401 y con clave inválida → 401 (la consulta a la base con service role funciona); `/configuracion/integraciones` sin sesión → 307 a `/login`.
+- El contrato y los endpoints quedan documentados en este archivo y en la pantalla Configuración → Integraciones.
+
+## Próximo paso
+
+- Deployar Factura Digital (`firebase deploy`) y configurar la integración: URL `https://silfe-costos.fedechingo.workers.dev/api/v1` y una clave creada en Configuración → Integraciones.
+- Más adelante: desglose de percepciones y envío del PDF original.
