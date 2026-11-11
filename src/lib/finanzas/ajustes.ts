@@ -36,13 +36,15 @@ function limpiar(valor: string | null | undefined): string | null {
 
 /**
  * Importe escrito a mano: acepta "$", coma o punto decimal y puntos de
- * miles ("1.500,25"). Con coma, los puntos son de miles; sin coma, el punto
- * es el decimal. null si no es un número.
+ * miles ("1.500,25"). Con coma, los puntos son de miles. Sin coma, los
+ * puntos en grupos de tres dígitos son de miles ("150.000") y si no, el
+ * punto es el decimal ("1500.5"). null si no es un número.
  */
 export function parsearImporte(valor: string | null | undefined): number | null {
   let texto = (valor ?? "").replace(/[$\s]/g, "");
   if (texto === "") return null;
   if (texto.includes(",")) texto = texto.replace(/\./g, "").replace(",", ".");
+  else if (/^-?\d{1,3}(\.\d{3})+$/.test(texto)) texto = texto.replace(/\./g, "");
   const n = Number(texto);
   return Number.isFinite(n) ? n : null;
 }

@@ -17,6 +17,13 @@ describe("parsearImporte", () => {
     expect(parsearImporte("$ 10")).toBe(10);
   });
 
+  it("sin coma, los puntos en grupos de tres son de miles", () => {
+    expect(parsearImporte("150.000")).toBe(150000);
+    expect(parsearImporte("1.500")).toBe(1500);
+    expect(parsearImporte("1.234.567")).toBe(1234567);
+    expect(parsearImporte("1500.5")).toBe(1500.5);
+  });
+
   it("devuelve null si no es un número", () => {
     expect(parsearImporte("")).toBeNull();
     expect(parsearImporte("abc")).toBeNull();
@@ -35,7 +42,7 @@ describe("validarAjuste", () => {
     expect(validarAjuste({ ...AJUSTE, importe: "0" })).toEqual(mensaje);
     expect(validarAjuste({ ...AJUSTE, importe: "-5" })).toEqual(mensaje);
     expect(validarAjuste({ ...AJUSTE, importe: "" })).toEqual(mensaje);
-    expect(validarAjuste({ ...AJUSTE, importe: "10.005" })).toEqual({
+    expect(validarAjuste({ ...AJUSTE, importe: "10,005" })).toEqual({
       error: "El importe admite hasta 2 decimales.",
     });
     expect(validarAjuste({ ...AJUSTE, importe: "1000000000000" })).toEqual({
