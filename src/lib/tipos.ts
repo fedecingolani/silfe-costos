@@ -1254,3 +1254,69 @@ export type ApiClaveVisible = {
   revocada_en: string | null;
   ultimo_uso_en: string | null;
 };
+
+// ----- Finanzas: bancos y caja ---------------------------------------------
+
+export const TIPOS_CUENTA_FONDOS = ["banco", "caja"] as const;
+
+export type TipoCuentaFondos = (typeof TIPOS_CUENTA_FONDOS)[number];
+
+/** Fila de cuenta_fondos. Los datos bancarios son siempre null en una caja. */
+export type CuentaFondos = {
+  id: string;
+  tipo: TipoCuentaFondos;
+  nombre: string;
+  banco: string | null;
+  numero_cuenta: string | null;
+  /** 22 dígitos. */
+  cbu: string | null;
+  alias: string | null;
+  activa: boolean;
+  observacion: string | null;
+  creado_en: string;
+  actualizado_en: string;
+};
+
+/** Fila de v_cuenta_fondos_saldo. Saldo actual: movimientos hasta hoy. */
+export type SaldoCuentaFondos = {
+  cuenta_id: string;
+  saldo_actual: number;
+  /** Suma de los movimientos con fecha posterior a hoy. */
+  movimientos_futuros: number;
+  ultimo_movimiento: string | null;
+};
+
+export type TipoAjusteFondos = "ingreso" | "egreso";
+
+/** Fila de ajuste_fondos: no se edita ni se borra, se anula con motivo. */
+export type AjusteFondos = {
+  id: string;
+  cuenta_id: string;
+  fecha: string;
+  tipo: TipoAjusteFondos;
+  importe: number;
+  concepto: string;
+  observacion: string | null;
+  estado: "vigente" | "anulado";
+  anulado_en: string | null;
+  motivo_anulacion: string | null;
+  creado_en: string;
+};
+
+/** Origen de un movimiento de fondos (por ahora, sólo ajustes manuales). */
+export type OrigenMovimientoFondos = "ajuste";
+
+/** Fila de v_movimiento_fondos. importe: positivo = ingreso. */
+export type MovimientoFondos = {
+  cuenta_id: string;
+  fecha: string;
+  origen: OrigenMovimientoFondos;
+  origen_id: string;
+  descripcion: string;
+  observacion: string | null;
+  ingreso: number;
+  egreso: number;
+  importe: number;
+  saldo: number;
+  creado_en: string;
+};
