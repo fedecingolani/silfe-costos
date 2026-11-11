@@ -36,7 +36,7 @@ export async function PaginaCuentas({ tipo }: { tipo: TipoCuentaFondos }) {
       />
 
       <Tarjeta
-        titulo={`${cuentas.length} ${tipo === "banco" ? "cuentas" : "cajas"}`}
+        titulo={`${cuentas.length} ${tipo === "banco" ? (cuentas.length === 1 ? "cuenta" : "cuentas") : cuentas.length === 1 ? "caja" : "cajas"}`}
         descripcion={`Saldo actual de las activas: ${pesos(total)}. El saldo cuenta los movimientos hasta hoy.`}
       >
         <div className="overflow-x-auto">

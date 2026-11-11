@@ -65,7 +65,7 @@ export function AnularAjuste({
         }}
         className="m-auto rounded-xl border border-stone-200 p-0 shadow-xl backdrop:bg-stone-900/40"
       >
-        <form onSubmit={onSubmit} noValidate className="w-[min(32rem,90vw)] space-y-3 p-5 text-left">
+        <form onSubmit={onSubmit} noValidate className="w-[min(32rem,90vw)] space-y-3 whitespace-normal p-5 text-left">
           <h2 className="text-sm font-semibold text-stone-900">Anular el ajuste «{descripcion}»</h2>
           <p className="text-sm text-stone-600">
             Deja de contar en el saldo de la cuenta. Queda registrado con el motivo y no se puede deshacer.

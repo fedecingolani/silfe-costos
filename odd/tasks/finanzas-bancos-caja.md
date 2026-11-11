@@ -56,4 +56,4 @@ Entrega: un PR por tarea, cada uno sobre la rama de la anterior, como en compras
 - Más grande que la heurística de 400 líneas (unas 1800 con tests y pantallas): es el esquema base más dos pantallas completas; partirlo no hacía más fácil la revisión.
 - Checks: `npm run typecheck` ok; `npm run lint` ok; `npm test` 1267 pasan (RED observado: los 3 archivos de test fallaban sin los módulos); `supabase migration up --local` ok; `supabase test db` 1442 pasan (38 nuevos).
 - Revisión nativa: riesgo medio, el usuario eligió saltearla para este cambio (declined).
-- Pendiente: probar las pantallas en la app local (hace falta iniciar sesión).
+- Probado en la app local con el usuario del seed: alta de cuenta bancaria (rechaza CBU de 5 dígitos), alta de caja (sin campos bancarios), ajuste de ingreso y de egreso con saldo acumulado, anulación (exige motivo y saca el ajuste del saldo), `/caja/<id de banco>` da 404. Corregido en la prueba: el diálogo de anular heredaba `whitespace-nowrap` de la celda y se cortaba en pantallas angostas; "1 cuentas" pasó a singular.
