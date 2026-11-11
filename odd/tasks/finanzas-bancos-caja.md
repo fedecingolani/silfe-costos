@@ -55,4 +55,5 @@ Entrega: un PR por tarea, cada uno sobre la rama de la anterior, como en compras
 - Código compartido en `src/app/(app)/finanzas/` (sin `page.tsx`); `bancos/` y `caja/` son envoltorios que pasan el tipo.
 - Más grande que la heurística de 400 líneas (unas 1800 con tests y pantallas): es el esquema base más dos pantallas completas; partirlo no hacía más fácil la revisión.
 - Checks: `npm run typecheck` ok; `npm run lint` ok; `npm test` 1267 pasan (RED observado: los 3 archivos de test fallaban sin los módulos); `supabase migration up --local` ok; `supabase test db` 1442 pasan (38 nuevos).
+- Revisión nativa: riesgo medio, el usuario eligió saltearla para este cambio (declined).
 - Pendiente: probar las pantallas en la app local (hace falta iniciar sesión).
