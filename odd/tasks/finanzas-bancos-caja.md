@@ -32,7 +32,7 @@ No existe ninguna cuenta de fondos. El banco es texto libre en `cheque.banco`, `
 
 Entrega: un PR por tarea, cada uno sobre la rama de la anterior, como en compras y en la API de compras.
 
-- [ ] T1 Cuentas y ajustes manuales: esquema + RLS, vista de movimientos y saldos (sólo ajustes por ahora), pantallas Bancos y Caja (lista con saldo, alta/edición de cuenta, detalle con movimientos, ajuste y anulación). Rama `feat/finanzas-01-cuentas`.
+- [x] T1 Cuentas y ajustes manuales: esquema + RLS, vista de movimientos y saldos (sólo ajustes por ahora), pantallas Bancos y Caja (lista con saldo, alta/edición de cuenta, detalle con movimientos, ajuste y anulación). Rama `feat/finanzas-01-cuentas`.
 - [ ] T2 Recibos: `recibo_medio.cuenta_id`, selector en el editor, obligatorio al emitir, movimientos en la vista. Rama `feat/finanzas-02-recibos`.
 - [ ] T3 Órdenes de pago: `orden_pago_medio.cuenta_id`, selector en el editor, obligatorio al confirmar, cheque propio por fecha de pago. Rama `feat/finanzas-03-pagos`.
 - [ ] T4 Cheques: cuenta destino al depositar, débito al rechazar un depositado. Rama `feat/finanzas-04-cheques`.
@@ -47,4 +47,12 @@ Entrega: un PR por tarea, cada uno sobre la rama de la anterior, como en compras
 
 ## Progreso
 
-Nada todavía.
+### T1 Cuentas y ajustes manuales — hecho
+
+- Commit `8dac711` en `feat/finanzas-01-cuentas`. Ruta: delegada (un writer; migraciones, tests y varias pantallas).
+- Migraciones `20261111000001_finanzas_cuentas.sql` y `20261111000002_rls_finanzas_cuentas.sql`. Códigos FN001 a FN006 (ajuste inmutable, nace anulado, no se borra, cuenta inactiva, motivo requerido, tipo de cuenta inmutable).
+- El tipo de cuenta no se cambia. Anular es un update de `estado` y motivo; el trigger completa `anulado_en`. "Hoy" es la fecha de Argentina, como en el resto de las vistas.
+- Código compartido en `src/app/(app)/finanzas/` (sin `page.tsx`); `bancos/` y `caja/` son envoltorios que pasan el tipo.
+- Más grande que la heurística de 400 líneas (unas 1800 con tests y pantallas): es el esquema base más dos pantallas completas; partirlo no hacía más fácil la revisión.
+- Checks: `npm run typecheck` ok; `npm run lint` ok; `npm test` 1267 pasan (RED observado: los 3 archivos de test fallaban sin los módulos); `supabase migration up --local` ok; `supabase test db` 1442 pasan (38 nuevos).
+- Pendiente: probar las pantallas en la app local (hace falta iniciar sesión).
