@@ -129,3 +129,4 @@ La revisión de toda la feature junta excedió el límite de contexto del reviso
 - Tres tests existentes ahora cargan un saldo inicial en su caja de prueba.
 - Checks: `npm run typecheck` ok; `npm run lint` ok; `npm test` 1314 pasan (RED observado); `supabase migration up --local` ok; `supabase test db` 1601 pasan (30 nuevos, RED observado).
 - Probado en la app local: egreso en la caja negativa rechazado con el mensaje; ingreso aceptado (la caja pasó a $ 8.500); transferencia de $ 9.000 desde la caja rechazada.
+- Revisión RDD aprobada. WARNING: la concurrencia (dos escrituras a la vez sobre la misma caja) no tiene test automático; el diseño con advisory lock se razonó pero no se probó en paralelo. Sugerencias: el formato del monto en el mensaje para importes enormes, y el orden de bloqueo entre sentencias de una misma transacción.
