@@ -17,6 +17,11 @@ insert into proveedor (id, nombre, cuit) values
   ('00000000-0000-4000-8000-0000000009c2', 'Proveedor cuenta 2', null),
   ('00000000-0000-4000-8000-0000000009c3', 'Proveedor cuenta 3 sin movimientos', null);
 
+-- Caja de la que sale el efectivo de las órdenes (nombre único: la base
+-- local puede tener cuentas cargadas a mano).
+insert into cuenta_fondos (id, tipo, nombre)
+values ('00000000-0000-4000-8000-0000000009f1', 'caja', 'Caja cuenta corriente ' || gen_random_uuid());
+
 select set_config(
   'request.jwt.claims',
   '{"sub": "11111111-1111-1111-1111-111111111111", "role": "authenticated"}',
@@ -67,7 +72,8 @@ declare
 begin
   v_id := guardar_orden_pago(null,
     jsonb_build_object('proveedor_id', '00000000-0000-4000-8000-0000000009c1', 'fecha', p_fecha),
-    jsonb_build_array(jsonb_build_object('tipo', 'efectivo', 'importe', p_efectivo)),
+    jsonb_build_array(jsonb_build_object('tipo', 'efectivo', 'importe', p_efectivo,
+      'cuenta_id', '00000000-0000-4000-8000-0000000009f1')),
     jsonb_build_array(jsonb_build_object('comprobante_compra_id', pg_temp.id(p_factura), 'importe', p_importe)));
   if p_confirmar then
     perform confirmar_orden_pago(v_id);

@@ -269,11 +269,13 @@ export type OrdenPagoMedio = {
   orden: number;
   tipo: TipoMedioPagoCompra;
   importe: number;
+  /** Efectivo: la caja; transferencia y cheque propio: la cuenta bancaria. Null en cheques de terceros y órdenes históricas. */
+  cuenta_id: string | null;
   /** Transferencia: referencia de la operación. */
   referencia: string | null;
   /** Cheque de terceros de la cartera. */
   cheque_id: string | null;
-  /** Cheque propio: banco, número y fecha de pago. */
+  /** Cheque propio: banco (desde Finanzas, el de la cuenta), número y fecha de pago. */
   banco: string | null;
   numero: string | null;
   fecha_pago: string | null;
@@ -325,13 +327,24 @@ export type ProveedorSaldoAFavor = {
   disponible: number;
 };
 
-/** Medio de pago para guardar_orden_pago (p_medios). */
+/**
+ * Medio de pago para guardar_orden_pago (p_medios). cuenta_id: la caja o la
+ * cuenta bancaria (obligatoria al confirmar, no en el borrador). En el cheque
+ * propio con cuenta, la base pone como banco el de la cuenta.
+ */
 export type MedioOrdenPagoGuardar =
-  | { tipo: "efectivo"; importe: number }
-  | { tipo: "transferencia"; importe: number; referencia?: string | null }
+  | { tipo: "efectivo"; importe: number; cuenta_id: string | null }
+  | { tipo: "transferencia"; importe: number; cuenta_id: string | null; referencia?: string | null }
   /** El importe lo pone la base: el del cheque. */
   | { tipo: "cheque_tercero"; cheque_id: string; importe?: number }
-  | { tipo: "cheque_propio"; importe: number; banco: string; numero: string; fecha_pago: string };
+  | {
+      tipo: "cheque_propio";
+      importe: number;
+      cuenta_id: string | null;
+      banco: string | null;
+      numero: string;
+      fecha_pago: string;
+    };
 
 /** Imputación para guardar_orden_pago (p_imputaciones). Los importes en cero se ignoran. */
 export type ImputacionOrdenPagoGuardar = { comprobante_compra_id: string; importe: number };
@@ -1305,8 +1318,12 @@ export type AjusteFondos = {
   creado_en: string;
 };
 
-/** Origen de un movimiento de fondos. recibo: origen_id es el id del recibo. */
-export type OrigenMovimientoFondos = "ajuste" | "recibo";
+/**
+ * Origen de un movimiento de fondos. recibo: origen_id es el id del recibo;
+ * orden_pago: el de la orden (puede dar más de un movimiento por cuenta, uno
+ * por fecha: los cheques propios salen en su fecha de pago).
+ */
+export type OrigenMovimientoFondos = "ajuste" | "recibo" | "orden_pago";
 
 /** Fila de v_movimiento_fondos. importe: positivo = ingreso. */
 export type MovimientoFondos = {

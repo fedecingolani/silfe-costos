@@ -6,6 +6,7 @@
  */
 import { esFechaValida } from "@/lib/comprobantes/validacion";
 import { aCentavos, sumarPesos, textoPesos } from "@/lib/cobranzas/dinero";
+import { tipoCuentaDelMedio } from "@/lib/finanzas/medios";
 import type { EstadoCheque, MedioOrdenPagoGuardar, TipoMedioPagoCompra } from "@/lib/tipos";
 
 /** Cheque de terceros que se ofrece o que ya eligió un borrador. fechaPago yyyy-mm-dd. */
@@ -25,11 +26,16 @@ export type ChequeCartera = {
 export type MedioBorrador = {
   tipo: TipoMedioPagoCompra;
   importe: number;
+  /**
+   * Efectivo: la caja; transferencia y cheque propio: la cuenta bancaria.
+   * Obligatoria al confirmar, no en el borrador.
+   */
+  cuentaId: string | null;
   /** Transferencia. */
   referencia: string | null;
   /** Cheque de terceros. */
   chequeId: string | null;
-  /** Cheque propio. */
+  /** Cheque propio. banco: el texto de los borradores anteriores a las cuentas (la base pone el de la cuenta). */
   banco: string | null;
   numero: string | null;
   fechaPago: string | null;
@@ -77,12 +83,25 @@ export function validarMedios(medios: readonly MedioBorrador[], cheques: Cheques
     }
     if (
       medio.tipo === "cheque_propio" &&
-      (!texto(medio.banco) || !texto(medio.numero) || !esFechaValida(medio.fechaPago))
+      ((!medio.cuentaId && !texto(medio.banco)) || !texto(medio.numero) || !esFechaValida(medio.fechaPago))
     ) {
-      errores.add("Cada cheque propio lleva banco, número y fecha de pago.");
+      errores.add("Cada cheque propio lleva cuenta bancaria, número y fecha de pago.");
     }
   }
   return [...errores];
+}
+
+/**
+ * Lo que falta para confirmar (además de validarMedios): la caja del
+ * efectivo y la cuenta bancaria de la transferencia y el cheque propio. La
+ * base lo vuelve a exigir (FN007).
+ */
+export function erroresConfirmacion(medios: readonly Pick<MedioBorrador, "tipo" | "cuentaId">[]): string[] {
+  return medios.flatMap((medio, indice) => {
+    const tipoCuenta = tipoCuentaDelMedio(medio.tipo);
+    if (!tipoCuenta || medio.cuentaId) return [];
+    return [`Medio ${indice + 1}: elegí ${tipoCuenta === "caja" ? "la caja" : "la cuenta bancaria"}.`];
+  });
 }
 
 /** Cheques que puede elegir un medio: los de la cartera menos los elegidos en otros medios. */
@@ -116,20 +135,26 @@ export function textoCheque(cheque: ChequeCartera): string {
   return `${cheque.banco} N° ${cheque.numero} · pago ${dia}/${mes}/${anio} · ${textoPesos(cheque.importe)}`;
 }
 
-/** Medio en la forma de p_medios de guardar_orden_pago. */
+/** Medio en la forma de p_medios de guardar_orden_pago (la cuenta, sólo donde corresponde). */
 export function medioParaGuardar(medio: MedioBorrador): MedioOrdenPagoGuardar {
   switch (medio.tipo) {
     case "efectivo":
-      return { tipo: "efectivo", importe: medio.importe };
+      return { tipo: "efectivo", importe: medio.importe, cuenta_id: medio.cuentaId };
     case "transferencia":
-      return { tipo: "transferencia", importe: medio.importe, referencia: texto(medio.referencia) };
+      return {
+        tipo: "transferencia",
+        importe: medio.importe,
+        cuenta_id: medio.cuentaId,
+        referencia: texto(medio.referencia),
+      };
     case "cheque_tercero":
       return { tipo: "cheque_tercero", cheque_id: medio.chequeId ?? "" };
     case "cheque_propio":
       return {
         tipo: "cheque_propio",
         importe: medio.importe,
-        banco: texto(medio.banco) ?? "",
+        cuenta_id: medio.cuentaId,
+        banco: texto(medio.banco),
         numero: texto(medio.numero) ?? "",
         fecha_pago: medio.fechaPago ?? "",
       };

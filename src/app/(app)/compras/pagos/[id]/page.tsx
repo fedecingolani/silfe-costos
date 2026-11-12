@@ -13,6 +13,7 @@ import { NOMBRES_ESTADO_CHEQUE, NOMBRES_MEDIO_PAGO_COMPRA } from "@/lib/tipos";
 import {
   cargarCartera,
   cargarCuentaProveedor,
+  cargarCuentasPago,
   cargarOrdenPago,
   cargarProveedores,
   medioEditable,
@@ -36,7 +37,7 @@ function Dato({ etiqueta, children }: { etiqueta: string; children: ReactNode })
   );
 }
 
-/** Detalle de un medio: referencia de la transferencia o datos del cheque. */
+/** Detalle de un medio: caja o cuenta bancaria, referencia de la transferencia o datos del cheque. */
 function DetalleMedio({ medio }: { medio: MedioLeido }) {
   if (medio.tipo === "cheque_tercero" && medio.cheque) {
     const ch = medio.cheque;
@@ -51,15 +52,17 @@ function DetalleMedio({ medio }: { medio: MedioLeido }) {
       </span>
     );
   }
+  const cuenta = medio.cuenta?.nombre;
   if (medio.tipo === "cheque_propio") {
     return (
       <span>
+        {cuenta && `${cuenta} · `}
         {medio.banco} N° {medio.numero} · pago {fecha(medio.fecha_pago)}
       </span>
     );
   }
-  if (medio.tipo === "transferencia") return <span>{medio.referencia || "—"}</span>;
-  return <span>—</span>;
+  if (medio.tipo === "transferencia") return <span>{[cuenta, medio.referencia].filter(Boolean).join(" · ") || "—"}</span>;
+  return <span>{cuenta ?? "—"}</span>;
 }
 
 export default async function OrdenPagoPage({
@@ -87,12 +90,14 @@ export default async function OrdenPagoPage({
 
   if (orden.estado === "borrador") {
     const elegidos = medios.flatMap((m) => (m.cheque_id ? [m.cheque_id] : []));
-    const [proveedores, cartera, cuenta] = await Promise.all([
+    const [proveedores, cartera, cuenta, cuentas] = await Promise.all([
       cargarProveedores(supabase),
       cargarCartera(supabase, elegidos),
       cargarCuentaProveedor(supabase, orden.proveedor_id),
+      cargarCuentasPago(supabase),
     ]);
     if (typeof proveedores === "string") return <p className="text-sm text-red-700">{proveedores}</p>;
+    if (typeof cuentas === "string") return <p className="text-sm text-red-700">{cuentas}</p>;
     if (typeof cartera === "string") return <p className="text-sm text-red-700">{cartera}</p>;
     if (typeof cuenta === "string") return <p className="text-sm text-red-700">{cuenta}</p>;
 
@@ -115,6 +120,7 @@ export default async function OrdenPagoPage({
           }}
           proveedores={proveedores}
           cartera={cartera}
+          cuentas={cuentas}
           cuentaInicial={cuenta}
           hoy={hoyArgentina()}
           aviso={aviso}

@@ -77,6 +77,13 @@ insert into cliente (id, razon_social, condicion_iva) values
 
 insert into punto_venta (numero, nombre, electronico) values (9707, 'Electrónico pagos', true);
 
+-- Caja y banco de los que salen el efectivo, la transferencia y el cheque
+-- propio (nombres únicos: la base local puede tener cuentas cargadas a mano).
+insert into cuenta_fondos (id, tipo, nombre, banco) values
+  ('00000000-0000-4000-8000-0000000007f1', 'banco', 'Banco pagos ' || gen_random_uuid(), 'Galicia');
+insert into cuenta_fondos (id, tipo, nombre) values
+  ('00000000-0000-4000-8000-0000000007f2', 'caja', 'Caja pagos ' || gen_random_uuid());
+
 select set_config(
   'request.jwt.claims',
   '{"sub": "11111111-1111-1111-1111-111111111111", "role": "authenticated"}',
@@ -127,7 +134,10 @@ $$;
 create function pg_temp.efectivo(p_importe numeric)
 returns jsonb
 language sql
-as $$ select jsonb_build_array(jsonb_build_object('tipo', 'efectivo', 'importe', p_importe)); $$;
+as $$
+  select jsonb_build_array(jsonb_build_object('tipo', 'efectivo', 'importe', p_importe,
+    'cuenta_id', '00000000-0000-4000-8000-0000000007f2'));
+$$;
 
 create function pg_temp.cheque_tercero(p_nombre text)
 returns jsonb
@@ -193,11 +203,12 @@ insert into op values ('OP1', guardar_orden_pago(
   null,
   pg_temp.orden(),
   jsonb_build_array(
-    jsonb_build_object('tipo', 'efectivo', 'importe', 500),
-    jsonb_build_object('tipo', 'transferencia', 'importe', 1000, 'referencia', 'TRF-1'),
+    jsonb_build_object('tipo', 'efectivo', 'importe', 500, 'cuenta_id', '00000000-0000-4000-8000-0000000007f2'),
+    jsonb_build_object('tipo', 'transferencia', 'importe', 1000, 'referencia', 'TRF-1',
+      'cuenta_id', '00000000-0000-4000-8000-0000000007f1'),
     jsonb_build_object('tipo', 'cheque_tercero', 'cheque_id', pg_temp.id('CH1'), 'importe', 1),
     jsonb_build_object('tipo', 'cheque_propio', 'importe', 700,
-      'banco', 'Galicia', 'numero', '123', 'fecha_pago', '2026-12-15')
+      'banco', 'Galicia', 'numero', '123', 'fecha_pago', '2026-12-15', 'cuenta_id', '00000000-0000-4000-8000-0000000007f1')
   ),
   pg_temp.imputar('F1', 1000) || pg_temp.imputar('F2', 1500) || pg_temp.imputar('ND1', 0)
 ));

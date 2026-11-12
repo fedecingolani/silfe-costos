@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buscarCheques,
   chequesElegibles,
+  erroresConfirmacion,
   importeMedio,
   medioParaGuardar,
   textoCheque,
@@ -26,6 +27,7 @@ const cheque = (id: string, cambios: Partial<ChequeCartera> = {}): ChequeCartera
 const medio = (cambios: Partial<MedioBorrador>): MedioBorrador => ({
   tipo: "efectivo",
   importe: 0,
+  cuentaId: null,
   referencia: null,
   chequeId: null,
   banco: null,
@@ -104,14 +106,48 @@ describe("validarMedios", () => {
     ).toEqual(["Cada cheque de terceros se entrega una sola vez."]);
   });
 
-  it("cheque propio sin banco, número o fecha de pago válida", () => {
-    const error = "Cada cheque propio lleva banco, número y fecha de pago.";
+  it("cheque propio sin cuenta bancaria (ni banco de un borrador viejo), número o fecha de pago válida", () => {
+    const error = "Cada cheque propio lleva cuenta bancaria, número y fecha de pago.";
     expect(validarMedios([medio({ tipo: "cheque_propio", importe: 5, numero: "1", fechaPago: "2026-12-01" })], cartera)).toEqual([
       error,
     ]);
     expect(
       validarMedios([medio({ tipo: "cheque_propio", importe: 5, banco: "Macro", numero: "1", fechaPago: "2026-13-01" })], cartera),
     ).toEqual([error]);
+  });
+
+  it("con la cuenta bancaria elegida, el cheque propio no necesita el texto del banco", () => {
+    expect(
+      validarMedios([medio({ tipo: "cheque_propio", importe: 5, cuentaId: "b1", numero: "1", fechaPago: "2026-12-01" })], cartera),
+    ).toEqual([]);
+  });
+});
+
+describe("erroresConfirmacion", () => {
+  it("pide la caja del efectivo y la cuenta bancaria de la transferencia y el cheque propio", () => {
+    expect(
+      erroresConfirmacion([
+        medio({ importe: 1 }),
+        medio({ tipo: "transferencia", importe: 1 }),
+        medio({ tipo: "cheque_tercero", chequeId: "1" }),
+        medio({ tipo: "cheque_propio", importe: 1, banco: "Macro" }),
+      ]),
+    ).toEqual(["Medio 1: elegí la caja.", "Medio 2: elegí la cuenta bancaria.", "Medio 4: elegí la cuenta bancaria."]);
+  });
+
+  it("con las cuentas elegidas no hay errores (el cheque de terceros no lleva cuenta)", () => {
+    expect(
+      erroresConfirmacion([
+        medio({ importe: 1, cuentaId: "c1" }),
+        medio({ tipo: "transferencia", importe: 1, cuentaId: "b1" }),
+        medio({ tipo: "cheque_tercero", chequeId: "1" }),
+        medio({ tipo: "cheque_propio", importe: 1, cuentaId: "b1" }),
+      ]),
+    ).toEqual([]);
+  });
+
+  it("un borrador se guarda sin cuenta: validarMedios no la pide", () => {
+    expect(validarMedios([medio({ importe: 1 })], cartera)).toEqual([]);
   });
 });
 
@@ -137,23 +173,27 @@ describe("chequesElegibles y buscarCheques", () => {
 
 describe("medioParaGuardar", () => {
   it("arma cada forma de p_medios de guardar_orden_pago", () => {
-    expect(medioParaGuardar(medio({ importe: 10 }))).toEqual({ tipo: "efectivo", importe: 10 });
-    expect(medioParaGuardar(medio({ tipo: "transferencia", importe: 20, referencia: " op 1 " }))).toEqual({
+    expect(medioParaGuardar(medio({ importe: 10, cuentaId: "c1" }))).toEqual({ tipo: "efectivo", importe: 10, cuenta_id: "c1" });
+    expect(medioParaGuardar(medio({ tipo: "transferencia", importe: 20, referencia: " op 1 ", cuentaId: "b1" }))).toEqual({
       tipo: "transferencia",
       importe: 20,
+      cuenta_id: "b1",
       referencia: "op 1",
     });
     expect(medioParaGuardar(medio({ tipo: "transferencia", importe: 20, referencia: "  " }))).toEqual({
       tipo: "transferencia",
       importe: 20,
+      cuenta_id: null,
       referencia: null,
     });
-    expect(medioParaGuardar(medio({ tipo: "cheque_tercero", chequeId: "1", importe: 99 }))).toEqual({
+    expect(medioParaGuardar(medio({ tipo: "cheque_tercero", chequeId: "1", importe: 99, cuentaId: "b1" }))).toEqual({
       tipo: "cheque_tercero",
       cheque_id: "1",
     });
     expect(
-      medioParaGuardar(medio({ tipo: "cheque_propio", importe: 50, banco: " Macro ", numero: "77", fechaPago: "2026-12-10" })),
-    ).toEqual({ tipo: "cheque_propio", importe: 50, banco: "Macro", numero: "77", fecha_pago: "2026-12-10" });
+      medioParaGuardar(
+        medio({ tipo: "cheque_propio", importe: 50, cuentaId: "b1", banco: " Macro ", numero: "77", fechaPago: "2026-12-10" }),
+      ),
+    ).toEqual({ tipo: "cheque_propio", importe: 50, cuenta_id: "b1", banco: "Macro", numero: "77", fecha_pago: "2026-12-10" });
   });
 });

@@ -19,6 +19,7 @@ import {
 import {
   buscarCheques,
   chequesElegibles,
+  erroresConfirmacion,
   importeMedio,
   textoCheque,
   totalMedios,
@@ -27,9 +28,11 @@ import {
   type MedioBorrador,
 } from "@/lib/compras/pagos/medios";
 import type { OrdenEnviada } from "@/lib/compras/pagos/guardado";
+import { cuentaPorDefecto, cuentasDelMedio, tipoCuentaDelMedio, type CuentaElegible } from "@/lib/finanzas/medios";
 import { NOMBRES_MEDIO_PAGO_COMPRA, TIPOS_MEDIO_PAGO_COMPRA, type TipoMedioPagoCompra } from "@/lib/tipos";
 import { borrarOrdenPago, confirmarOrdenPago, cuentaDelProveedor, guardarOrdenPago } from "./acciones";
 import type { CuentaProveedor, ProveedorOfrecido } from "./datos";
+import { SelectorCuenta } from "../../finanzas/SelectorCuenta";
 
 /** Orden de pago en borrador ya guardada. */
 export type OrdenEditable = {
@@ -45,10 +48,13 @@ type FilaMedio = {
   clave: number;
   tipo: TipoMedioPagoCompra;
   importe: string;
+  /** Caja o cuenta bancaria ("" sin elegir). */
+  cuentaId: string;
   referencia: string;
   chequeId: string;
   /** Búsqueda en la cartera (sólo pantalla). */
   busqueda: string;
+  /** Banco del cheque propio de los borradores anteriores a las cuentas: se conserva, ya no se edita. */
   banco: string;
   numero: string;
   fechaPago: string;
@@ -57,12 +63,34 @@ type FilaMedio = {
 let siguienteClave = 1;
 
 function filaVacia(tipo: TipoMedioPagoCompra = "efectivo", importe = ""): FilaMedio {
-  return { clave: siguienteClave++, tipo, importe, referencia: "", chequeId: "", busqueda: "", banco: "", numero: "", fechaPago: "" };
+  return {
+    clave: siguienteClave++,
+    tipo,
+    importe,
+    cuentaId: "",
+    referencia: "",
+    chequeId: "",
+    busqueda: "",
+    banco: "",
+    numero: "",
+    fechaPago: "",
+  };
 }
 
-function filaDeMedio(m: MedioBorrador): FilaMedio {
+/** La cuenta guardada si sigue activa y es del tipo del medio; si no, la única de ese tipo. */
+function cuentaDeFila(cuentas: readonly CuentaElegible[], tipo: TipoMedioPagoCompra, actual: string | null): string {
+  if (actual && cuentasDelMedio(cuentas, tipo).some((c) => c.id === actual)) return actual;
+  return cuentaPorDefecto(cuentas, tipo) ?? "";
+}
+
+function filaNueva(cuentas: readonly CuentaElegible[], tipo: TipoMedioPagoCompra = "efectivo", importe = ""): FilaMedio {
+  return { ...filaVacia(tipo, importe), cuentaId: cuentaDeFila(cuentas, tipo, null) };
+}
+
+function filaDeMedio(m: MedioBorrador, cuentas: readonly CuentaElegible[]): FilaMedio {
   return {
     ...filaVacia(m.tipo, m.tipo === "cheque_tercero" ? "" : String(m.importe)),
+    cuentaId: cuentaDeFila(cuentas, m.tipo, m.cuentaId),
     referencia: m.referencia ?? "",
     chequeId: m.chequeId ?? "",
     banco: m.banco ?? "",
@@ -75,6 +103,7 @@ function medioDeFila(f: FilaMedio): MedioBorrador {
   return {
     tipo: f.tipo,
     importe: f.tipo === "cheque_tercero" ? 0 : (aDecimal(f.importe) ?? Number.NaN),
+    cuentaId: tipoCuentaDelMedio(f.tipo) && f.cuentaId ? f.cuentaId : null,
     referencia: f.tipo === "transferencia" ? f.referencia : null,
     chequeId: f.tipo === "cheque_tercero" ? f.chequeId || null : null,
     banco: f.tipo === "cheque_propio" ? f.banco : null,
@@ -109,13 +138,16 @@ function Campo({
  * Editor de una orden de pago: proveedor, medios (efectivo, transferencia,
  * cheques de terceros de la cartera y cheques propios) e imputación a sus
  * facturas y notas de débito con saldo. Lo que no se imputa queda a favor
- * del proveedor. Guarda el borrador entero en una transacción y confirma
- * con confirmación; los errores de la base, en un diálogo.
+ * del proveedor. Cada medio, salvo el cheque de terceros, elige de qué caja o
+ * cuenta bancaria sale (obligatorio al confirmar). Guarda el borrador entero
+ * en una transacción y confirma con confirmación; los errores de la base, en
+ * un diálogo.
  */
 export function EditorOrdenPago({
   orden,
   proveedores,
   cartera,
+  cuentas,
   cuentaInicial,
   proveedorInicial = null,
   aImputarInicial = {},
@@ -127,6 +159,8 @@ export function EditorOrdenPago({
   proveedores: ProveedorOfrecido[];
   /** Cheques en cartera (y los que ya eligió el borrador). */
   cartera: ChequeCartera[];
+  /** Cajas y cuentas bancarias activas, para la cuenta de cada medio. */
+  cuentas: CuentaElegible[];
   cuentaInicial: CuentaProveedor | null;
   /** Proveedor ya elegido al abrir una orden nueva (`?proveedor=`). */
   proveedorInicial?: string | null;
@@ -152,8 +186,8 @@ export function EditorOrdenPago({
   const [observaciones, setObservaciones] = useState(orden?.observaciones ?? "");
   const [filas, setFilas] = useState<FilaMedio[]>(() =>
     orden && orden.medios.length > 0
-      ? orden.medios.map(filaDeMedio)
-      : [filaVacia("efectivo", importeInicial ? String(importeInicial) : "")],
+      ? orden.medios.map((m) => filaDeMedio(m, cuentas))
+      : [filaNueva(cuentas, "efectivo", importeInicial ? String(importeInicial) : "")],
   );
   const [cuenta, setCuenta] = useState<CuentaProveedor | null>(cuentaInicial);
   const [cargandoCuenta, setCargandoCuenta] = useState(false);
@@ -236,6 +270,12 @@ export function EditorOrdenPago({
     setOk(null);
     setIntentado(true);
     if (errores.length > 0) return;
+    // El borrador se guarda sin cuenta; para confirmar, cada medio (salvo el cheque de terceros) la necesita.
+    const faltan = paraConfirmar ? erroresConfirmacion(medios) : [];
+    if (faltan.length > 0) {
+      setFalla({ error: faltan.join(" "), titulo: "Falta elegir de dónde sale el pago" });
+      return;
+    }
     iniciar(async () => {
       const resultado = await guardarOrdenPago(id, datos());
       if (resultado.error || !resultado.id) {
@@ -341,7 +381,7 @@ export function EditorOrdenPago({
         titulo="Medios de pago"
         descripcion="Un cheque de terceros sale de la cartera por su importe al confirmar la orden."
         acciones={
-          <button type="button" onClick={() => setFilas((f) => [...f, filaVacia()])} className="boton-secundario px-2 py-1 text-xs">
+          <button type="button" onClick={() => setFilas((f) => [...f, filaNueva(cuentas)])} className="boton-secundario px-2 py-1 text-xs">
             + Agregar medio
           </button>
         }
@@ -364,7 +404,10 @@ export function EditorOrdenPago({
                   <span className="etiqueta">Medio {indice + 1}</span>
                   <select
                     value={f.tipo}
-                    onChange={(e) => cambiarFila(f.clave, { tipo: e.target.value as TipoMedioPagoCompra })}
+                    onChange={(e) => {
+                      const tipo = e.target.value as TipoMedioPagoCompra;
+                      cambiarFila(f.clave, { tipo, cuentaId: cuentaDeFila(cuentas, tipo, f.cuentaId || null) });
+                    }}
                     className="campo"
                   >
                     {TIPOS_MEDIO_PAGO_COMPRA.map((t) => (
@@ -394,12 +437,22 @@ export function EditorOrdenPago({
                   )}
                 </label>
 
+                {tipoCuentaDelMedio(f.tipo) && (
+                  <SelectorCuenta
+                    cuentas={cuentas}
+                    tipo={f.tipo}
+                    valor={f.cuentaId}
+                    onCambiar={(v) => cambiarFila(f.clave, { cuentaId: v })}
+                    className="sm:col-span-3"
+                  />
+                )}
+
                 {f.tipo === "transferencia" && (
                   <Campo
                     etiqueta="Referencia"
                     valor={f.referencia}
                     onCambiar={(v) => cambiarFila(f.clave, { referencia: v })}
-                    className="sm:col-span-4"
+                    className="sm:col-span-3"
                   />
                 )}
 
@@ -444,12 +497,6 @@ export function EditorOrdenPago({
 
                 {f.tipo === "cheque_propio" && (
                   <>
-                    <Campo
-                      etiqueta="Banco *"
-                      valor={f.banco}
-                      onCambiar={(v) => cambiarFila(f.clave, { banco: v })}
-                      className="sm:col-span-2"
-                    />
                     <Campo
                       etiqueta="Número *"
                       valor={f.numero}

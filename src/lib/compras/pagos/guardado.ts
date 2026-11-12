@@ -48,12 +48,17 @@ const importe = (valor: unknown): number => (typeof valor === "number" ? valor :
 const objeto = (valor: unknown): Record<string, unknown> =>
   typeof valor === "object" && valor !== null ? (valor as Record<string, unknown>) : {};
 
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 function leerMedio(valor: unknown): MedioBorrador | null {
   const m = objeto(valor);
   if (!(TIPOS_MEDIO_PAGO_COMPRA as readonly unknown[]).includes(m.tipo)) return null;
+  const cuentaId = texto(m.cuentaId);
+  if (cuentaId !== null && !UUID.test(cuentaId)) return null;
   return {
     tipo: m.tipo as TipoMedioPagoCompra,
     importe: importe(m.importe),
+    cuentaId,
     referencia: texto(m.referencia),
     chequeId: texto(m.chequeId),
     banco: texto(m.banco),

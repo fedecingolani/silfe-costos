@@ -18,7 +18,7 @@ import { RegistrarAjuste } from "./RegistrarAjuste";
 
 export type ParametrosCuenta = { desde?: string; hasta?: string; editar?: string };
 
-/** Descripción del movimiento, con enlace a su origen si tiene página (un recibo). */
+/** Descripción del movimiento, con enlace a su origen si tiene página (un recibo o una orden de pago). */
 function Descripcion({ movimiento }: { movimiento: MovimientoFondos }) {
   const enlace = enlaceOrigen(movimiento);
   if (!enlace) return <>{movimiento.descripcion}</>;
@@ -124,7 +124,7 @@ export async function PaginaCuenta({
         descripcion={
           movimientos.length >= LIMITE_MOVIMIENTOS
             ? `Se muestran los ${LIMITE_MOVIMIENTOS} más recientes del rango: acote las fechas.`
-            : "Del más nuevo al más viejo. El saldo acumulado incluye los movimientos anteriores al rango. Los ajustes y recibos anulados no aparecen."
+            : "Del más nuevo al más viejo. El saldo acumulado incluye los movimientos anteriores al rango. Lo anulado no aparece (ajustes, recibos y órdenes de pago)."
         }
       >
         <form method="get" className="flex flex-wrap items-end gap-3 border-b border-stone-200 p-4">
@@ -163,7 +163,8 @@ export async function PaginaCuenta({
             <tbody>
               {movimientos.length === 0 && <Vacio mensaje="Sin movimientos en el rango." colSpan={7} />}
               {movimientos.map((m) => (
-                <tr key={`${m.origen}-${m.origen_id}`}>
+                // Una orden de pago puede dar varios movimientos en la misma cuenta (sus cheques propios, en otras fechas).
+                <tr key={`${m.origen}-${m.origen_id}-${m.fecha}`}>
                   <td className="whitespace-nowrap">
                     {fecha(m.fecha)}
                     {m.fecha > hoy && (
