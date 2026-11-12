@@ -35,7 +35,7 @@ Entrega: un PR por tarea, cada uno sobre la rama de la anterior, como en compras
 - [x] T1 Cuentas y ajustes manuales: esquema + RLS, vista de movimientos y saldos (sólo ajustes por ahora), pantallas Bancos y Caja (lista con saldo, alta/edición de cuenta, detalle con movimientos, ajuste y anulación). Rama `feat/finanzas-01-cuentas`.
 - [x] T2 Recibos: `recibo_medio.cuenta_id`, selector en el editor, obligatorio al emitir, movimientos en la vista. Rama `feat/finanzas-02-recibos`.
 - [x] T3 Órdenes de pago: `orden_pago_medio.cuenta_id`, selector en el editor, obligatorio al confirmar, cheque propio por fecha de pago. Rama `feat/finanzas-03-pagos`.
-- [ ] T4 Cheques: cuenta destino al depositar, débito al rechazar un depositado. Rama `feat/finanzas-04-cheques`.
+- [x] T4 Cheques: cuenta destino al depositar, débito al rechazar un depositado. Rama `feat/finanzas-04-cheques`.
 - [ ] T5 Transferencias entre cuentas. Rama `feat/finanzas-05-transferencias`.
 
 ## Verificación
@@ -84,3 +84,13 @@ Entrega: un PR por tarea, cada uno sobre la rama de la anterior, como en compras
 - Checks: `npm run typecheck` ok; `npm run lint` ok; `npm test` 1291 pasan (RED observado en helpers y errores); `supabase migration up --local` ok; `supabase test db` 1513 pasan (37 nuevos, RED observado).
 - Probado en la app local: caja y banco preseleccionados; confirmar sin caja muestra "Medio 1: elegí la caja."; OP-00000002 ($1.500 efectivo + cheque propio $2.000 al 15/12/2026) sale de la caja y el cheque queda en movimientos futuros del banco. La anulación sólo se probó en pgTAP.
 - Detalle cosmético pendiente: en una fila de cheque propio el botón "Quitar" baja a una segunda línea.
+
+### T4 Cheques — hecho
+
+- Commit `a6275bf` en `feat/finanzas-04-cheques` (sobre T3). Ruta: delegada (un writer).
+- Migración `20261112000002_finanzas_cheques.sql`: `cheque.deposito_cuenta_id`; trigger `trg_cheque_validar_deposito` (después de `trg_cheque_validar`) exige banco activo al depositar y no deja poner ni cambiar la cuenta fuera del depósito. Reusa FN004, FN007, FN008 y FN009 con mensajes de cheques.
+- Fechas de depósito y rechazo salen del historial `cheque_estado` (`estado_fecha` se pisa en cada cambio). Un cheque sólo sale de `depositado` hacia `rechazado`; `rechazar_cheque` ya lo permitía y no se cambió. El rechazo debita aunque la cuenta se haya desactivado después.
+- `v_movimiento_fondos`: orígenes `cheque_deposito` (ingreso) y `cheque_rechazo` (egreso), link a `/cheques/<id>`. `origen` pasa a ser el último desempate del orden (depósito y rechazo comparten `origen_id`).
+- El editor de recibos usa el `SelectorCuenta` compartido. El de órdenes de pago todavía usa la prop vieja `tipo` (pendiente menor).
+- Checks: `npm run typecheck` ok; `npm run lint` ok; `npm test` 1297 pasan (RED observado); `supabase migration up --local` ok; `supabase test db` 1539 pasan (26 nuevos, RED observado).
+- Pendiente: probar depósito y rechazo en la app.
