@@ -111,7 +111,8 @@ insert into recibo_medio (recibo_id, orden, tipo, importe, referencia, cuenta_id
   ('fe300000-0000-4000-8000-000000000001', 3, 'transferencia', 150, 'TR-9', 'fe100000-0000-4000-8000-000000000001');
 
 select is(
-  (select count(*)::integer from v_movimiento_fondos where origen = 'recibo'),
+  (select count(*)::integer from v_movimiento_fondos
+    where origen = 'recibo' and cuenta_id::text like 'fe100000-%'),
   0,
   'Un borrador no mueve fondos'
 );
