@@ -132,6 +132,8 @@ export type DatosCambioCheque = {
   /** Rechazar: gastos bancarios (opcionales, con IVA en la ND). */
   gastosImporte?: number | null;
   gastosDescripcion?: string | null;
+  /** Depositar: la cuenta bancaria (obligatoria). */
+  cuentaId?: string | null;
 };
 
 export type CambioCheque = {
@@ -140,6 +142,8 @@ export type CambioCheque = {
   observacion: string | null;
   entregadoA: string | null;
   gastos: { importe: number; descripcion: string } | null;
+  /** Depositar: la cuenta bancaria; null en las demás acciones. */
+  cuentaId: string | null;
 };
 
 const texto = (valor: string | null | undefined): string | null => {
@@ -163,6 +167,9 @@ export function validarCambioCheque(
   const errores: string[] = [];
   if (!esFechaValida(datos.fecha)) errores.push("Completá la fecha.");
 
+  const cuentaId = datos.accion === "depositar" ? texto(datos.cuentaId) : null;
+  if (datos.accion === "depositar" && !cuentaId) errores.push("Elegí la cuenta bancaria donde se deposita el cheque.");
+
   const entregadoA = datos.accion === "entregar" ? texto(datos.entregadoA) : null;
   if (datos.accion === "entregar" && !entregadoA) errores.push("Completá a quién se entregó el cheque.");
 
@@ -178,6 +185,6 @@ export function validarCambioCheque(
 
   if (errores.length > 0) return { errores };
   return {
-    cambio: { accion: datos.accion, fecha: datos.fecha, observacion: texto(datos.observacion), entregadoA, gastos },
+    cambio: { accion: datos.accion, fecha: datos.fecha, observacion: texto(datos.observacion), entregadoA, gastos, cuentaId },
   };
 }

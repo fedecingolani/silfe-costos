@@ -633,8 +633,14 @@ select results_eq(
 -- Cartera: transiciones (C3)
 -- ---------------------------------------------------------------------
 
+-- Cuenta bancaria donde se depositan (20261112000002_finanzas_cheques.sql).
+-- Nombre único: la base local puede tener cuentas cargadas a mano.
+insert into cuenta_fondos (id, tipo, nombre)
+values ('cb900000-0000-0000-0000-000000000001', 'banco', 'Banco cobranzas ' || gen_random_uuid()::text);
+
 select lives_ok(
-  $$update cheque set estado = 'depositado', estado_fecha = '2026-11-15', estado_observacion = 'Depositado en Nación'
+  $$update cheque set estado = 'depositado', estado_fecha = '2026-11-15', estado_observacion = 'Depositado en Nación',
+      deposito_cuenta_id = 'cb900000-0000-0000-0000-000000000001'
     where id = 'cb300000-0000-0000-0000-000000000002'$$,
   'en_cartera → depositado'
 );
@@ -1283,7 +1289,8 @@ select throws_ok(
   '23514', null, 'Un cheque no queda rechazado sin su nota de débito'
 );
 select lives_ok(
-  $$update cheque set estado = 'depositado', estado_fecha = '2026-11-01', estado_observacion = 'Banco propio'
+  $$update cheque set estado = 'depositado', estado_fecha = '2026-11-01', estado_observacion = 'Banco propio',
+      deposito_cuenta_id = 'cb900000-0000-0000-0000-000000000001'
     where id = 'cb300000-0000-0000-0000-000000000071'$$,
   'Un cheque en cartera se deposita'
 );

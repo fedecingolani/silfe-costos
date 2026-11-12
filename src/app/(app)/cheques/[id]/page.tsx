@@ -8,6 +8,7 @@ import { hoyArgentina } from "@/lib/clientes/seguimiento";
 import { nombreComprobante, numeroVisible } from "@/lib/comprobantes/listado";
 import { accionesDisponibles, estadoChequeVisible, TONO_ESTADO_CHEQUE } from "@/lib/cobranzas/cartera";
 import { armarNotaDebitoRechazo, type ComprobanteImputado } from "@/lib/cobranzas/cheques";
+import type { CuentaElegible } from "@/lib/finanzas/medios";
 import {
   NOMBRES_ESTADO_CHEQUE,
   type Cheque,
@@ -28,6 +29,7 @@ type ChequeLeido = Cheque & {
   recibo: Pick<Recibo, "id" | "numero_texto" | "fecha" | "estado"> | null;
   cliente: { id: string; razon_social: string; condicion_iva: CondicionIva | null } | null;
   nd: { id: string; estado: EstadoComprobante; letra: LetraComprobante | null; punto_venta: number; numero: number | null } | null;
+  deposito: { id: string; nombre: string } | null;
 };
 
 type Imputado = {
@@ -94,6 +96,18 @@ async function previaDelRechazo(
   };
 }
 
+/** Cuentas bancarias activas, para elegir dónde se deposita el cheque. */
+async function cargarBancosActivos(supabase: Awaited<ReturnType<typeof createClient>>): Promise<CuentaElegible[] | string> {
+  const { data, error } = await supabase
+    .from("cuenta_fondos")
+    .select("id, tipo, nombre")
+    .eq("tipo", "banco")
+    .eq("activa", true)
+    .order("nombre");
+  if (error) return `No se pudieron leer las cuentas bancarias: ${error.message}`;
+  return (data ?? []) as CuentaElegible[];
+}
+
 export default async function ChequePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   if (!UUID.test(id)) notFound();
@@ -104,7 +118,7 @@ export default async function ChequePage({ params }: { params: Promise<{ id: str
       .from("cheque")
       .select(
         "*, recibo:recibo_id(id, numero_texto, fecha, estado), cliente:cliente_id(id, razon_social, condicion_iva), " +
-          "nd:nd_comprobante_id(id, estado, letra, punto_venta, numero)",
+          "nd:nd_comprobante_id(id, estado, letra, punto_venta, numero), deposito:deposito_cuenta_id(id, nombre)",
       )
       .eq("id", id)
       .maybeSingle(),
@@ -120,7 +134,10 @@ export default async function ChequePage({ params }: { params: Promise<{ id: str
   const enCartera = cheque.recibo?.estado === "emitido";
   const acciones = enCartera ? accionesDisponibles(cheque.estado) : [];
   const hoy = hoyArgentina();
-  const previa = acciones.includes("rechazar") ? await previaDelRechazo(supabase, cheque, hoy) : null;
+  const [previa, bancos] = await Promise.all([
+    acciones.includes("rechazar") ? previaDelRechazo(supabase, cheque, hoy) : null,
+    acciones.includes("depositar") ? cargarBancosActivos(supabase) : [],
+  ]);
 
   const ndNumero = cheque.nd && cheque.nd.numero !== null ? numeroVisible({ ...cheque.nd, punto_venta: Number(cheque.nd.punto_venta) }) : null;
   const visible = estadoChequeVisible({
@@ -169,7 +186,18 @@ export default async function ChequePage({ params }: { params: Promise<{ id: str
       )}
 
       <div className="mb-4">
-        <AccionesCheque id={cheque.id} acciones={acciones} hoy={hoy} previaRechazo={previa} />
+        {typeof bancos === "string" && (
+          <p role="alert" className="mb-2 text-sm text-red-700">
+            {bancos}
+          </p>
+        )}
+        <AccionesCheque
+          id={cheque.id}
+          acciones={acciones}
+          hoy={hoy}
+          cuentas={typeof bancos === "string" ? [] : bancos}
+          previaRechazo={previa}
+        />
       </div>
 
       <Tarjeta titulo="Cheque">
@@ -203,6 +231,13 @@ export default async function ChequePage({ params }: { params: Promise<{ id: str
             )}
           </Dato>
           {cheque.entregado_a && <Dato etiqueta="Entregado a">{cheque.entregado_a}</Dato>}
+          {cheque.deposito && (
+            <Dato etiqueta="Depositado en">
+              <Link href={`/bancos/${cheque.deposito.id}`} className="text-marca-700 hover:underline">
+                {cheque.deposito.nombre}
+              </Link>
+            </Dato>
+          )}
           {cheque.nd && (
             <Dato etiqueta="Nota de débito">
               <Link href={`/comprobantes/${cheque.nd.id}`} className="text-marca-700 hover:underline">

@@ -6,7 +6,9 @@
  *   (fn_recibo_medio_tipo_cuenta, 20261111000003_finanzas_recibos.sql);
  * - orden de pago: el efectivo sale de una caja, la transferencia y el
  *   cheque propio de una cuenta bancaria; el cheque de terceros sale de la
- *   cartera (fn_orden_pago_medio_tipo_cuenta, 20261112000001_finanzas_pagos.sql).
+ *   cartera (fn_orden_pago_medio_tipo_cuenta, 20261112000001_finanzas_pagos.sql);
+ * - depósito de un cheque de terceros: una cuenta bancaria
+ *   (fn_cheque_validar_deposito, 20261112000002_finanzas_cheques.sql).
  */
 import type { CuentaFondos, TipoCuentaFondos, TipoMedioPago, TipoMedioPagoCompra } from "@/lib/tipos";
 
@@ -23,14 +25,25 @@ export function tipoCuentaDelMedio(tipo: TipoMedio): TipoCuentaFondos | null {
   return null;
 }
 
+/** Las cuentas de un tipo (caja o banco), en el orden recibido. */
+export function cuentasDelTipo<T extends CuentaElegible>(cuentas: readonly T[], tipoCuenta: TipoCuentaFondos): T[] {
+  return cuentas.filter((c) => c.tipo === tipoCuenta);
+}
+
+/** La única cuenta del tipo, si hay exactamente una (para preseleccionarla). */
+export function cuentaUnica(cuentas: readonly CuentaElegible[], tipoCuenta: TipoCuentaFondos): string | null {
+  const posibles = cuentasDelTipo(cuentas, tipoCuenta);
+  return posibles.length === 1 ? posibles[0].id : null;
+}
+
 /** Las cuentas que admite el medio, en el orden recibido. */
 export function cuentasDelMedio<T extends CuentaElegible>(cuentas: readonly T[], tipo: TipoMedio): T[] {
   const tipoCuenta = tipoCuentaDelMedio(tipo);
-  return tipoCuenta ? cuentas.filter((c) => c.tipo === tipoCuenta) : [];
+  return tipoCuenta ? cuentasDelTipo(cuentas, tipoCuenta) : [];
 }
 
 /** La cuenta a preseleccionar: la única del tipo, si hay exactamente una. */
 export function cuentaPorDefecto(cuentas: readonly CuentaElegible[], tipo: TipoMedio): string | null {
-  const posibles = cuentasDelMedio(cuentas, tipo);
-  return posibles.length === 1 ? posibles[0].id : null;
+  const tipoCuenta = tipoCuentaDelMedio(tipo);
+  return tipoCuenta ? cuentaUnica(cuentas, tipoCuenta) : null;
 }

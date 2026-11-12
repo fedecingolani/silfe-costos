@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cuentaPorDefecto, cuentasDelMedio, tipoCuentaDelMedio, type CuentaElegible } from "./medios";
+import { cuentaPorDefecto, cuentasDelMedio, cuentasDelTipo, cuentaUnica, tipoCuentaDelMedio, type CuentaElegible } from "./medios";
 
 const CUENTAS: CuentaElegible[] = [
   { id: "b1", tipo: "banco", nombre: "Galicia" },
@@ -49,5 +49,18 @@ describe("cuentaPorDefecto", () => {
     expect(cuentaPorDefecto(CUENTAS, "transferencia")).toBeNull();
     expect(cuentaPorDefecto([], "efectivo")).toBeNull();
     expect(cuentaPorDefecto(CUENTAS, "retencion")).toBeNull();
+  });
+});
+
+describe("cuentasDelTipo y cuentaUnica", () => {
+  it("filtran por tipo de cuenta (el depósito de un cheque va a un banco)", () => {
+    expect(cuentasDelTipo(CUENTAS, "banco").map((c) => c.id)).toEqual(["b1", "b2"]);
+    expect(cuentasDelTipo(CUENTAS, "caja").map((c) => c.id)).toEqual(["c1"]);
+  });
+
+  it("preseleccionan sólo si hay exactamente una", () => {
+    expect(cuentaUnica(CUENTAS, "caja")).toBe("c1");
+    expect(cuentaUnica(CUENTAS, "banco")).toBeNull();
+    expect(cuentaUnica([], "banco")).toBeNull();
   });
 });
