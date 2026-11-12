@@ -10,6 +10,7 @@ export type CuentaConSaldo = CuentaFondos & { saldo: SaldoCuentaFondos };
 
 /** Tope de movimientos: con el rango de fechas alcanza para acotar. */
 export const LIMITE_MOVIMIENTOS = 500;
+const LOTE_IDS = 100;
 
 function saldoVacio(cuentaId: string): SaldoCuentaFondos {
   return { cuenta_id: cuentaId, saldo_actual: 0, movimientos_futuros: 0, ultimo_movimiento: null };
@@ -104,13 +105,17 @@ export async function cargarTransferencias(
   movimientos: readonly MovimientoFondos[],
 ): Promise<Map<string, TransferenciaConCuentas> | string> {
   const ids = [...new Set(movimientos.filter((m) => m.origen === "transferencia").map((m) => m.origen_id))];
-  if (ids.length === 0) return new Map();
-  const { data, error } = await supabase
-    .from("transferencia_fondos")
-    .select(
-      "id, cuenta_origen_id, cuenta_destino_id, origen:cuenta_fondos!cuenta_origen_id(tipo), destino:cuenta_fondos!cuenta_destino_id(tipo)",
-    )
-    .in("id", ids);
-  if (error) return `No se pudieron leer las transferencias: ${error.message}`;
-  return new Map(((data ?? []) as unknown as (TransferenciaConCuentas & { id: string })[]).map((t) => [t.id, t]));
+  const resultado = new Map<string, TransferenciaConCuentas>();
+  // En lotes: los ids viajan en la URL y 500 uuid juntos pueden pasar el límite del gateway.
+  for (let i = 0; i < ids.length; i += LOTE_IDS) {
+    const { data, error } = await supabase
+      .from("transferencia_fondos")
+      .select(
+        "id, cuenta_origen_id, cuenta_destino_id, origen:cuenta_fondos!cuenta_origen_id(tipo), destino:cuenta_fondos!cuenta_destino_id(tipo)",
+      )
+      .in("id", ids.slice(i, i + LOTE_IDS));
+    if (error) return `No se pudieron leer las transferencias: ${error.message}`;
+    for (const t of (data ?? []) as unknown as (TransferenciaConCuentas & { id: string })[]) resultado.set(t.id, t);
+  }
+  return resultado;
 }
