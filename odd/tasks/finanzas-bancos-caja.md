@@ -1,6 +1,6 @@
 # Finanzas: bancos y caja
 
-Estado: en desarrollo.
+Estado: T1 a T5 hechas y revisadas; sin pushear.
 
 ## Objetivo
 
@@ -87,7 +87,7 @@ Entrega: un PR por tarea, cada uno sobre la rama de la anterior, como en compras
 
 ### T4 Cheques — hecho
 
-- Commit `a6275bf` en `feat/finanzas-04-cheques` (sobre T3). Ruta: delegada (un writer).
+- Commit `38877b0` en `feat/finanzas-04-cheques` (sobre T3). Ruta: delegada (un writer).
 - Migración `20261112000002_finanzas_cheques.sql`: `cheque.deposito_cuenta_id`; trigger `trg_cheque_validar_deposito` (después de `trg_cheque_validar`) exige banco activo al depositar y no deja poner ni cambiar la cuenta fuera del depósito. Reusa FN004, FN007, FN008 y FN009 con mensajes de cheques.
 - Fechas de depósito y rechazo salen del historial `cheque_estado` (`estado_fecha` se pisa en cada cambio). Un cheque sólo sale de `depositado` hacia `rechazado`; `rechazar_cheque` ya lo permitía y no se cambió. El rechazo debita aunque la cuenta se haya desactivado después.
 - `v_movimiento_fondos`: orígenes `cheque_deposito` (ingreso) y `cheque_rechazo` (egreso), link a `/cheques/<id>`. `origen` pasa a ser el último desempate del orden (depósito y rechazo comparten `origen_id`).
@@ -97,12 +97,20 @@ Entrega: un PR por tarea, cada uno sobre la rama de la anterior, como en compras
 
 ### T5 Transferencias — hecho
 
-- Commit `6ac08ac` en `feat/finanzas-05-transferencias` (sobre T4). Ruta: delegada (un writer).
+- Commit `36a2585` en `feat/finanzas-05-transferencias` (sobre T4). Ruta: delegada (un writer).
 - Migraciones `20261112000003_finanzas_transferencias.sql` y `20261112000004_rls_finanzas_transferencias.sql`: tabla `transferencia_fondos`, mismas reglas que los ajustes (inmutable, se anula con motivo, no se borra). Código nuevo FN010 (misma cuenta en origen y destino); FN001 a FN005 reusados.
 - `v_movimiento_fondos`: dos patas por transferencia ("Transferencia a …" egreso, "Transferencia desde …" ingreso), con link a la otra cuenta. Se anula desde cualquiera de las dos.
 - `validarImporte` compartido entre ajustes y transferencias. `AnularAjuste` también anula transferencias (renombrarlo queda pendiente).
 - Checks: `npm run typecheck` ok; `npm run lint` ok; `npm test` 1309 pasan (RED observado); `supabase migration up --local` ok; `supabase test db` 1571 pasan (32 nuevos, RED observado).
 - Probado en la app local: transferencia de "1.000" de la caja al banco aparece en las dos cuentas; anulada desde el banco desaparece de las dos.
+
+## Revisión de T3 a T5
+
+La revisión de toda la feature junta excedió el límite de contexto del revisor (`lens_context_budget_exceeded`), así que se revisó un tramo por rama, cada uno con su permiso. Las tres quedaron aprobadas y acusadas, todas con la lente de confiabilidad.
+
+- T3 (`review-97347363e6fe4c28`): WARNING corregida en `6939ab2` (el fixture usaba `current_date`, en UTC); T4 y T5 se rebasearon encima.
+- T4: WARNING descartada. El trigger de depósito no falla abierto con una cuenta inexistente porque la clave foránea lo rechaza igual. Sugerencias: probar más ramas del trigger y el estado vacío de bancos en el detalle del cheque.
+- T5: WARNING corregida en `f36675e`. `cargarTransferencias` arma la consulta en lotes de 100 ids, porque hasta 500 ids en la URL podían pasar el límite del gateway. Sugerencias: tests de las acciones y de los mensajes de error.
 
 ## Pendientes y preguntas abiertas
 
