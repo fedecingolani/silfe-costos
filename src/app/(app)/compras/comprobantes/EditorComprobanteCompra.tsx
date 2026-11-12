@@ -49,6 +49,7 @@ import {
 } from "@/lib/tipos";
 import { Confirmacion } from "../../remitos/Confirmacion";
 import { ActualizarPrecios } from "./ActualizarPrecios";
+import { AyudaTipoRenglon } from "./AyudaTipoRenglon";
 import {
   articulosDelProveedor,
   borrarComprobanteCompra,
@@ -490,6 +491,7 @@ export function EditorComprobanteCompra({
           </button>
         }
       >
+        <AyudaTipoRenglon />
         <div className="overflow-x-auto">
           <table className="tabla">
             <thead>
