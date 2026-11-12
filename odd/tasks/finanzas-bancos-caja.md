@@ -36,7 +36,7 @@ Entrega: un PR por tarea, cada uno sobre la rama de la anterior, como en compras
 - [x] T2 Recibos: `recibo_medio.cuenta_id`, selector en el editor, obligatorio al emitir, movimientos en la vista. Rama `feat/finanzas-02-recibos`.
 - [x] T3 Órdenes de pago: `orden_pago_medio.cuenta_id`, selector en el editor, obligatorio al confirmar, cheque propio por fecha de pago. Rama `feat/finanzas-03-pagos`.
 - [x] T4 Cheques: cuenta destino al depositar, débito al rechazar un depositado. Rama `feat/finanzas-04-cheques`.
-- [ ] T5 Transferencias entre cuentas. Rama `feat/finanzas-05-transferencias`.
+- [x] T5 Transferencias entre cuentas. Rama `feat/finanzas-05-transferencias`.
 
 ## Verificación
 
@@ -93,4 +93,20 @@ Entrega: un PR por tarea, cada uno sobre la rama de la anterior, como en compras
 - `v_movimiento_fondos`: orígenes `cheque_deposito` (ingreso) y `cheque_rechazo` (egreso), link a `/cheques/<id>`. `origen` pasa a ser el último desempate del orden (depósito y rechazo comparten `origen_id`).
 - El editor de recibos usa el `SelectorCuenta` compartido. El de órdenes de pago todavía usa la prop vieja `tipo` (pendiente menor).
 - Checks: `npm run typecheck` ok; `npm run lint` ok; `npm test` 1297 pasan (RED observado); `supabase migration up --local` ok; `supabase test db` 1539 pasan (26 nuevos, RED observado).
-- Pendiente: probar depósito y rechazo en la app.
+- Probado en la app local: depositar pide la cuenta bancaria (preseleccionada), el banco muestra "Depósito cheque N° 777001" con link y el cheque muestra "Depositado en". El rechazo no se probó en la app (el cliente de prueba no tiene condición de IVA, que exige la nota de débito); lo cubre pgTAP.
+
+### T5 Transferencias — hecho
+
+- Commit `6ac08ac` en `feat/finanzas-05-transferencias` (sobre T4). Ruta: delegada (un writer).
+- Migraciones `20261112000003_finanzas_transferencias.sql` y `20261112000004_rls_finanzas_transferencias.sql`: tabla `transferencia_fondos`, mismas reglas que los ajustes (inmutable, se anula con motivo, no se borra). Código nuevo FN010 (misma cuenta en origen y destino); FN001 a FN005 reusados.
+- `v_movimiento_fondos`: dos patas por transferencia ("Transferencia a …" egreso, "Transferencia desde …" ingreso), con link a la otra cuenta. Se anula desde cualquiera de las dos.
+- `validarImporte` compartido entre ajustes y transferencias. `AnularAjuste` también anula transferencias (renombrarlo queda pendiente).
+- Checks: `npm run typecheck` ok; `npm run lint` ok; `npm test` 1309 pasan (RED observado); `supabase migration up --local` ok; `supabase test db` 1571 pasan (32 nuevos, RED observado).
+- Probado en la app local: transferencia de "1.000" de la caja al banco aparece en las dos cuentas; anulada desde el banco desaparece de las dos.
+
+## Pendientes y preguntas abiertas
+
+- La caja puede quedar en saldo negativo (no hay control). Decidir si se bloquea o sólo se avisa.
+- Movimientos futuros en el detalle no siguen el rango filtrado.
+- `EditorOrdenPago` usa la prop vieja `tipo` de `SelectorCuenta`; en una fila de cheque propio el botón "Quitar" baja de línea.
+- Sugerencias de la revisión de T1+T2: validar `tipo` en `finanzas/acciones.ts`, test del `banco` completado con el nombre de la cuenta.
