@@ -4,7 +4,13 @@ import { Encabezado, Migas } from "@/components/ui";
 import { hoyArgentina } from "@/lib/clientes/seguimiento";
 import { nombreComprobante } from "@/lib/comprobantes/listado";
 import type { ClienteEncontrado } from "../../comprobantes/acciones";
-import { cargarComprobanteContado, cargarDebitos, reciboDeContado, type CuentaCliente } from "../datos";
+import {
+  cargarComprobanteContado,
+  cargarCuentasCobro,
+  cargarDebitos,
+  reciboDeContado,
+  type CuentaCliente,
+} from "../datos";
 import { EditorRecibo, type ContadoAPagar } from "../EditorRecibo";
 
 export const dynamic = "force-dynamic";
@@ -68,6 +74,9 @@ export default async function NuevaCobranzaPage({
     }
   }
 
+  const cuentas = await cargarCuentasCobro(supabase);
+  if (typeof cuentas === "string") return <p className="text-sm text-red-700">{cuentas}</p>;
+
   return (
     <>
       <Migas items={[{ href: "/cobranzas", texto: "Cobranzas" }, { texto: contado ? "Pago de contado" : "Nueva" }]} />
@@ -84,6 +93,7 @@ export default async function NuevaCobranzaPage({
         contado={contado}
         clienteInicial={clienteInicial}
         cuentaInicial={cuentaInicial}
+        cuentas={cuentas}
         hoy={hoyArgentina()}
       />
     </>

@@ -145,6 +145,38 @@ describe("armarRecibo", () => {
   });
 });
 
+describe("cuenta de fondos del medio", () => {
+  const CAJA = "33333333-3333-4333-8333-333333333333";
+  const BANCO = "44444444-4444-4444-8444-444444444444";
+
+  it("lee la cuenta y la manda sólo en efectivo y transferencia", () => {
+    const leido = leerReciboEnviado({
+      ...base,
+      medios: [
+        { tipo: "efectivo", importe: 60, cuentaId: CAJA },
+        { tipo: "transferencia", importe: 30, cuentaId: BANCO, banco: "viejo" },
+        { tipo: "retencion", importe: 10, cuentaId: BANCO, retencion: { tipo: "iva", certificado: "1", fecha: "2026-10-18" } },
+      ],
+    });
+    expect(leido?.medios.map((m) => m.cuentaId)).toEqual([CAJA, BANCO, BANCO]);
+    const r = leido && armarRecibo(leido, { debitos: [], contado: null });
+    expect(r && "guardar" in r && r.guardar.medios.map((m) => [m.tipo, m.cuenta_id, m.banco])).toEqual([
+      ["efectivo", CAJA, null],
+      ["transferencia", BANCO, "viejo"],
+      ["retencion", null, null],
+    ]);
+  });
+
+  it("sin cuenta el borrador se guarda igual", () => {
+    const r = armarRecibo(base, { debitos: [], contado: null });
+    expect("guardar" in r && r.guardar.medios[0].cuenta_id).toBeNull();
+  });
+
+  it("una cuenta que no es un id es una forma inválida", () => {
+    expect(leerReciboEnviado({ ...base, medios: [{ tipo: "efectivo", importe: 1, cuentaId: "caja" }] })).toBeNull();
+  });
+});
+
 describe("CUIT del librador (la base exige 11 dígitos)", () => {
   it("de la pantalla a guardar_borrador_recibo, con separadores, queda sólo con dígitos", () => {
     const enviado = leerReciboEnviado(
@@ -200,6 +232,12 @@ describe("mensajeErrorCobranza", () => {
 
   it("traduce los demás", () => {
     expect(mensajeErrorCobranza({ code: "CB001", message: "x" })).toMatch(/ya no es un borrador/);
+    expect(mensajeErrorCobranza({ code: "FN007", message: "El medio 1 (efectivo) no tiene caja: elegila antes de emitir." })).toBe(
+      "El medio 1 (efectivo) no tiene caja: elegila antes de emitir.",
+    );
+    expect(mensajeErrorCobranza({ code: "FN004", message: "x" })).toMatch(/inactiva/);
+    expect(mensajeErrorCobranza({ code: "FN008", message: "x" })).toMatch(/caja.*banc|banc.*caja/);
+    expect(mensajeErrorCobranza({ code: "FN009", message: "x" })).toMatch(/no llevan cuenta/);
     expect(mensajeErrorCobranza({ code: "XX000", message: "boom" }, "emitir el recibo")).toBe(
       "No se pudo emitir el recibo: boom",
     );

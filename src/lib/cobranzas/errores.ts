@@ -1,7 +1,8 @@
 /**
  * Mensajes legibles de los errores de la base de cobranzas (SQLSTATE CB0xx,
  * ver 20261026000001_cobranzas.sql y
- * 20261028000001_cobranzas_cartera.sql). Los mensajes de la base ya están en
+ * 20261028000001_cobranzas_cartera.sql) y de la cuenta de fondos de sus
+ * medios (FN0xx, ver 20261111000003_finanzas_recibos.sql). Los mensajes de la base ya están en
  * castellano y dicen el detalle (importes, comprobante): para esos se
  * muestra el de la base. Los demás tienen un texto propio.
  */
@@ -12,6 +13,9 @@ const PROPIOS: Record<string, string> = {
   CB013: "No se encontró el recibo. Puede que lo hayan borrado.",
   CB014: "No se pudo asignar el número del recibo. Volvé a intentar.",
   CB021: "No se encontró el cheque. Recargá la página.",
+  FN004: "La caja o cuenta bancaria elegida está inactiva: elegí otra.",
+  FN008: "El efectivo va a una caja y la transferencia a una cuenta bancaria: revisá la cuenta de cada medio.",
+  FN009: "Los cheques, e-cheq y retenciones no llevan cuenta: no mueven fondos al cobrarlos.",
   "23503": "El cliente o el comprobante ya no existen. Recargá la página.",
   "23514": "Hay un dato inválido en los medios de pago: revisá importes, cheques y retenciones.",
 };
@@ -34,6 +38,7 @@ const CON_MENSAJE_DE_LA_BASE = new Set([
   "CB019",
   "CB020",
   "CB022",
+  "FN007",
 ]);
 
 export function mensajeErrorCobranza(error: { code?: string; message: string }, contexto = "guardar el recibo"): string {

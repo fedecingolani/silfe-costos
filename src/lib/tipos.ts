@@ -1182,6 +1182,8 @@ export type ReciboMedio = {
   orden: number;
   tipo: TipoMedioPago;
   importe: number;
+  /** Efectivo: la caja; transferencia: la cuenta bancaria. Null en cheques, retenciones y recibos históricos. */
+  cuenta_id: string | null;
   banco: string | null;
   referencia: string | null;
   cheque_id: string | null;
@@ -1303,8 +1305,8 @@ export type AjusteFondos = {
   creado_en: string;
 };
 
-/** Origen de un movimiento de fondos (por ahora, sólo ajustes manuales). */
-export type OrigenMovimientoFondos = "ajuste";
+/** Origen de un movimiento de fondos. recibo: origen_id es el id del recibo. */
+export type OrigenMovimientoFondos = "ajuste" | "recibo";
 
 /** Fila de v_movimiento_fondos. importe: positivo = ingreso. */
 export type MovimientoFondos = {

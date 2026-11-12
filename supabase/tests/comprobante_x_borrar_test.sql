@@ -38,6 +38,9 @@ insert into recibo_punto_venta (numero, nombre) values (19, 'Recibos borrar X');
 
 set local role authenticated;
 
+-- El efectivo se emite con su caja (20261111000003_finanzas_recibos.sql).
+insert into cuenta_fondos (id, tipo, nombre) values ('cd900000-0000-4000-8000-000000000001', 'caja', 'Caja borrar X');
+
 -- Facturas X de cuenta corriente, en borrador.
 insert into comprobante (id, punto_venta, clase, letra, cliente_id, condicion_pago, neto, total, fecha) values
   ('cd100000-0000-0000-0000-000000000001', 9299, 'factura', 'X',
@@ -92,7 +95,7 @@ select throws_ok(
 
 insert into recibo (id, punto_venta, cliente_id, fecha, total) values
   ('cd200000-0000-0000-0000-000000000002', 19, 'cd000000-0000-0000-0000-000000000002', '2026-10-02', 50);
-insert into recibo_medio (recibo_id, tipo, importe) values ('cd200000-0000-0000-0000-000000000002', 'efectivo', 50);
+insert into recibo_medio (recibo_id, tipo, importe, cuenta_id) values ('cd200000-0000-0000-0000-000000000002', 'efectivo', 50, 'cd900000-0000-4000-8000-000000000001');
 insert into imputacion (recibo_id, comprobante_id, importe)
 values ('cd200000-0000-0000-0000-000000000002', 'cd100000-0000-0000-0000-000000000002', 50);
 select emitir_recibo('cd200000-0000-0000-0000-000000000002');
@@ -140,7 +143,7 @@ select throws_ok(
 
 insert into recibo (id, punto_venta, cliente_id, fecha, total) values
   ('cd200000-0000-0000-0000-000000000004', 19, 'cd000000-0000-0000-0000-000000000004', '2026-10-02', 80);
-insert into recibo_medio (recibo_id, tipo, importe) values ('cd200000-0000-0000-0000-000000000004', 'efectivo', 80);
+insert into recibo_medio (recibo_id, tipo, importe, cuenta_id) values ('cd200000-0000-0000-0000-000000000004', 'efectivo', 80, 'cd900000-0000-4000-8000-000000000001');
 select emitir_recibo('cd200000-0000-0000-0000-000000000004');
 
 insert into comprobante (id, punto_venta, clase, letra, cliente_id, condicion_pago, neto, total, fecha)
