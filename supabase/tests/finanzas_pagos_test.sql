@@ -74,7 +74,7 @@ declare
   v_recibo uuid;
 begin
   v_recibo := guardar_borrador_recibo(null,
-    jsonb_build_object('cliente_id', 'fd000000-0000-4000-8000-000000000002', 'fecha', current_date),
+    jsonb_build_object('cliente_id', 'fd000000-0000-4000-8000-000000000002', 'fecha', (now() at time zone 'America/Argentina/Buenos_Aires')::date),
     jsonb_build_array(jsonb_build_object('tipo', 'cheque', 'importe', 250,
       'cheque', jsonb_build_object('banco', 'Nación', 'numero', 'FD-1', 'fecha_pago', '2026-12-01'))),
     '[]'::jsonb);
