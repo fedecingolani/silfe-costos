@@ -4,20 +4,28 @@ import { useRef, useState, useTransition, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { LARGO_MAXIMO_MOTIVO, validarMotivoAnulacion } from "@/lib/cobranzas/anulacion";
 import type { TipoCuentaFondos } from "@/lib/tipos";
-import { anularAjuste } from "./acciones";
+import { anularAjuste, anularTransferencia } from "./acciones";
 
-/** "Anular" un ajuste vigente: pide el motivo. Deja de contar en el saldo y no se puede deshacer. */
+/**
+ * "Anular" un ajuste o una transferencia vigente: pide el motivo. Deja de
+ * contar en el saldo (una transferencia, en las dos cuentas) y no se puede
+ * deshacer. Una transferencia se anula desde cualquiera de sus cuentas.
+ */
 export function AnularAjuste({
   ajusteId,
   cuentaId,
   tipoCuenta,
   descripcion,
+  transferencia = false,
 }: {
+  /** Id del ajuste o de la transferencia. */
   ajusteId: string;
   cuentaId: string;
   tipoCuenta: TipoCuentaFondos;
   descripcion: string;
+  transferencia?: boolean;
 }) {
+  const sujeto = transferencia ? "la transferencia" : "el ajuste";
   const router = useRouter();
   const dialogo = useRef<HTMLDialogElement>(null);
   const [pendiente, iniciar] = useTransition();
@@ -43,7 +51,9 @@ export function AnularAjuste({
       return;
     }
     iniciar(async () => {
-      const resultado = await anularAjuste(ajusteId, cuentaId, tipoCuenta, motivo);
+      const resultado = transferencia
+        ? await anularTransferencia(ajusteId, cuentaId, motivo)
+        : await anularAjuste(ajusteId, cuentaId, tipoCuenta, motivo);
       if (resultado.error) {
         setError(resultado.error);
         return;
@@ -66,9 +76,14 @@ export function AnularAjuste({
         className="m-auto rounded-xl border border-stone-200 p-0 shadow-xl backdrop:bg-stone-900/40"
       >
         <form onSubmit={onSubmit} noValidate className="w-[min(32rem,90vw)] space-y-3 whitespace-normal p-5 text-left">
-          <h2 className="text-sm font-semibold text-stone-900">Anular el ajuste «{descripcion}»</h2>
+          <h2 className="text-sm font-semibold text-stone-900">
+            Anular {sujeto} «{descripcion}»
+          </h2>
           <p className="text-sm text-stone-600">
-            Deja de contar en el saldo de la cuenta. Queda registrado con el motivo y no se puede deshacer.
+            {transferencia
+              ? "Deja de contar en el saldo de las dos cuentas."
+              : "Deja de contar en el saldo de la cuenta."}{" "}
+            Queda registrado con el motivo y no se puede deshacer.
           </p>
           <label className="block">
             <span className="etiqueta">Motivo *</span>
@@ -92,7 +107,7 @@ export function AnularAjuste({
               Cancelar
             </button>
             <button type="submit" disabled={pendiente} className="boton-peligro flex-1">
-              {pendiente ? "Anulando…" : "Anular ajuste"}
+              {pendiente ? "Anulando…" : transferencia ? "Anular transferencia" : "Anular ajuste"}
             </button>
           </div>
         </form>

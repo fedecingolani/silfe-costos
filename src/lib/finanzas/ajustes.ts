@@ -49,15 +49,22 @@ export function parsearImporte(valor: string | null | undefined): number | null 
   return Number.isFinite(n) ? n : null;
 }
 
+/** Importe positivo de numeric(14,2): el número, o el mensaje de error. */
+export function validarImporte(valor: string | null | undefined): number | string {
+  const importe = parsearImporte(valor);
+  if (importe === null || importe <= 0) return "El importe tiene que ser mayor que cero.";
+  if (importe > IMPORTE_TOPE) return "El importe no puede superar $ 999.999.999.999,99.";
+  if (Math.abs(aCentavos(importe) / 100 - importe) > 1e-9) return "El importe admite hasta 2 decimales.";
+  return importe;
+}
+
 export function validarAjuste(entrada: EntradaAjuste): Resultado<DatosAjuste> {
   const fecha = limpiar(entrada.fecha);
   if (!esFechaValida(fecha)) return { error: "La fecha no es válida." };
   const tipo = limpiar(entrada.tipo);
   if (tipo !== "ingreso" && tipo !== "egreso") return { error: "El ajuste tiene que ser un ingreso o un egreso." };
-  const importe = parsearImporte(entrada.importe);
-  if (importe === null || importe <= 0) return { error: "El importe tiene que ser mayor que cero." };
-  if (importe > IMPORTE_TOPE) return { error: "El importe no puede superar $ 999.999.999.999,99." };
-  if (Math.abs(aCentavos(importe) / 100 - importe) > 1e-9) return { error: "El importe admite hasta 2 decimales." };
+  const importe = validarImporte(entrada.importe);
+  if (typeof importe === "string") return { error: importe };
   const concepto = limpiar(entrada.concepto);
   if (concepto === null) return { error: "El concepto es obligatorio." };
   return { datos: { fecha, tipo, importe, concepto, observacion: limpiar(entrada.observacion) } };

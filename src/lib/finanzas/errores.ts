@@ -1,7 +1,7 @@
 /**
  * Mensajes legibles de los errores de la base de Finanzas (SQLSTATE FN0xx,
  * ver 20261111000001_finanzas_cuentas.sql) y de los checks e índices de
- * cuenta_fondos y ajuste_fondos. Las acciones los devuelven en lugar de
+ * cuenta_fondos, ajuste_fondos y transferencia_fondos. Las acciones los devuelven en lugar de
  * lanzarlos: en producción Next reemplaza el mensaje de un error lanzado.
  */
 
@@ -34,4 +34,31 @@ export function mensajeErrorFinanzas(error: ErrorBase, contexto: string): string
     if (clave) return RESTRICCIONES[clave];
   }
   return PROPIOS[code] ?? `No se pudo ${contexto}: ${error.message}`;
+}
+
+/** Mensajes de las transferencias (20261112000003_finanzas_transferencias.sql) que difieren de los del ajuste. */
+const TRANSFERENCIA: Record<string, string> = {
+  FN001: "La transferencia ya no se puede modificar. Recargue la página.",
+  FN002: "Una transferencia nueva no puede nacer anulada.",
+  FN003: "Las transferencias no se borran: se anulan con un motivo.",
+  FN010: "La cuenta destino tiene que ser distinta de la de origen.",
+  "23503": "Alguna de las cuentas ya no existe. Recargue la página.",
+};
+
+const RESTRICCIONES_TRANSFERENCIA: Record<string, string> = {
+  transferencia_fondos_importe_check: "El importe tiene que ser mayor que cero.",
+};
+
+/**
+ * Como mensajeErrorFinanzas, para registrar o anular una transferencia. La
+ * cuenta inactiva (FN004) usa el mensaje de la base, que nombra la cuenta.
+ */
+export function mensajeErrorTransferencia(error: ErrorBase, contexto: string): string {
+  const code = error.code ?? "";
+  if (code === "FN004") return error.message;
+  if (code === "23514") {
+    const clave = Object.keys(RESTRICCIONES_TRANSFERENCIA).find((nombre) => error.message.includes(`"${nombre}"`));
+    if (clave) return RESTRICCIONES_TRANSFERENCIA[clave];
+  }
+  return TRANSFERENCIA[code] ?? mensajeErrorFinanzas(error, contexto);
 }

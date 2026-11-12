@@ -6,7 +6,8 @@ import { createClient } from "@/lib/supabase/server";
 import { validarMotivoAnulacion } from "@/lib/cobranzas/anulacion";
 import { validarAjuste } from "@/lib/finanzas/ajustes";
 import { PANTALLA_CUENTAS, validarCuenta } from "@/lib/finanzas/cuentas";
-import { mensajeErrorFinanzas } from "@/lib/finanzas/errores";
+import { mensajeErrorFinanzas, mensajeErrorTransferencia } from "@/lib/finanzas/errores";
+import { validarTransferencia } from "@/lib/finanzas/transferencias";
 import type { TipoCuentaFondos } from "@/lib/tipos";
 
 // Next enmascara en producción los errores lanzados desde una acción: las
@@ -127,5 +128,54 @@ export async function anularAjuste(
   if (error) return { error: mensajeErrorFinanzas(error, "anular el ajuste") };
   if (!data?.length) return { error: "El ajuste ya estaba anulado o no existe. Recargue la página." };
   refrescar(tipoCuenta, cuentaId);
+  return {};
+}
+
+/** Una transferencia toca dos cuentas, de cualquier tipo: se refrescan las dos pantallas. */
+function refrescarTransferencia(...ids: string[]) {
+  for (const { ruta } of Object.values(PANTALLA_CUENTAS)) {
+    revalidatePath(ruta);
+    for (const id of ids) revalidatePath(`${ruta}/${id}`);
+  }
+}
+
+/** Registra una transferencia desde la cuenta de la pantalla (origen) a la elegida (destino). */
+export async function registrarTransferencia(cuentaOrigenId: string, formData: FormData): Promise<ResultadoFinanzas> {
+  if (!UUID.test(cuentaOrigenId)) return { error: "Cuenta inválida." };
+  const entrada = validarTransferencia(cuentaOrigenId, {
+    fecha: texto(formData, "fecha"),
+    cuenta_destino_id: texto(formData, "cuenta_destino_id"),
+    importe: texto(formData, "importe"),
+    concepto: texto(formData, "concepto"),
+    observacion: texto(formData, "observacion"),
+  });
+  if ("error" in entrada) return { error: entrada.error };
+  const supabase = await createClient();
+  const { error } = await supabase.from("transferencia_fondos").insert(entrada.datos);
+  if (error) return { error: mensajeErrorTransferencia(error, "registrar la transferencia") };
+  refrescarTransferencia(entrada.datos.cuenta_origen_id, entrada.datos.cuenta_destino_id);
+  return {};
+}
+
+/** Anula una transferencia vigente desde cualquiera de sus dos cuentas; el trigger pone la fecha de anulación. */
+export async function anularTransferencia(
+  transferenciaId: string,
+  cuentaId: string,
+  motivo: string,
+): Promise<ResultadoFinanzas> {
+  if (!UUID.test(transferenciaId) || !UUID.test(cuentaId)) return { error: "Transferencia inválida." };
+  const errorMotivo = validarMotivoAnulacion(motivo);
+  if (errorMotivo) return { error: errorMotivo };
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("transferencia_fondos")
+    .update({ estado: "anulado", motivo_anulacion: motivo.trim() })
+    .eq("id", transferenciaId)
+    .or(`cuenta_origen_id.eq.${cuentaId},cuenta_destino_id.eq.${cuentaId}`)
+    .eq("estado", "vigente")
+    .select("cuenta_origen_id, cuenta_destino_id");
+  if (error) return { error: mensajeErrorTransferencia(error, "anular la transferencia") };
+  if (!data?.length) return { error: "La transferencia ya estaba anulada o no existe. Recargue la página." };
+  refrescarTransferencia(data[0].cuenta_origen_id as string, data[0].cuenta_destino_id as string);
   return {};
 }
