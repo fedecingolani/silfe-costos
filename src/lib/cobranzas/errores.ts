@@ -2,7 +2,8 @@
  * Mensajes legibles de los errores de la base de cobranzas (SQLSTATE CB0xx,
  * ver 20261026000001_cobranzas.sql y
  * 20261028000001_cobranzas_cartera.sql) y de la cuenta de fondos de sus
- * medios (FN0xx, ver 20261111000003_finanzas_recibos.sql). Los mensajes de la base ya están en
+ * medios (FN0xx, ver 20261111000003_finanzas_recibos.sql; FN011, caja en negativo al anular, ver
+ * 20261112000005_finanzas_caja_sin_negativo.sql). Los mensajes de la base ya están en
  * castellano y dicen el detalle (importes, comprobante): para esos se
  * muestra el de la base. Los demás tienen un texto propio.
  */
@@ -39,6 +40,7 @@ const CON_MENSAJE_DE_LA_BASE = new Set([
   "CB020",
   "CB022",
   "FN007",
+  "FN011",
 ]);
 
 export function mensajeErrorCobranza(error: { code?: string; message: string }, contexto = "guardar el recibo"): string {

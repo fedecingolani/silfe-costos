@@ -3,6 +3,8 @@
  * ver 20261111000001_finanzas_cuentas.sql) y de los checks e índices de
  * cuenta_fondos, ajuste_fondos y transferencia_fondos. Las acciones los devuelven en lugar de
  * lanzarlos: en producción Next reemplaza el mensaje de un error lanzado.
+ * La caja en negativo (FN011, ver 20261112000005_finanzas_caja_sin_negativo.sql)
+ * se muestra con el mensaje de la base, que nombra la caja, el saldo y la fecha.
  */
 
 export type ErrorBase = { code?: string; message: string };
@@ -29,6 +31,7 @@ const RESTRICCIONES: Record<string, string> = {
 
 export function mensajeErrorFinanzas(error: ErrorBase, contexto: string): string {
   const code = error.code ?? "";
+  if (code === "FN011") return error.message;
   if (code === "23505" || code === "23514") {
     const clave = Object.keys(RESTRICCIONES).find((nombre) => error.message.includes(`"${nombre}"`));
     if (clave) return RESTRICCIONES[clave];

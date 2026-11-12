@@ -2,6 +2,14 @@ import { describe, expect, it } from "vitest";
 import { mensajeErrorFinanzas, mensajeErrorTransferencia } from "./errores";
 
 describe("mensajeErrorFinanzas", () => {
+  it("caja en negativo (FN011): muestra el mensaje de la base, que nombra la caja, el saldo y la fecha", () => {
+    const mensaje = 'La caja "Caja chica" quedaría en $ -1.500,00 el 12/11/2026.';
+    expect(mensajeErrorFinanzas({ code: "FN011", message: mensaje }, "registrar el ajuste")).toBe(mensaje);
+    expect(mensajeErrorFinanzas({ code: "FN011", message: mensaje }, "anular el ajuste")).toBe(mensaje);
+    expect(mensajeErrorTransferencia({ code: "FN011", message: mensaje }, "registrar la transferencia")).toBe(mensaje);
+    expect(mensajeErrorTransferencia({ code: "FN011", message: mensaje }, "anular la transferencia")).toBe(mensaje);
+  });
+
   it("traduce el nombre repetido", () => {
     expect(
       mensajeErrorFinanzas(

@@ -127,6 +127,12 @@ describe("mensajeErrorOrdenPago", () => {
     );
   });
 
+  it("caja en negativo (FN011): muestra el mensaje de la base, que nombra la caja, el saldo y la fecha", () => {
+    const mensaje = 'La caja "Caja chica" quedaría en $ -50,00 el 12/11/2026.';
+    expect(mensajeErrorOrdenPago({ code: "FN011", message: mensaje }, "confirmar la orden de pago")).toBe(mensaje);
+    expect(mensajeErrorOrdenPago({ message: mensaje, hint: "caja_negativa" }, "confirmar la orden de pago")).toBe(mensaje);
+  });
+
   it("una pista o un código que coincide con una clave heredada de Object no rompe el mensaje", () => {
     expect(mensajeErrorOrdenPago({ message: "x", hint: "constructor" })).toBe("No se pudo guardar la orden de pago: x");
   });
