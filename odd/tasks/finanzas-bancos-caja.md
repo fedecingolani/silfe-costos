@@ -1,6 +1,6 @@
 # Finanzas: bancos y caja
 
-Estado: T1 a T5 hechas y revisadas; sin pushear.
+Estado: en producción desde el 2026-11-13 (T1 a T7).
 
 ## Objetivo
 
@@ -140,3 +140,12 @@ Cerrados en T7.
 - Checks: `npm run typecheck` ok; `npm run lint` ok; `npm test` 1322 pasan (RED observado en los helpers nuevos); `supabase test db` 1604, con sólo la falla horaria conocida de `pagos_compra_test` 87-89.
 - Probado en la app local: el cheque propio del 15/12 aparece en el banco sin tocar el filtro.
 - Revisión RDD aprobada. WARNING descartada: se quitó el valor por defecto de `para` en `SelectorCuenta`, pero los tres usos lo pasan explícito. Sugerencias: test del tipo leído de la fila en `acciones.ts`, y tope de filas cuando no hay fecha "hasta" (ya existe el límite de 500 movimientos).
+
+## Deploy (2026-11-13)
+
+- PRs #52 a #58 mergeados en orden a `main` (merge del último: `5bcabe8`). Con el deploy salió también `01cb91f` (ayuda de tipos de renglón de compra), que ya estaba en `main`.
+- `supabase migration list --linked`: el remoto coincidía con el local hasta `20261106000007`; faltaban sólo las 8 de Finanzas.
+- `supabase db push --linked`: aplicó de `20261111000001` a `20261112000005` sin errores.
+- `npm run deploy`: versión `c3bd4fa1-281c-42ba-9e88-0cf192cf2c42` del worker `silfe-costos`. No hay secretos nuevos.
+- Chequeo sin sesión en producción: `/login` 200; `/bancos` y `/caja` redirigen al login. No se probó con sesión en producción.
+- Para empezar a usarlo: crear las cuentas en Bancos y Caja y cargar el saldo inicial de cada una como ajuste de ingreso. Los recibos y órdenes anteriores no se reasignan.
