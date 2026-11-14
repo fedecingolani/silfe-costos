@@ -71,4 +71,4 @@ la base para provincia.
 
 ## Avance
 
-T1, T2 y T3 hechas. Pendiente: probar en el navegador, revisión RDD y PR. Variantes con palabras distintas ("Banco Galicia" vs "Banco de Galicia") quedan como bancos separados: falta unificar duplicados.
+T1, T2 y T3 hechas. Revisión RDD: riesgo medio, declinada por el usuario para este candidato (14/11). Pendiente: probar en el navegador y PR. Variantes con palabras distintas ("Banco Galicia" vs "Banco de Galicia") quedan como bancos separados: falta unificar duplicados.
