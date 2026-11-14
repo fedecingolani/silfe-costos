@@ -115,10 +115,7 @@ La revisión de toda la feature junta excedió el límite de contexto del reviso
 
 ## Pendientes y preguntas abiertas
 
-- Caja en negativo: el usuario decidió bloquearlo (T6).
-- Movimientos futuros en el detalle no siguen el rango filtrado.
-- `EditorOrdenPago` usa la prop vieja `tipo` de `SelectorCuenta`; en una fila de cheque propio el botón "Quitar" baja de línea.
-- Sugerencias de la revisión de T1+T2: validar `tipo` en `finanzas/acciones.ts`, test del `banco` completado con el nombre de la cuenta.
+Cerrados en T7.
 
 ### T6 Caja sin saldo negativo — hecho
 
@@ -130,3 +127,15 @@ La revisión de toda la feature junta excedió el límite de contexto del reviso
 - Checks: `npm run typecheck` ok; `npm run lint` ok; `npm test` 1314 pasan (RED observado); `supabase migration up --local` ok; `supabase test db` 1601 pasan (30 nuevos, RED observado).
 - Probado en la app local: egreso en la caja negativa rechazado con el mensaje; ingreso aceptado (la caja pasó a $ 8.500); transferencia de $ 9.000 desde la caja rechazada.
 - Revisión RDD aprobada. WARNING: la concurrencia (dos escrituras a la vez sobre la misma caja) no tiene test automático; el diseño con advisory lock se razonó pero no se probó en paralelo. Sugerencias: el formato del monto en el mensaje para importes enormes, y el orden de bloqueo entre sentencias de una misma transacción.
+
+### T7 Pendientes — hecho
+
+- Commit `b0c1424` en `feat/finanzas-07-pendientes` (sobre T6). Ruta: delegada (un writer).
+- Movimientos futuros: sin fecha "hasta", la tabla del detalle incluye los futuros (marcados "Futuro"); las tarjetas de arriba siguen siendo de toda la cuenta y lo dicen. Helper `rangoMovimientosCuenta`.
+- `SelectorCuenta`: los dos editores usan `tipoCuenta`; se quitó la prop vieja. El botón "Quitar" del cheque propio ya no baja de línea.
+- `AnularAjuste` pasó a `AnularMovimiento`.
+- Las acciones de ajustes validan el tipo de cuenta (`esTipoCuentaFondos`) y revalidan según el tipo real de la cuenta.
+- Tests: 3 casos más del trigger de depósito de cheques y más mensajes de error de transferencias. Los de `banco` completado ya existían, igual que el aviso de "no hay bancos activos" en el cheque.
+- Concurrencia de FN011 probada a mano con dos sesiones de `psql` sobre la base local: la segunda espera a la primera y recibe FN011, sin deadlock y con el saldo final correcto. El script no queda en el repo y los datos de la prueba se borraron.
+- Checks: `npm run typecheck` ok; `npm run lint` ok; `npm test` 1322 pasan (RED observado en los helpers nuevos); `supabase test db` 1604, con sólo la falla horaria conocida de `pagos_compra_test` 87-89.
+- Probado en la app local: el cheque propio del 15/12 aparece en el banco sin tocar el filtro.
