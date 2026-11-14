@@ -2,6 +2,7 @@ import "server-only";
 import type { createClient } from "@/lib/supabase/server";
 import type { DebitoPendiente } from "@/lib/cobranzas/imputacion";
 import type { MedioBorrador } from "@/lib/cobranzas/recibo";
+import type { CuentaElegible } from "@/lib/finanzas/medios";
 import type {
   ClaseComprobante,
   CondicionPago,
@@ -109,6 +110,8 @@ export const COLUMNAS_RECIBO =
 export type ReciboLeido = Omit<Recibo, "creado_por" | "actualizado_en">;
 
 export type MedioLeido = Omit<ReciboMedio, "recibo_id"> & {
+  /** La caja o la cuenta bancaria del medio, si tiene. */
+  cuenta: { nombre: string } | null;
   cheque: Pick<
     Cheque,
     "id" | "tipo" | "banco" | "numero" | "fecha_emision" | "fecha_pago" | "librador" | "librador_cuit" | "estado"
@@ -133,8 +136,9 @@ export async function cargarRecibo(
     supabase
       .from("recibo_medio")
       .select(
-        "id, orden, tipo, importe, banco, referencia, cheque_id, retencion_tipo, retencion_jurisdiccion, certificado, " +
-          "fecha_retencion, cheque(id, tipo, banco, numero, fecha_emision, fecha_pago, librador, librador_cuit, estado)",
+        "id, orden, tipo, importe, cuenta_id, banco, referencia, cheque_id, retencion_tipo, retencion_jurisdiccion, " +
+          "certificado, fecha_retencion, cuenta:cuenta_id(nombre), " +
+          "cheque(id, tipo, banco, numero, fecha_emision, fecha_pago, librador, librador_cuit, estado)",
       )
       .eq("recibo_id", id)
       .order("orden"),
@@ -162,6 +166,7 @@ export function medioEditable(m: MedioLeido): MedioBorrador {
   return {
     tipo: m.tipo,
     importe: Number(m.importe),
+    cuentaId: m.cuenta_id,
     banco: m.banco,
     referencia: m.referencia,
     cheque: m.cheque
@@ -184,6 +189,17 @@ export function medioEditable(m: MedioLeido): MedioBorrador {
           }
         : null,
   };
+}
+
+/** Cajas y cuentas bancarias activas, para elegir la cuenta de cada medio en el editor. */
+export async function cargarCuentasCobro(supabase: Supabase): Promise<CuentaElegible[] | string> {
+  const { data, error } = await supabase
+    .from("cuenta_fondos")
+    .select("id, tipo, nombre")
+    .eq("activa", true)
+    .order("nombre");
+  if (error) return `No se pudieron leer las cajas y cuentas bancarias: ${error.message}`;
+  return (data ?? []) as CuentaElegible[];
 }
 
 /** Imputación vigente recibida por un débito: de un recibo emitido o de una nota de crédito. */

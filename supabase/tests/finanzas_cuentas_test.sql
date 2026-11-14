@@ -73,7 +73,7 @@ select throws_ok(
   'FN006', null, 'El tipo de la cuenta no cambia'
 );
 select lives_ok(
-  $$update cuenta_fondos set nombre = 'Galicia cuenta corriente' where id = '00000000-0000-4000-8000-00000000f001'$$,
+  $$update cuenta_fondos set nombre = 'Galicia cuenta corriente de prueba' where id = '00000000-0000-4000-8000-00000000f001'$$,
   'Los demás datos de la cuenta se editan'
 );
 

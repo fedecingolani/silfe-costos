@@ -33,7 +33,7 @@ No existe ninguna cuenta de fondos. El banco es texto libre en `cheque.banco`, `
 Entrega: un PR por tarea, cada uno sobre la rama de la anterior, como en compras y en la API de compras.
 
 - [x] T1 Cuentas y ajustes manuales: esquema + RLS, vista de movimientos y saldos (sólo ajustes por ahora), pantallas Bancos y Caja (lista con saldo, alta/edición de cuenta, detalle con movimientos, ajuste y anulación). Rama `feat/finanzas-01-cuentas`.
-- [ ] T2 Recibos: `recibo_medio.cuenta_id`, selector en el editor, obligatorio al emitir, movimientos en la vista. Rama `feat/finanzas-02-recibos`.
+- [x] T2 Recibos: `recibo_medio.cuenta_id`, selector en el editor, obligatorio al emitir, movimientos en la vista. Rama `feat/finanzas-02-recibos`.
 - [ ] T3 Órdenes de pago: `orden_pago_medio.cuenta_id`, selector en el editor, obligatorio al confirmar, cheque propio por fecha de pago. Rama `feat/finanzas-03-pagos`.
 - [ ] T4 Cheques: cuenta destino al depositar, débito al rechazar un depositado. Rama `feat/finanzas-04-cheques`.
 - [ ] T5 Transferencias entre cuentas. Rama `feat/finanzas-05-transferencias`.
@@ -59,4 +59,17 @@ Entrega: un PR por tarea, cada uno sobre la rama de la anterior, como en compras
 - Observaciones no bloqueantes de esa revisión:
   - Importe "150.000" sin coma se leía como 150. Corregido en `0d0afc0`: sin coma, los puntos en grupos de tres son de miles (test RED → GREEN, probado en pantalla con "2.000").
   - Pendiente (sugerencia): la cabecera de movimientos futuros en `PaginaCuenta.tsx` no refleja el rango filtrado.
+
+### T2 Recibos — hecho
+
+- Rama `feat/finanzas-02-recibos` (sobre T1). Ruta: delegada (un writer; migración, tests de base, editor y detalle).
+- Migración `20261111000003_finanzas_recibos.sql`: `recibo_medio.cuenta_id`; códigos FN007 (falta la cuenta al emitir), FN008 (tipo de cuenta distinto al medio), FN009 (cheque, echeq o retención con cuenta); FN004 (cuenta inactiva) se reusa. Un trigger valida cada medio y otro sólo el paso de borrador a emitido.
+- Transferencia: `guardar_borrador_recibo` completa `banco` con el nombre de la cuenta, así el detalle y el PDF siguen sin cambios y el recibo conserva el nombre de ese momento.
+- `v_movimiento_fondos`: un movimiento por recibo y por cuenta (dos efectivos a la misma caja suman), con link a `/cobranzas/<id>`.
+- Un borrador cuya cuenta se desactivó pierde esa selección al reabrirlo (toma la única cuenta del tipo, o ninguna).
+- `finanzas_cuentas_test.sql` usa un nombre de cuenta único para no chocar con datos de la base local.
+- Checks: `npm run typecheck` ok; `npm run lint` ok; `npm test` 1282 pasan; `supabase migration up --local` ok; `supabase test db` 1476 pasan (RED observado: 33 de 34 checks nuevos fallaban sin la migración).
+- Revisión nativa (T1 + T2): pedida (granted), lente de confiabilidad, aprobada y acusada (`review-4791fcbbf778a9e0`). Observación WARNING corregida en `4c2f12b`: el test de borrador contaba recibos de toda la base. Quedan como sugerencias: validar `tipo` en `finanzas/acciones.ts:105`, nombres de fixtures, y un test del `banco` que se completa con el nombre de la cuenta.
+- Falla ajena a esta rama: `pagos_compra_test.sql` tests 87-89 fallan entre las 21 y las 24 hs de Argentina (en UTC ya es el día siguiente; CB018 en `rechazar_cheque`). Ni el test ni la función se tocan acá; pasan en horario normal.
+- Probado en la app local: el editor preselecciona la única caja y el único banco; recibo de $35.000 (10.000 en efectivo + 25.000 por transferencia) emitido; aparece en Caja y en Bancos con su saldo y link al recibo; al anularlo desaparece de los dos.
 - Probado en la app local con el usuario del seed: alta de cuenta bancaria (rechaza CBU de 5 dígitos), alta de caja (sin campos bancarios), ajuste de ingreso y de egreso con saldo acumulado, anulación (exige motivo y saca el ajuste del saldo), `/caja/<id de banco>` da 404. Corregido en la prueba: el diálogo de anular heredaba `whitespace-nowrap` de la celda y se cortaba en pantallas angostas; "1 cuentas" pasó a singular.

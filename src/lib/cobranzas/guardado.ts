@@ -11,6 +11,7 @@ import {
   type TipoMedioPago,
   type TipoRetencion,
 } from "@/lib/tipos";
+import { tipoCuentaDelMedio } from "@/lib/finanzas/medios";
 import { totalRecibo, validarRecibo, type MedioBorrador } from "./recibo";
 import {
   pagoContado,
@@ -41,6 +42,8 @@ export type ReciboParaGuardar = {
   medios: {
     tipo: TipoMedioPago;
     importe: number;
+    /** Sólo efectivo y transferencia. */
+    cuenta_id: string | null;
     banco: string | null;
     referencia: string | null;
     cheque: {
@@ -72,6 +75,8 @@ const texto = (valor: unknown): string | null =>
 
 const importe = (valor: unknown): number => (typeof valor === "number" ? valor : Number.NaN);
 
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 const objeto = (valor: unknown): Record<string, unknown> =>
   typeof valor === "object" && valor !== null ? (valor as Record<string, unknown>) : {};
 
@@ -79,11 +84,14 @@ function leerMedio(valor: unknown): MedioBorrador | null {
   const m = objeto(valor);
   if (!(TIPOS_MEDIO_PAGO as readonly unknown[]).includes(m.tipo)) return null;
   const tipo = m.tipo as TipoMedioPago;
+  const cuentaId = texto(m.cuentaId);
+  if (cuentaId !== null && !UUID.test(cuentaId)) return null;
   const cheque = objeto(m.cheque);
   const retencion = objeto(m.retencion);
   return {
     tipo,
     importe: importe(m.importe),
+    cuentaId,
     banco: texto(m.banco),
     referencia: texto(m.referencia),
     cheque:
@@ -162,6 +170,7 @@ export function armarRecibo(
       medios: enviado.medios.map((m) => ({
         tipo: m.tipo,
         importe: m.importe,
+        cuenta_id: tipoCuentaDelMedio(m.tipo) ? (m.cuentaId ?? null) : null,
         banco: m.tipo === "transferencia" ? (m.banco ?? null) : null,
         referencia: m.tipo === "transferencia" ? (m.referencia ?? null) : null,
         cheque:

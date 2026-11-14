@@ -6,6 +6,7 @@
  */
 import type { TipoMedioPago, TipoRetencion } from "@/lib/tipos";
 import { esFechaValida } from "@/lib/comprobantes/validacion";
+import { tipoCuentaDelMedio } from "@/lib/finanzas/medios";
 import { sumarPesos } from "./dinero";
 
 export type ChequeBorrador = {
@@ -31,7 +32,9 @@ export type RetencionBorrador = {
 export type MedioBorrador = {
   tipo: TipoMedioPago;
   importe: number;
-  /** Transferencia: banco o cuenta destino. */
+  /** Efectivo: la caja; transferencia: la cuenta bancaria. Obligatoria al emitir, no en el borrador. */
+  cuentaId?: string | null;
+  /** Transferencia: banco o cuenta destino (texto de los borradores anteriores a las cuentas). */
   banco?: string | null;
   referencia?: string | null;
   cheque?: ChequeBorrador | null;
@@ -83,6 +86,18 @@ export function validarRecibo(recibo: ReciboBorrador): string[] {
     errores.push(...propios.map((error) => `Medio ${indice + 1}: ${error}`));
   });
   return errores;
+}
+
+/**
+ * Lo que falta para emitir (además de validarRecibo): la caja del efectivo y
+ * la cuenta bancaria de la transferencia. La base lo vuelve a exigir (FN007).
+ */
+export function erroresEmision(medios: readonly Pick<MedioBorrador, "tipo" | "cuentaId">[]): string[] {
+  return medios.flatMap((medio, indice) => {
+    const tipoCuenta = tipoCuentaDelMedio(medio.tipo);
+    if (!tipoCuenta || !vacio(medio.cuentaId)) return [];
+    return [`Medio ${indice + 1}: elegí ${tipoCuenta === "caja" ? "la caja" : "la cuenta bancaria"}.`];
+  });
 }
 
 /** Total del recibo: la suma de sus medios, exacta a centavos. */

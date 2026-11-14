@@ -123,6 +123,12 @@ insert into recibo_punto_venta (numero, nombre) values (9, 'Recibos de prueba');
 
 set local role authenticated;
 
+-- Cuentas de fondos: desde 20261111000003_finanzas_recibos.sql el efectivo
+-- se emite con su caja y la transferencia con su cuenta bancaria.
+insert into cuenta_fondos (id, tipo, nombre) values
+  ('cb900000-0000-4000-8000-000000000001', 'caja', 'Caja de cobranzas de prueba'),
+  ('cb900000-0000-4000-8000-000000000002', 'banco', 'Banco de cobranzas de prueba');
+
 -- ---------------------------------------------------------------------
 -- Alta de recibos y medios
 -- ---------------------------------------------------------------------
@@ -189,8 +195,8 @@ select lives_ok(
   'Una retención de IIBB con jurisdicción y certificado se carga'
 );
 select lives_ok(
-  $$insert into recibo_medio (recibo_id, orden, tipo, importe, banco, referencia)
-    values ('cb200000-0000-0000-0000-000000000001', 2, 'transferencia', 90, 'Banco Nación', 'TR-1')$$,
+  $$insert into recibo_medio (recibo_id, orden, tipo, importe, banco, referencia, cuenta_id)
+    values ('cb200000-0000-0000-0000-000000000001', 2, 'transferencia', 90, 'Banco Nación', 'TR-1', 'cb900000-0000-4000-8000-000000000002')$$,
   'Una transferencia se carga'
 );
 
@@ -564,8 +570,8 @@ values ('cb300000-0000-0000-0000-000000000002', 'cb200000-0000-0000-0000-0000000
         'cb000000-0000-0000-0000-000000000003', 'echeq', 'Macro', 'E-77', '2026-11-15', 50);
 insert into recibo_medio (recibo_id, orden, tipo, importe, cheque_id) values
   ('cb200000-0000-0000-0000-000000000003', 1, 'echeq', 50, 'cb300000-0000-0000-0000-000000000002');
-insert into recibo_medio (recibo_id, orden, tipo, importe) values
-  ('cb200000-0000-0000-0000-000000000003', 2, 'efectivo', 30);
+insert into recibo_medio (recibo_id, orden, tipo, importe, cuenta_id) values
+  ('cb200000-0000-0000-0000-000000000003', 2, 'efectivo', 30, 'cb900000-0000-4000-8000-000000000001');
 insert into imputacion (recibo_id, comprobante_id, importe)
 values ('cb200000-0000-0000-0000-000000000003', 'cb100000-0000-0000-0000-000000000008', 50);
 
@@ -772,7 +778,7 @@ select throws_ok(
 insert into recibo (id, punto_venta, cliente_id, comprobante_contado_id, fecha, total) values
   ('cb200000-0000-0000-0000-000000000004', 9, 'cb000000-0000-0000-0000-000000000003',
    'cb100000-0000-0000-0000-000000000009', '2026-10-15', 25);
-insert into recibo_medio (recibo_id, tipo, importe) values ('cb200000-0000-0000-0000-000000000004', 'efectivo', 25);
+insert into recibo_medio (recibo_id, tipo, importe, cuenta_id) values ('cb200000-0000-0000-0000-000000000004', 'efectivo', 25, 'cb900000-0000-4000-8000-000000000001');
 select throws_ok(
   $$insert into imputacion (recibo_id, comprobante_id, importe)
     values ('cb200000-0000-0000-0000-000000000004', 'cb100000-0000-0000-0000-000000000010', 5)$$,
@@ -938,7 +944,7 @@ insert into cliente (id, razon_social, condicion_iva) values
 -- C5: un recibo de 100 sin imputar (todo a favor).
 insert into recibo (id, punto_venta, cliente_id, fecha, total) values
   ('cb200000-0000-0000-0000-000000000051', 9, 'cb000000-0000-0000-0000-000000000005', '2026-10-05', 100);
-insert into recibo_medio (recibo_id, tipo, importe) values ('cb200000-0000-0000-0000-000000000051', 'efectivo', 100);
+insert into recibo_medio (recibo_id, tipo, importe, cuenta_id) values ('cb200000-0000-0000-0000-000000000051', 'efectivo', 100, 'cb900000-0000-4000-8000-000000000001');
 select emitir_recibo('cb200000-0000-0000-0000-000000000051');
 
 insert into comprobante (id, punto_venta, ambiente, clase, letra, tipo_arca, cliente_id, condicion_pago, total, neto, fecha)
@@ -1098,9 +1104,9 @@ insert into cliente (id, razon_social, condicion_iva) values
 insert into recibo (id, punto_venta, cliente_id, fecha, total) values
   ('cb200000-0000-0000-0000-000000000075', 9, 'cb000000-0000-0000-0000-000000000009', '2026-10-01', 40),
   ('cb200000-0000-0000-0000-000000000076', 9, 'cb000000-0000-0000-0000-000000000009', '2026-10-02', 40);
-insert into recibo_medio (recibo_id, tipo, importe) values
-  ('cb200000-0000-0000-0000-000000000075', 'efectivo', 40),
-  ('cb200000-0000-0000-0000-000000000076', 'efectivo', 40);
+insert into recibo_medio (recibo_id, tipo, importe, cuenta_id) values
+  ('cb200000-0000-0000-0000-000000000075', 'efectivo', 40, 'cb900000-0000-4000-8000-000000000001'),
+  ('cb200000-0000-0000-0000-000000000076', 'efectivo', 40, 'cb900000-0000-4000-8000-000000000001');
 select emitir_recibo('cb200000-0000-0000-0000-000000000075');
 select emitir_recibo('cb200000-0000-0000-0000-000000000076');
 insert into comprobante (id, punto_venta, ambiente, clase, letra, tipo_arca, cliente_id, condicion_pago, total, neto, fecha)
@@ -1172,7 +1178,7 @@ create temporary table t_contador on commit drop as
   select ultimo_numero from recibo_punto_venta where numero = 9;
 insert into recibo (id, punto_venta, cliente_id, fecha, total) values
   ('cb200000-0000-0000-0000-000000000091', 9, 'cb000000-0000-0000-0000-000000000004', '2026-10-18', 5);
-insert into recibo_medio (recibo_id, tipo, importe) values ('cb200000-0000-0000-0000-000000000091', 'efectivo', 5);
+insert into recibo_medio (recibo_id, tipo, importe, cuenta_id) values ('cb200000-0000-0000-0000-000000000091', 'efectivo', 5, 'cb900000-0000-4000-8000-000000000001');
 select is(
   emitir_recibo('cb200000-0000-0000-0000-000000000091'),
   (select ultimo_numero + 1 from t_contador),
@@ -1468,7 +1474,7 @@ update comprobante set estado = 'autorizado', numero = 111 where id = 'cb100000-
 insert into recibo (id, punto_venta, cliente_id, fecha, total, comprobante_contado_id) values
   ('cb200000-0000-0000-0000-000000000111', 9, 'cb000000-0000-0000-0000-000000000011', '2026-10-10', 45,
    'cb100000-0000-0000-0000-000000000111');
-insert into recibo_medio (recibo_id, tipo, importe) values ('cb200000-0000-0000-0000-000000000111', 'efectivo', 45);
+insert into recibo_medio (recibo_id, tipo, importe, cuenta_id) values ('cb200000-0000-0000-0000-000000000111', 'efectivo', 45, 'cb900000-0000-4000-8000-000000000001');
 insert into imputacion (recibo_id, comprobante_id, importe)
 values ('cb200000-0000-0000-0000-000000000111', 'cb100000-0000-0000-0000-000000000111', 45);
 
@@ -1495,7 +1501,7 @@ reset role;
 insert into recibo (id, punto_venta, cliente_id, fecha, total, comprobante_contado_id) values
   ('cb200000-0000-0000-0000-000000000112', 9, 'cb000000-0000-0000-0000-000000000011', '2026-10-11', 45,
    'cb100000-0000-0000-0000-000000000111');
-insert into recibo_medio (recibo_id, tipo, importe) values ('cb200000-0000-0000-0000-000000000112', 'efectivo', 45);
+insert into recibo_medio (recibo_id, tipo, importe, cuenta_id) values ('cb200000-0000-0000-0000-000000000112', 'efectivo', 45, 'cb900000-0000-4000-8000-000000000001');
 insert into imputacion (recibo_id, comprobante_id, importe)
 values ('cb200000-0000-0000-0000-000000000112', 'cb100000-0000-0000-0000-000000000111', 45);
 set local role authenticated;

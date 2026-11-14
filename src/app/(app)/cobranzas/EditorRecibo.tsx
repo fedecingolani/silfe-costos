@@ -9,7 +9,8 @@ import { aDecimal } from "@/lib/comprobantes/borrador";
 import { nombreComprobante } from "@/lib/comprobantes/listado";
 import { aCentavos, sumarPesos } from "@/lib/cobranzas/dinero";
 import { completarEnOrden, pagoContado, saldoAFavor, validarImputaciones } from "@/lib/cobranzas/imputacion";
-import { totalRecibo, validarRecibo, type MedioBorrador } from "@/lib/cobranzas/recibo";
+import { erroresEmision, totalRecibo, validarRecibo, type MedioBorrador } from "@/lib/cobranzas/recibo";
+import { cuentaPorDefecto, cuentasDelMedio, tipoCuentaDelMedio, type CuentaElegible } from "@/lib/finanzas/medios";
 import { erroresImporteImputado, leerImputacionesEditor } from "@/lib/cobranzas/editor";
 import type { ReciboEnviado } from "@/lib/cobranzas/guardado";
 import {
@@ -47,6 +48,9 @@ type FilaMedio = {
   clave: number;
   tipo: TipoMedioPago;
   importe: string;
+  /** Caja o cuenta bancaria ("" sin elegir). */
+  cuentaId: string;
+  /** Texto de los borradores anteriores a las cuentas: se conserva, ya no se edita. */
   banco: string;
   referencia: string;
   chequeBanco: string;
@@ -68,6 +72,7 @@ function filaVacia(tipo: TipoMedioPago = "efectivo", importe = ""): FilaMedio {
     clave: siguienteClave++,
     tipo,
     importe,
+    cuentaId: "",
     banco: "",
     referencia: "",
     chequeBanco: "",
@@ -83,9 +88,20 @@ function filaVacia(tipo: TipoMedioPago = "efectivo", importe = ""): FilaMedio {
   };
 }
 
-function filaDeMedio(m: MedioBorrador): FilaMedio {
+/** La cuenta guardada si sigue activa y es del tipo del medio; si no, la única de ese tipo. */
+function cuentaDeFila(cuentas: readonly CuentaElegible[], tipo: TipoMedioPago, actual: string | null | undefined): string {
+  if (actual && cuentasDelMedio(cuentas, tipo).some((c) => c.id === actual)) return actual;
+  return cuentaPorDefecto(cuentas, tipo) ?? "";
+}
+
+function filaNueva(cuentas: readonly CuentaElegible[], tipo: TipoMedioPago = "efectivo", importe = ""): FilaMedio {
+  return { ...filaVacia(tipo, importe), cuentaId: cuentaDeFila(cuentas, tipo, null) };
+}
+
+function filaDeMedio(m: MedioBorrador, cuentas: readonly CuentaElegible[]): FilaMedio {
   return {
     ...filaVacia(m.tipo, String(m.importe)),
+    cuentaId: cuentaDeFila(cuentas, m.tipo, m.cuentaId),
     banco: m.banco ?? "",
     referencia: m.referencia ?? "",
     chequeBanco: m.cheque?.banco ?? "",
@@ -106,6 +122,7 @@ function medioDeFila(f: FilaMedio): MedioBorrador {
   return {
     tipo: f.tipo,
     importe: aDecimal(f.importe) ?? Number.NaN,
+    cuentaId: tipoCuentaDelMedio(f.tipo) && f.cuentaId ? f.cuentaId : null,
     banco: f.tipo === "transferencia" ? f.banco : null,
     referencia: f.tipo === "transferencia" ? f.referencia : null,
     cheque: esCheque
@@ -128,6 +145,44 @@ function medioDeFila(f: FilaMedio): MedioBorrador {
           }
         : null,
   };
+}
+
+/** Selector de la caja (efectivo) o la cuenta bancaria (transferencia) del medio: sólo las activas. */
+function SelectorCuenta({
+  cuentas,
+  tipo,
+  valor,
+  onCambiar,
+}: {
+  cuentas: readonly CuentaElegible[];
+  tipo: TipoMedioPago;
+  valor: string;
+  onCambiar: (valor: string) => void;
+}) {
+  const esCaja = tipoCuentaDelMedio(tipo) === "caja";
+  const posibles = cuentasDelMedio(cuentas, tipo);
+  return (
+    <label className="block sm:col-span-3">
+      <span className="etiqueta">{esCaja ? "Caja" : "Cuenta bancaria"} (para emitir)</span>
+      <select value={valor} onChange={(e) => onCambiar(e.target.value)} className="campo">
+        <option value="">Elegí…</option>
+        {posibles.map((c) => (
+          <option key={c.id} value={c.id}>
+            {c.nombre}
+          </option>
+        ))}
+      </select>
+      {posibles.length === 0 && (
+        <span className="mt-1 block text-xs text-amber-700">
+          No hay {esCaja ? "cajas activas" : "cuentas bancarias activas"}: creá una en{" "}
+          <Link href={esCaja ? "/caja" : "/bancos"} className="text-marca-700 hover:underline">
+            {esCaja ? "Caja" : "Bancos"}
+          </Link>
+          .
+        </span>
+      )}
+    </label>
+  );
 }
 
 /** Campo de texto con su etiqueta. */
@@ -170,6 +225,7 @@ export function EditorRecibo({
   recibo,
   contado,
   cuentaInicial,
+  cuentas,
   clienteInicial = null,
   hoy,
   aviso = null,
@@ -177,6 +233,8 @@ export function EditorRecibo({
   recibo: ReciboEditable | null;
   contado: ContadoAPagar | null;
   cuentaInicial: CuentaCliente | null;
+  /** Cajas y cuentas bancarias activas, para la cuenta de cada medio. */
+  cuentas: CuentaElegible[];
   /** Cliente ya elegido al abrir una cobranza nueva (`?cliente=` desde su cuenta corriente). */
   clienteInicial?: ClienteEncontrado | null;
   hoy: string;
@@ -198,8 +256,8 @@ export function EditorRecibo({
   const [observaciones, setObservaciones] = useState(recibo?.observaciones ?? "");
   const [filas, setFilas] = useState<FilaMedio[]>(() =>
     recibo && recibo.medios.length > 0
-      ? recibo.medios.map(filaDeMedio)
-      : [filaVacia("efectivo", contado ? String(contado.total) : "")],
+      ? recibo.medios.map((m) => filaDeMedio(m, cuentas))
+      : [filaNueva(cuentas, "efectivo", contado ? String(contado.total) : "")],
   );
   const [cuenta, setCuenta] = useState<CuentaCliente | null>(cuentaInicial);
   const [cargandoCuenta, setCargandoCuenta] = useState(false);
@@ -287,6 +345,12 @@ export function EditorRecibo({
     setIntentado(true);
     if (errores.length > 0) {
       setMensaje({ error: errores.join(" ") });
+      return;
+    }
+    // El borrador se guarda sin cuenta; para emitir, el efectivo y la transferencia la necesitan.
+    const faltan = paraEmitir ? erroresEmision(medios) : [];
+    if (faltan.length > 0) {
+      setMensaje({ error: faltan.join(" ") });
       return;
     }
     iniciar(async () => {
@@ -407,7 +471,7 @@ export function EditorRecibo({
         titulo="Medios de pago"
         descripcion={contado ? `Tienen que sumar exactamente ${pesos(contado.total)}.` : undefined}
         acciones={
-          <button type="button" onClick={() => setFilas((f) => [...f, filaVacia()])} className="boton-secundario px-2 py-1 text-xs">
+          <button type="button" onClick={() => setFilas((f) => [...f, filaNueva(cuentas)])} className="boton-secundario px-2 py-1 text-xs">
             + Agregar medio
           </button>
         }
@@ -420,7 +484,10 @@ export function EditorRecibo({
                 <span className="etiqueta">Medio {indice + 1}</span>
                 <select
                   value={f.tipo}
-                  onChange={(e) => cambiarFila(f.clave, { tipo: e.target.value as TipoMedioPago })}
+                  onChange={(e) => {
+                    const tipo = e.target.value as TipoMedioPago;
+                    cambiarFila(f.clave, { tipo, cuentaId: cuentaDeFila(cuentas, tipo, f.cuentaId) });
+                  }}
                   className="campo"
                 >
                   {TIPOS_MEDIO_PAGO.map((t) => (
@@ -440,14 +507,17 @@ export function EditorRecibo({
                 />
               </label>
 
+              {tipoCuentaDelMedio(f.tipo) && (
+                <SelectorCuenta
+                  cuentas={cuentas}
+                  tipo={f.tipo}
+                  valor={f.cuentaId}
+                  onCambiar={(v) => cambiarFila(f.clave, { cuentaId: v })}
+                />
+              )}
+
               {f.tipo === "transferencia" && (
                 <>
-                  <Campo
-                    etiqueta="Banco o cuenta destino"
-                    valor={f.banco}
-                    onCambiar={(v) => cambiarFila(f.clave, { banco: v })}
-                    className="sm:col-span-3"
-                  />
                   <Campo
                     etiqueta="Referencia"
                     valor={f.referencia}

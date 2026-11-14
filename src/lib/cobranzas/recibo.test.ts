@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { formatearNumeroRecibo, totalRecibo, validarRecibo, type MedioBorrador, type ReciboBorrador } from "./recibo";
+import {
+  erroresEmision,
+  formatearNumeroRecibo,
+  totalRecibo,
+  validarRecibo,
+  type MedioBorrador,
+  type ReciboBorrador,
+} from "./recibo";
 
 const CLIENTE = "c0000000-0000-0000-0000-000000000001";
 
@@ -100,5 +107,28 @@ describe("formatearNumeroRecibo", () => {
   it("formatea R-00001-00000001", () => {
     expect(formatearNumeroRecibo(1, 1)).toBe("R-00001-00000001");
     expect(formatearNumeroRecibo(12, 345)).toBe("R-00012-00000345");
+  });
+});
+
+describe("erroresEmision", () => {
+  it("pide la caja del efectivo y la cuenta bancaria de la transferencia", () => {
+    expect(
+      erroresEmision([efectivo(100), { tipo: "transferencia", importe: 50 }, cheque(), retencion()]),
+    ).toEqual(["Medio 1: elegí la caja.", "Medio 2: elegí la cuenta bancaria."]);
+  });
+
+  it("con las cuentas elegidas no hay errores (cheques y retenciones no llevan cuenta)", () => {
+    expect(
+      erroresEmision([
+        { ...efectivo(100), cuentaId: "caja-1" },
+        { tipo: "transferencia", importe: 50, cuentaId: "banco-1" },
+        cheque(),
+        retencion(),
+      ]),
+    ).toEqual([]);
+  });
+
+  it("un borrador se guarda sin cuenta: validarRecibo no la pide", () => {
+    expect(validarRecibo(recibo([efectivo(100)]))).toEqual([]);
   });
 });

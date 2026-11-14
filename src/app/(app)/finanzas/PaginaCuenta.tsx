@@ -8,7 +8,8 @@ import { fecha, pesos } from "@/lib/formato";
 import { hoyArgentina } from "@/lib/clientes/seguimiento";
 import { rangoMovimientos } from "@/lib/cobranzas/cuenta-corriente";
 import { PANTALLA_CUENTAS } from "@/lib/finanzas/cuentas";
-import type { TipoCuentaFondos } from "@/lib/tipos";
+import { enlaceOrigen, nombreOrigen } from "@/lib/finanzas/movimientos";
+import type { MovimientoFondos, TipoCuentaFondos } from "@/lib/tipos";
 import { actualizarCuenta } from "./acciones";
 import { AnularAjuste } from "./AnularAjuste";
 import { cargarCuenta, cargarMovimientos, LIMITE_MOVIMIENTOS } from "./datos";
@@ -17,7 +18,16 @@ import { RegistrarAjuste } from "./RegistrarAjuste";
 
 export type ParametrosCuenta = { desde?: string; hasta?: string; editar?: string };
 
-const NOMBRE_ORIGEN: Record<string, string> = { ajuste: "Ajuste" };
+/** Descripción del movimiento, con enlace a su origen si tiene página (un recibo). */
+function Descripcion({ movimiento }: { movimiento: MovimientoFondos }) {
+  const enlace = enlaceOrigen(movimiento);
+  if (!enlace) return <>{movimiento.descripcion}</>;
+  return (
+    <Link href={enlace} className="text-marca-700 hover:underline">
+      {movimiento.descripcion}
+    </Link>
+  );
+}
 
 function Dato({ etiqueta, children }: { etiqueta: string; children: ReactNode }) {
   return (
@@ -114,7 +124,7 @@ export async function PaginaCuenta({
         descripcion={
           movimientos.length >= LIMITE_MOVIMIENTOS
             ? `Se muestran los ${LIMITE_MOVIMIENTOS} más recientes del rango: acote las fechas.`
-            : "Del más nuevo al más viejo. El saldo acumulado incluye los movimientos anteriores al rango. Los ajustes anulados no aparecen."
+            : "Del más nuevo al más viejo. El saldo acumulado incluye los movimientos anteriores al rango. Los ajustes y recibos anulados no aparecen."
         }
       >
         <form method="get" className="flex flex-wrap items-end gap-3 border-b border-stone-200 p-4">
@@ -162,9 +172,11 @@ export async function PaginaCuenta({
                       </span>
                     )}
                   </td>
-                  <td className="text-stone-500">{NOMBRE_ORIGEN[m.origen] ?? m.origen}</td>
+                  <td className="text-stone-500">{nombreOrigen(m.origen)}</td>
                   <td>
-                    <div>{m.descripcion}</div>
+                    <div>
+                      <Descripcion movimiento={m} />
+                    </div>
                     {m.observacion && <div className="text-xs text-stone-400">{m.observacion}</div>}
                   </td>
                   <td className="text-right tabular-nums">{m.ingreso ? pesos(m.ingreso) : ""}</td>

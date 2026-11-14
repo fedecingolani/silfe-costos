@@ -20,6 +20,7 @@ import {
 import type { ClienteEncontrado } from "../../comprobantes/acciones";
 import {
   cargarComprobanteContado,
+  cargarCuentasCobro,
   cargarDebitos,
   cargarRecibo,
   medioEditable,
@@ -58,7 +59,10 @@ function DetalleMedio({ medio }: { medio: MedioLeido }) {
     );
   }
   if (medio.tipo === "transferencia") {
-    return <span>{[medio.banco, medio.referencia].filter(Boolean).join(" · ") || "—"}</span>;
+    return <span>{[medio.banco ?? medio.cuenta?.nombre, medio.referencia].filter(Boolean).join(" · ") || "—"}</span>;
+  }
+  if (medio.tipo === "efectivo" && medio.cuenta) {
+    return <span>{medio.cuenta.nombre}</span>;
   }
   if (medio.tipo === "retencion") {
     const tipo = medio.retencion_tipo ? NOMBRES_RETENCION[medio.retencion_tipo as TipoRetencion] : "—";
@@ -111,8 +115,12 @@ export default async function ReciboPage({
       if (typeof c === "string") return <p className="text-sm text-red-700">{c}</p>;
       contado = { id: c.id, texto: `${nombreComprobante(c.clase, null)} ${c.numeroTexto}`, total: c.total, cliente };
     }
-    const cuenta = contado ? null : await cargarDebitos(supabase, recibo.cliente_id);
+    const [cuenta, cuentas] = await Promise.all([
+      contado ? null : cargarDebitos(supabase, recibo.cliente_id),
+      cargarCuentasCobro(supabase),
+    ]);
     if (typeof cuenta === "string") return <p className="text-sm text-red-700">{cuenta}</p>;
+    if (typeof cuentas === "string") return <p className="text-sm text-red-700">{cuentas}</p>;
 
     return (
       <>
@@ -133,6 +141,7 @@ export default async function ReciboPage({
           }}
           contado={contado}
           cuentaInicial={cuenta}
+          cuentas={cuentas}
           hoy={hoyArgentina()}
           aviso={aviso}
         />
