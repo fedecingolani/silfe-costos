@@ -139,3 +139,4 @@ Cerrados en T7.
 - Concurrencia de FN011 probada a mano con dos sesiones de `psql` sobre la base local: la segunda espera a la primera y recibe FN011, sin deadlock y con el saldo final correcto. El script no queda en el repo y los datos de la prueba se borraron.
 - Checks: `npm run typecheck` ok; `npm run lint` ok; `npm test` 1322 pasan (RED observado en los helpers nuevos); `supabase test db` 1604, con sólo la falla horaria conocida de `pagos_compra_test` 87-89.
 - Probado en la app local: el cheque propio del 15/12 aparece en el banco sin tocar el filtro.
+- Revisión RDD aprobada. WARNING descartada: se quitó el valor por defecto de `para` en `SelectorCuenta`, pero los tres usos lo pasan explícito. Sugerencias: test del tipo leído de la fila en `acciones.ts`, y tope de filas cuando no hay fecha "hasta" (ya existe el límite de 500 movimientos).
