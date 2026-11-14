@@ -472,7 +472,7 @@ export function EditorRecibo({
 
               <SelectorCuenta
                 cuentas={cuentas}
-                tipo={f.tipo}
+                tipoCuenta={tipoCuentaDelMedio(f.tipo)}
                 para="para emitir"
                 valor={f.cuentaId}
                 onCambiar={(v) => cambiarFila(f.clave, { cuentaId: v })}

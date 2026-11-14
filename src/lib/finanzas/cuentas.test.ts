@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { validarCuenta, type EntradaCuenta } from "./cuentas";
+import { esTipoCuentaFondos, validarCuenta, type EntradaCuenta } from "./cuentas";
 
 const BANCO: EntradaCuenta = {
   nombre: " Galicia cuenta corriente ",
@@ -63,5 +63,18 @@ describe("validarCuenta", () => {
         activa: false,
       },
     });
+  });
+});
+
+describe("esTipoCuentaFondos", () => {
+  it("acepta sólo banco y caja", () => {
+    expect(esTipoCuentaFondos("banco")).toBe(true);
+    expect(esTipoCuentaFondos("caja")).toBe(true);
+    expect(esTipoCuentaFondos("Banco")).toBe(false);
+    expect(esTipoCuentaFondos("../clientes")).toBe(false);
+    expect(esTipoCuentaFondos("")).toBe(false);
+    expect(esTipoCuentaFondos(null)).toBe(false);
+    expect(esTipoCuentaFondos(undefined)).toBe(false);
+    expect(esTipoCuentaFondos(1)).toBe(false);
   });
 });

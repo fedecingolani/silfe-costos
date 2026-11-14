@@ -12,7 +12,7 @@
 begin;
 create extension if not exists pgtap with schema extensions;
 
-select plan(26);
+select plan(29);
 
 -- ---------------------------------------------------------------------
 -- Estructura
@@ -152,6 +152,21 @@ select lives_ok(
 select throws_ok(
   format($$update cheque set deposito_cuenta_id = 'fc100000-0000-4000-8000-000000000003' where id = %L$$, pg_temp.id('A')),
   'FN009', null, 'La cuenta de depósito no cambia después de depositar'
+);
+select throws_ok(
+  format($$update cheque set deposito_cuenta_id = null where id = %L$$, pg_temp.id('A')),
+  'FN009', null, 'La cuenta de depósito tampoco se borra después de depositar'
+);
+select throws_ok(
+  format($$insert into cheque (recibo_id, cliente_id, tipo, banco, numero, fecha_pago, importe, deposito_cuenta_id)
+           select recibo_id, cliente_id, tipo, banco, 'FC-INS', fecha_pago, 10, 'fc100000-0000-4000-8000-000000000001'
+           from cheque where id = %L$$, pg_temp.id('BORRADOR')),
+  'FN009', null, 'Un cheque no nace con cuenta de depósito'
+);
+select throws_ok(
+  format($$update cheque set estado = 'depositado', deposito_cuenta_id = 'fc100000-0000-4000-8000-0000000000ff'
+           where id = %L$$, pg_temp.id('D')),
+  '23503', null, 'Depositar en una cuenta inexistente lo rechaza la clave foránea'
 );
 
 update cheque set estado = 'depositado', deposito_cuenta_id = 'fc100000-0000-4000-8000-000000000001',

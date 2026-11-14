@@ -1,35 +1,31 @@
 import Link from "next/link";
-import { cuentasDelTipo, tipoCuentaDelMedio, type CuentaElegible } from "@/lib/finanzas/medios";
-import type { TipoCuentaFondos, TipoMedioPago, TipoMedioPagoCompra } from "@/lib/tipos";
-
-/** El tipo de cuenta, directo o el del medio de pago (null o un medio sin cuenta: no se muestra). */
-type Destino =
-  | { tipoCuenta: TipoCuentaFondos | null; tipo?: never }
-  | { tipo: TipoMedioPago | TipoMedioPagoCompra; tipoCuenta?: never };
+import { cuentasDelTipo, type CuentaElegible } from "@/lib/finanzas/medios";
+import type { TipoCuentaFondos } from "@/lib/tipos";
 
 /**
  * Selector de una caja o una cuenta bancaria activa: la de un medio de un
- * recibo o de una orden de pago, o la del depósito de un cheque. Sin
- * ninguna, enlaza a la pantalla donde se crea. Sin tipo (un medio que no
- * lleva cuenta) no muestra nada.
+ * recibo o de una orden de pago (con tipoCuentaDelMedio), o la del depósito
+ * de un cheque. Sin ninguna, enlaza a la pantalla donde se crea. Sin tipo
+ * (un medio que no lleva cuenta) no muestra nada.
  */
 export function SelectorCuenta({
   cuentas,
-  para = "para confirmar",
+  tipoCuenta,
+  para,
   valor,
   onCambiar,
   className = "",
-  ...destino
-}: Destino & {
+}: {
   /** Cuentas activas (se muestran las del tipo). */
   cuentas: readonly CuentaElegible[];
-  /** Cuándo es obligatoria, para la etiqueta ("para emitir"); null: sin aclaración. */
+  /** Caja o banco; null: no se muestra. */
+  tipoCuenta: TipoCuentaFondos | null;
+  /** Cuándo es obligatoria, para la etiqueta ("para emitir"); sin valor: sin aclaración. */
   para?: string | null;
   valor: string;
   onCambiar: (valor: string) => void;
   className?: string;
 }) {
-  const tipoCuenta = destino.tipo ? tipoCuentaDelMedio(destino.tipo) : destino.tipoCuenta;
   if (!tipoCuenta) return null;
   const esCaja = tipoCuenta === "caja";
   const posibles = cuentasDelTipo(cuentas, tipoCuenta);

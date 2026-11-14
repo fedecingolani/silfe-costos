@@ -1,3 +1,6 @@
+import { rangoMovimientos } from "@/lib/cobranzas/cuenta-corriente";
+import { esFechaValida } from "@/lib/comprobantes/validacion";
+
 /**
  * Origen de un movimiento de fondos (columna origen de v_movimiento_fondos):
  * cómo se muestra y adónde lleva en la tabla de movimientos de una cuenta.
@@ -28,4 +31,27 @@ export function enlaceOrigen(movimiento: { origen: string; origen_id: string }):
     return `/cheques/${movimiento.origen_id}`;
   }
   return null;
+}
+
+type ParametrosRango = { desde?: string | string[]; hasta?: string | string[] };
+
+function primero(valor: string | string[] | undefined): string {
+  return (Array.isArray(valor) ? valor[0] : valor)?.trim() ?? "";
+}
+
+/**
+ * Rango de los movimientos del detalle de una cuenta. Por defecto, desde
+ * hace 12 meses y sin tope (hasta null), para que se vean los movimientos
+ * de fecha futura (un cheque propio que se debita más adelante). Con un
+ * "hasta" pedido, el rango es el pedido. Las fechas inválidas se ignoran y
+ * un rango al revés se da vuelta.
+ */
+export function rangoMovimientosCuenta(
+  parametros: ParametrosRango,
+  hoy: string,
+): { desde: string; hasta: string | null } {
+  const pedidoDesde = primero(parametros.desde);
+  const pedidoHasta = primero(parametros.hasta);
+  if (esFechaValida(pedidoHasta)) return rangoMovimientos({ desde: pedidoDesde, hasta: pedidoHasta }, hoy);
+  return { desde: esFechaValida(pedidoDesde) ? pedidoDesde : rangoMovimientos({}, hoy).desde, hasta: null };
 }

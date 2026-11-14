@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { validarMotivoAnulacion } from "@/lib/cobranzas/anulacion";
 import { validarAjuste } from "@/lib/finanzas/ajustes";
-import { PANTALLA_CUENTAS, validarCuenta } from "@/lib/finanzas/cuentas";
+import { esTipoCuentaFondos, PANTALLA_CUENTAS, validarCuenta } from "@/lib/finanzas/cuentas";
 import { mensajeErrorFinanzas, mensajeErrorTransferencia } from "@/lib/finanzas/errores";
 import { validarTransferencia } from "@/lib/finanzas/transferencias";
 import type { TipoCuentaFondos } from "@/lib/tipos";
@@ -27,7 +27,7 @@ function texto(formData: FormData, campo: string): string | null {
 
 function leerTipo(formData: FormData): TipoCuentaFondos | null {
   const tipo = texto(formData, "tipo");
-  return tipo === "banco" || tipo === "caja" ? tipo : null;
+  return esTipoCuentaFondos(tipo) ? tipo : null;
 }
 
 function datosCuenta(formData: FormData) {
@@ -42,6 +42,18 @@ function datosCuenta(formData: FormData) {
     observacion: texto(formData, "observacion"),
     activa: formData.get("activa") === "on",
   });
+}
+
+/**
+ * El tipo de la cuenta de un ajuste, leído de la base al escribirlo: las
+ * rutas que se refrescan no dependen del tipo que manda el cliente.
+ */
+const CON_TIPO_DE_CUENTA = "id, cuenta:cuenta_fondos(tipo)";
+type FilaConTipo = { id: string; cuenta: { tipo: string } | null };
+
+function tipoDeLaFila(fila: FilaConTipo | undefined, pedido: TipoCuentaFondos): TipoCuentaFondos {
+  const tipo = fila?.cuenta?.tipo;
+  return esTipoCuentaFondos(tipo) ? tipo : pedido;
 }
 
 function refrescar(tipo: TipoCuentaFondos, id?: string) {
@@ -91,7 +103,7 @@ export async function registrarAjuste(
   tipoCuenta: TipoCuentaFondos,
   formData: FormData,
 ): Promise<ResultadoFinanzas> {
-  if (!UUID.test(cuentaId)) return { error: "Cuenta inválida." };
+  if (!UUID.test(cuentaId) || !esTipoCuentaFondos(tipoCuenta)) return { error: "Cuenta inválida." };
   const entrada = validarAjuste({
     fecha: texto(formData, "fecha"),
     tipo: texto(formData, "tipo"),
@@ -101,9 +113,13 @@ export async function registrarAjuste(
   });
   if ("error" in entrada) return { error: entrada.error };
   const supabase = await createClient();
-  const { error } = await supabase.from("ajuste_fondos").insert({ ...entrada.datos, cuenta_id: cuentaId });
+  const { data, error } = await supabase
+    .from("ajuste_fondos")
+    .insert({ ...entrada.datos, cuenta_id: cuentaId })
+    .select(CON_TIPO_DE_CUENTA)
+    .returns<FilaConTipo[]>();
   if (error) return { error: mensajeErrorFinanzas(error, "registrar el ajuste") };
-  refrescar(tipoCuenta, cuentaId);
+  refrescar(tipoDeLaFila(data?.[0], tipoCuenta), cuentaId);
   return {};
 }
 
@@ -114,7 +130,9 @@ export async function anularAjuste(
   tipoCuenta: TipoCuentaFondos,
   motivo: string,
 ): Promise<ResultadoFinanzas> {
-  if (!UUID.test(ajusteId) || !UUID.test(cuentaId)) return { error: "Ajuste inválido." };
+  if (!UUID.test(ajusteId) || !UUID.test(cuentaId) || !esTipoCuentaFondos(tipoCuenta)) {
+    return { error: "Ajuste inválido." };
+  }
   const errorMotivo = validarMotivoAnulacion(motivo);
   if (errorMotivo) return { error: errorMotivo };
   const supabase = await createClient();
@@ -124,10 +142,11 @@ export async function anularAjuste(
     .eq("id", ajusteId)
     .eq("cuenta_id", cuentaId)
     .eq("estado", "vigente")
-    .select("id");
+    .select(CON_TIPO_DE_CUENTA)
+    .returns<FilaConTipo[]>();
   if (error) return { error: mensajeErrorFinanzas(error, "anular el ajuste") };
   if (!data?.length) return { error: "El ajuste ya estaba anulado o no existe. Recargue la página." };
-  refrescar(tipoCuenta, cuentaId);
+  refrescar(tipoDeLaFila(data[0], tipoCuenta), cuentaId);
   return {};
 }
 

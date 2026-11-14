@@ -6,13 +6,12 @@ import { Encabezado, Migas, Pastilla, Tarjeta, Vacio } from "@/components/ui";
 import { Modal } from "@/components/Modal";
 import { fecha, pesos } from "@/lib/formato";
 import { hoyArgentina } from "@/lib/clientes/seguimiento";
-import { rangoMovimientos } from "@/lib/cobranzas/cuenta-corriente";
 import { PANTALLA_CUENTAS } from "@/lib/finanzas/cuentas";
-import { enlaceOrigen, nombreOrigen } from "@/lib/finanzas/movimientos";
+import { enlaceOrigen, nombreOrigen, rangoMovimientosCuenta } from "@/lib/finanzas/movimientos";
 import { cuentaDeTransferencia, type TransferenciaConCuentas } from "@/lib/finanzas/transferencias";
 import type { MovimientoFondos, TipoCuentaFondos } from "@/lib/tipos";
 import { actualizarCuenta } from "./acciones";
-import { AnularAjuste } from "./AnularAjuste";
+import { AnularMovimiento } from "./AnularMovimiento";
 import { cargarCuenta, cargarCuentasActivas, cargarMovimientos, cargarTransferencias, LIMITE_MOVIMIENTOS } from "./datos";
 import { FormularioCuenta } from "./FormularioCuenta";
 import { RegistrarAjuste } from "./RegistrarAjuste";
@@ -44,8 +43,9 @@ function Dato({ etiqueta, children }: { etiqueta: string; children: ReactNode })
 }
 
 /**
- * Detalle de una cuenta de banco o de caja: datos, saldo actual y futuro,
- * y movimientos del rango (del más nuevo al más viejo, con el saldo
+ * Detalle de una cuenta de banco o de caja: datos, saldo actual y futuro
+ * (de toda la cuenta, no del rango), y movimientos del rango (por defecto,
+ * los últimos 12 meses y todos los futuros) (del más nuevo al más viejo, con el saldo
  * acumulado de toda la historia). Registra ajustes manuales y
  * transferencias a otras cuentas, y anula los vigentes (una transferencia,
  * desde cualquiera de sus dos cuentas); los anulados no aparecen.
@@ -62,7 +62,7 @@ export async function PaginaCuenta({
   const pantalla = PANTALLA_CUENTAS[tipo];
   const supabase = await createClient();
   const hoy = hoyArgentina();
-  const { desde, hasta } = rangoMovimientos({ desde: parametros.desde, hasta: parametros.hasta }, hoy);
+  const { desde, hasta } = rangoMovimientosCuenta(parametros, hoy);
   const [cuenta, movimientos, activas] = await Promise.all([
     cargarCuenta(supabase, id, tipo),
     cargarMovimientos(supabase, id, desde, hasta),
@@ -112,6 +112,7 @@ export async function PaginaCuenta({
           </Dato>
           <Dato etiqueta="Movimientos futuros">
             <span className="tabular-nums">{movimientos_futuros ? pesos(movimientos_futuros) : "—"}</span>
+            <span className="block text-xs text-stone-500">Todos los posteriores a hoy, sin importar el filtro.</span>
             {movimientos_futuros !== 0 && (
               <span className="block text-xs text-stone-500">
                 Saldo con lo futuro: {pesos(saldo_actual + movimientos_futuros)}
@@ -142,7 +143,7 @@ export async function PaginaCuenta({
         descripcion={
           movimientos.length >= LIMITE_MOVIMIENTOS
             ? `Se muestran los ${LIMITE_MOVIMIENTOS} más recientes del rango: acote las fechas.`
-            : "Del más nuevo al más viejo. El saldo acumulado incluye los movimientos anteriores al rango. Lo anulado no aparece (ajustes, transferencias, recibos y órdenes de pago)."
+            : "Del más nuevo al más viejo; sin fecha «hasta» incluye los futuros. El saldo acumulado incluye los movimientos anteriores al rango. Lo anulado no aparece (ajustes, transferencias, recibos y órdenes de pago)."
         }
       >
         <form method="get" className="flex flex-wrap items-end gap-3 border-b border-stone-200 p-4">
@@ -156,13 +157,20 @@ export async function PaginaCuenta({
             <label className="etiqueta" htmlFor="mov-hasta">
               Hasta
             </label>
-            <input id="mov-hasta" name="hasta" type="date" defaultValue={hasta} className="campo" />
+            <input
+              id="mov-hasta"
+              name="hasta"
+              type="date"
+              defaultValue={hasta ?? ""}
+              title="Vacío: incluye los movimientos futuros."
+              className="campo"
+            />
           </div>
           <button type="submit" className="boton-secundario">
             Filtrar
           </button>
           <Link href={hrefCuenta} className="text-xs text-marca-700 hover:underline">
-            Últimos 12 meses
+            Últimos 12 meses y futuros
           </Link>
         </form>
         <div className="overflow-x-auto">
@@ -203,8 +211,8 @@ export async function PaginaCuenta({
                   <td className={`text-right tabular-nums ${m.saldo < 0 ? "text-red-700" : ""}`}>{pesos(m.saldo)}</td>
                   <td className="whitespace-nowrap text-right">
                     {(m.origen === "ajuste" || m.origen === "transferencia") && (
-                      <AnularAjuste
-                        ajusteId={m.origen_id}
+                      <AnularMovimiento
+                        origenId={m.origen_id}
                         cuentaId={cuenta.id}
                         tipoCuenta={tipo}
                         descripcion={m.descripcion}
