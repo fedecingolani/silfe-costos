@@ -34,7 +34,7 @@ import {
 } from "@/lib/compras/comprobantes/nota";
 import { NOMBRES_TIPO_COMPROBANTE_COMPRA, numeroComprobanteCompra } from "@/lib/compras/comprobantes/numero";
 import { calcularRenglonCompra, totalesComprobanteCompra } from "@/lib/compras/comprobantes/totales";
-import { PROVINCIAS } from "@/lib/compras/provincias";
+import { esProvincia, PROVINCIAS } from "@/lib/provincias";
 import { fecha, numero, pesos } from "@/lib/formato";
 import {
   ALICUOTAS_IVA,
@@ -628,7 +628,7 @@ export function EditorComprobanteCompra({
               {editor.percepciones.length === 0 && <Vacio mensaje="Sin percepciones." colSpan={5} />}
               {editor.percepciones.map((p, i) => {
                 const provincias =
-                  p.jurisdiccion && !(PROVINCIAS as readonly string[]).includes(p.jurisdiccion)
+                  p.jurisdiccion && !esProvincia(p.jurisdiccion)
                     ? [p.jurisdiccion, ...PROVINCIAS]
                     : PROVINCIAS;
                 return (

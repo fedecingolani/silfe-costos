@@ -12,6 +12,7 @@ import {
   mensajeErrorSucursal,
 } from "@/lib/clientes/errores";
 import { fechaLocalAIso, rutaDeVuelta } from "@/lib/clientes/seguimiento";
+import { provinciaAdmitida } from "@/lib/provincias";
 
 function refrescar(clienteId?: string) {
   revalidatePath("/clientes");
@@ -39,6 +40,23 @@ export type AvisoCliente =
 function cuenta(valor: FormDataEntryValue | null, validar: typeof validarCbu) {
   const texto = aTexto(valor);
   return texto === null ? null : (validar(texto).normalizado ?? texto);
+}
+
+/** Mensaje si la provincia del formulario no es de la lista ni la que ya estaba guardada. */
+async function errorProvincia(
+  formData: FormData,
+  tabla: "cliente" | "cliente_sucursal",
+  id: string | null,
+): Promise<string | null> {
+  const valor = aTexto(formData.get("provincia"));
+  if (provinciaAdmitida(valor, null)) return null;
+  let actual: string | null = null;
+  if (id) {
+    const supabase = await createClient();
+    const { data } = await supabase.from(tabla).select("provincia").eq("id", id).maybeSingle();
+    actual = (data?.provincia as string | null | undefined) ?? null;
+  }
+  return provinciaAdmitida(valor, actual) ? null : "Elegí una provincia de la lista.";
 }
 
 // ----- Cliente ---------------------------------------------------------
@@ -73,6 +91,8 @@ export async function crearCliente(
   _estado: EstadoFormularioCliente,
   formData: FormData,
 ): Promise<EstadoFormularioCliente> {
+  const errorDeProvincia = await errorProvincia(formData, "cliente", null);
+  if (errorDeProvincia) return { error: errorDeProvincia };
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("cliente")
@@ -89,6 +109,8 @@ export async function actualizarCliente(
   formData: FormData,
 ): Promise<EstadoFormularioCliente> {
   const id = String(formData.get("id"));
+  const errorDeProvincia = await errorProvincia(formData, "cliente", id);
+  if (errorDeProvincia) return { error: errorDeProvincia };
   const supabase = await createClient();
   const { error } = await supabase.from("cliente").update(datosCliente(formData)).eq("id", id);
   if (error) return { error: mensajeErrorCliente("actualizar", error) };
@@ -124,6 +146,8 @@ function datosSucursal(formData: FormData) {
 
 /** Guarda la sucursal con guardar_sucursal; si falla, devuelve el mensaje legible. */
 async function guardarSucursal(formData: FormData, accion: string): Promise<EstadoFormularioCliente> {
+  const errorDeProvincia = await errorProvincia(formData, "cliente_sucursal", aTexto(formData.get("id")));
+  if (errorDeProvincia) return { error: errorDeProvincia };
   const supabase = await createClient();
   const { error } = await supabase.rpc("guardar_sucursal", {
     p_id: aTexto(formData.get("id")),
