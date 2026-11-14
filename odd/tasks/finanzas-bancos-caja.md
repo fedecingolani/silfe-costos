@@ -34,7 +34,7 @@ Entrega: un PR por tarea, cada uno sobre la rama de la anterior, como en compras
 
 - [x] T1 Cuentas y ajustes manuales: esquema + RLS, vista de movimientos y saldos (sólo ajustes por ahora), pantallas Bancos y Caja (lista con saldo, alta/edición de cuenta, detalle con movimientos, ajuste y anulación). Rama `feat/finanzas-01-cuentas`.
 - [x] T2 Recibos: `recibo_medio.cuenta_id`, selector en el editor, obligatorio al emitir, movimientos en la vista. Rama `feat/finanzas-02-recibos`.
-- [ ] T3 Órdenes de pago: `orden_pago_medio.cuenta_id`, selector en el editor, obligatorio al confirmar, cheque propio por fecha de pago. Rama `feat/finanzas-03-pagos`.
+- [x] T3 Órdenes de pago: `orden_pago_medio.cuenta_id`, selector en el editor, obligatorio al confirmar, cheque propio por fecha de pago. Rama `feat/finanzas-03-pagos`.
 - [ ] T4 Cheques: cuenta destino al depositar, débito al rechazar un depositado. Rama `feat/finanzas-04-cheques`.
 - [ ] T5 Transferencias entre cuentas. Rama `feat/finanzas-05-transferencias`.
 
@@ -73,3 +73,14 @@ Entrega: un PR por tarea, cada uno sobre la rama de la anterior, como en compras
 - Falla ajena a esta rama: `pagos_compra_test.sql` tests 87-89 fallan entre las 21 y las 24 hs de Argentina (en UTC ya es el día siguiente; CB018 en `rechazar_cheque`). Ni el test ni la función se tocan acá; pasan en horario normal.
 - Probado en la app local: el editor preselecciona la única caja y el único banco; recibo de $35.000 (10.000 en efectivo + 25.000 por transferencia) emitido; aparece en Caja y en Bancos con su saldo y link al recibo; al anularlo desaparece de los dos.
 - Probado en la app local con el usuario del seed: alta de cuenta bancaria (rechaza CBU de 5 dígitos), alta de caja (sin campos bancarios), ajuste de ingreso y de egreso con saldo acumulado, anulación (exige motivo y saca el ajuste del saldo), `/caja/<id de banco>` da 404. Corregido en la prueba: el diálogo de anular heredaba `whitespace-nowrap` de la celda y se cortaba en pantallas angostas; "1 cuentas" pasó a singular.
+
+### T3 Órdenes de pago — hecho
+
+- Commit `1c72ef7` en `feat/finanzas-03-pagos` (sobre T2). Ruta: delegada (un writer; mismo diseño que T2).
+- Migración `20261112000001_finanzas_pagos.sql`: `orden_pago_medio.cuenta_id`. Efectivo → caja; transferencia y cheque propio → banco; cheque de tercero sin cuenta. Sin códigos nuevos: FN004, FN007, FN008 y FN009 con mensajes para pagos. `confirmar_orden_pago` no se tocó.
+- Cheque propio: `guardar_orden_pago` completa `banco` con el banco de la cuenta. Se debita en su `fecha_pago` (puede ser futuro); efectivo y transferencia en la fecha de la orden.
+- `v_movimiento_fondos`: un egreso por orden, cuenta y fecha; una orden puede tener varias filas en la misma cuenta (la clave de React incluye la fecha).
+- Selector compartido `src/app/(app)/finanzas/SelectorCuenta.tsx`. El editor de recibos sigue con su propia copia (pendiente unificar).
+- Checks: `npm run typecheck` ok; `npm run lint` ok; `npm test` 1291 pasan (RED observado en helpers y errores); `supabase migration up --local` ok; `supabase test db` 1513 pasan (37 nuevos, RED observado).
+- Probado en la app local: caja y banco preseleccionados; confirmar sin caja muestra "Medio 1: elegí la caja."; OP-00000002 ($1.500 efectivo + cheque propio $2.000 al 15/12/2026) sale de la caja y el cheque queda en movimientos futuros del banco. La anulación sólo se probó en pgTAP.
+- Detalle cosmético pendiente: en una fila de cheque propio el botón "Quitar" baja a una segunda línea.

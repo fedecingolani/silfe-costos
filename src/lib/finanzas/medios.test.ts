@@ -20,11 +20,23 @@ describe("tipoCuentaDelMedio", () => {
   });
 });
 
+describe("tipoCuentaDelMedio en una orden de pago", () => {
+  it("el efectivo sale de una caja; la transferencia y el cheque propio, de un banco", () => {
+    expect(tipoCuentaDelMedio("cheque_propio")).toBe("banco");
+  });
+
+  it("el cheque de terceros sale de la cartera, no de una cuenta", () => {
+    expect(tipoCuentaDelMedio("cheque_tercero")).toBeNull();
+  });
+});
+
 describe("cuentasDelMedio", () => {
   it("filtra por el tipo que corresponde al medio", () => {
     expect(cuentasDelMedio(CUENTAS, "transferencia").map((c) => c.id)).toEqual(["b1", "b2"]);
     expect(cuentasDelMedio(CUENTAS, "efectivo").map((c) => c.id)).toEqual(["c1"]);
     expect(cuentasDelMedio(CUENTAS, "cheque")).toEqual([]);
+    expect(cuentasDelMedio(CUENTAS, "cheque_propio").map((c) => c.id)).toEqual(["b1", "b2"]);
+    expect(cuentasDelMedio(CUENTAS, "cheque_tercero")).toEqual([]);
   });
 });
 

@@ -2,6 +2,7 @@ import "server-only";
 import type { createClient } from "@/lib/supabase/server";
 import type { DebitoPendiente } from "@/lib/compras/pagos/imputacion";
 import type { ChequeCartera, MedioBorrador } from "@/lib/compras/pagos/medios";
+import type { CuentaElegible } from "@/lib/finanzas/medios";
 import type {
   Cheque,
   ComprobanteCompraSaldo,
@@ -120,6 +121,8 @@ export const COLUMNAS_ORDEN_PAGO =
 export type OrdenPagoLeida = Omit<OrdenPago, "creado_por" | "actualizado_en">;
 
 export type MedioLeido = Omit<OrdenPagoMedio, "orden_pago_id"> & {
+  /** La caja o la cuenta bancaria del medio, si tiene. */
+  cuenta: { nombre: string } | null;
   cheque: Pick<Cheque, "id" | "banco" | "numero" | "fecha_pago" | "librador" | "estado"> | null;
 };
 
@@ -147,7 +150,7 @@ export async function cargarOrdenPago(
     supabase
       .from("orden_pago_medio")
       .select(
-        "id, orden, tipo, importe, referencia, cheque_id, banco, numero, fecha_pago, " +
+        "id, orden, tipo, importe, cuenta_id, referencia, cheque_id, banco, numero, fecha_pago, cuenta:cuenta_id(nombre), " +
           "cheque:cheque_id(id, banco, numero, fecha_pago, librador, estado)",
       )
       .eq("orden_pago_id", id)
@@ -182,10 +185,22 @@ export function medioEditable(m: MedioLeido): MedioBorrador {
   return {
     tipo: m.tipo,
     importe: Number(m.importe),
+    cuentaId: m.cuenta_id,
     referencia: m.referencia,
     chequeId: m.cheque_id,
     banco: m.banco,
     numero: m.numero,
     fechaPago: m.fecha_pago,
   };
+}
+
+/** Cajas y cuentas bancarias activas, para elegir de dónde sale cada medio en el editor. */
+export async function cargarCuentasPago(supabase: Supabase): Promise<CuentaElegible[] | string> {
+  const { data, error } = await supabase
+    .from("cuenta_fondos")
+    .select("id, tipo, nombre")
+    .eq("activa", true)
+    .order("nombre");
+  if (error) return `No se pudieron leer las cajas y cuentas bancarias: ${error.message}`;
+  return (data ?? []) as CuentaElegible[];
 }

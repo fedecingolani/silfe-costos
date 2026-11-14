@@ -52,7 +52,7 @@ describe("mensajeErrorOrdenPago", () => {
   it("controles de los medios de pago (23514)", () => {
     expect(
       mensajeErrorOrdenPago({ code: "23514", message: 'violates check constraint "orden_pago_medio_cheque_propio_check"' }),
-    ).toBe("Cada cheque propio lleva banco, número y fecha de pago.");
+    ).toBe("Cada cheque propio lleva cuenta bancaria, número y fecha de pago.");
     expect(
       mensajeErrorOrdenPago({ code: "23514", message: 'violates check constraint "orden_pago_medio_tipo_check"' }),
     ).toBe("Revisá los medios de pago: hay datos que no son válidos.");
@@ -109,6 +109,21 @@ describe("mensajeErrorOrdenPago", () => {
     );
     expect(mensajeErrorOrdenPago({ code: "OP019", message: "x" }, "aplicar el saldo a favor")).toBe(
       "El comprobante ya no tiene saldo pendiente. Recargá la página.",
+    );
+  });
+
+  it("la cuenta de fondos de los medios (FN004, FN007, FN008, FN009)", () => {
+    const falta = "El medio 1 (efectivo) no tiene caja: elegila antes de confirmar.";
+    expect(mensajeErrorOrdenPago({ code: "FN007", message: falta }, "confirmar la orden de pago")).toBe(falta);
+    expect(mensajeErrorOrdenPago({ message: falta, hint: "cuenta_requerida" })).toBe(falta);
+    expect(mensajeErrorOrdenPago({ code: "FN004", message: "x" })).toBe(
+      "La caja o cuenta bancaria elegida está inactiva: elegí otra.",
+    );
+    expect(mensajeErrorOrdenPago({ code: "FN008", message: "x" })).toBe(
+      "El efectivo sale de una caja; la transferencia y el cheque propio, de una cuenta bancaria: revisá la cuenta de cada medio.",
+    );
+    expect(mensajeErrorOrdenPago({ message: "x", hint: "cuenta_no_corresponde" })).toBe(
+      "Un cheque de terceros no lleva cuenta: sale de la cartera.",
     );
   });
 

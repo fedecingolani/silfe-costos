@@ -2,7 +2,13 @@ import { createClient } from "@/lib/supabase/server";
 import { Encabezado, Migas } from "@/components/ui";
 import { hoyArgentina } from "@/lib/clientes/seguimiento";
 import { imputacionInicial } from "@/lib/compras/pagos/imputacion";
-import { cargarCartera, cargarCuentaProveedor, cargarProveedores, type CuentaProveedor } from "../datos";
+import {
+  cargarCartera,
+  cargarCuentaProveedor,
+  cargarCuentasPago,
+  cargarProveedores,
+  type CuentaProveedor,
+} from "../datos";
 import { EditorOrdenPago } from "../EditorOrdenPago";
 
 export const dynamic = "force-dynamic";
@@ -24,9 +30,14 @@ export default async function NuevaOrdenPagoPage({
   const comprobanteParam = typeof parametros.comprobante === "string" ? parametros.comprobante : null;
   const supabase = await createClient();
 
-  const [proveedores, cartera] = await Promise.all([cargarProveedores(supabase), cargarCartera(supabase)]);
+  const [proveedores, cartera, cuentas] = await Promise.all([
+    cargarProveedores(supabase),
+    cargarCartera(supabase),
+    cargarCuentasPago(supabase),
+  ]);
   if (typeof proveedores === "string") return <p className="text-sm text-red-700">{proveedores}</p>;
   if (typeof cartera === "string") return <p className="text-sm text-red-700">{cartera}</p>;
+  if (typeof cuentas === "string") return <p className="text-sm text-red-700">{cuentas}</p>;
 
   let proveedorInicial: string | null = null;
   let cuentaInicial: CuentaProveedor | null = null;
@@ -52,6 +63,7 @@ export default async function NuevaOrdenPagoPage({
         orden={null}
         proveedores={proveedores}
         cartera={cartera}
+        cuentas={cuentas}
         cuentaInicial={cuentaInicial}
         proveedorInicial={proveedorInicial}
         aImputarInicial={aImputarInicial}

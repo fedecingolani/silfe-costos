@@ -3,6 +3,7 @@ import { armarOrdenPago, leerOrdenEnviada, type OrdenEnviada } from "./guardado"
 import type { ChequeCartera } from "./medios";
 
 const PROVEEDOR = "11111111-1111-4111-8111-111111111111";
+const CAJA = "33333333-3333-4333-8333-333333333333";
 
 const cheque: ChequeCartera = {
   id: "c1",
@@ -28,8 +29,8 @@ const enviada = (cambios: Partial<OrdenEnviada> = {}): OrdenEnviada => ({
   fecha: "2026-11-06",
   observaciones: null,
   medios: [
-    { tipo: "efectivo", importe: 200, referencia: null, chequeId: null, banco: null, numero: null, fechaPago: null },
-    { tipo: "cheque_tercero", importe: 0, referencia: null, chequeId: "c1", banco: null, numero: null, fechaPago: null },
+    { tipo: "efectivo", importe: 200, cuentaId: CAJA, referencia: null, chequeId: null, banco: null, numero: null, fechaPago: null },
+    { tipo: "cheque_tercero", importe: 0, cuentaId: null, referencia: null, chequeId: "c1", banco: null, numero: null, fechaPago: null },
   ],
   imputaciones: [{ comprobanteId: "f1", importe: 500 }],
   ...cambios,
@@ -47,6 +48,11 @@ describe("leerOrdenEnviada", () => {
     expect(leerOrdenEnviada({ medios: [{ tipo: "retencion", importe: 1 }], imputaciones: [] })).toBeNull();
   });
 
+  it("una cuenta que no es un id es una forma inválida; sin cuenta, el borrador se lee igual", () => {
+    expect(leerOrdenEnviada({ ...enviada(), medios: [{ tipo: "efectivo", importe: 1, cuentaId: "caja" }] })).toBeNull();
+    expect(leerOrdenEnviada({ ...enviada(), medios: [{ tipo: "efectivo", importe: 1 }] })?.medios[0].cuentaId).toBeNull();
+  });
+
   it("un importe que no es número queda NaN para que la validación lo rechace", () => {
     const leida = leerOrdenEnviada({ ...enviada(), medios: [{ tipo: "efectivo", importe: "10" }] });
     expect(Number.isNaN(leida?.medios[0].importe)).toBe(true);
@@ -59,7 +65,7 @@ describe("armarOrdenPago", () => {
       guardar: {
         orden: { proveedor_id: PROVEEDOR, fecha: "2026-11-06", observaciones: null },
         medios: [
-          { tipo: "efectivo", importe: 200 },
+          { tipo: "efectivo", importe: 200, cuenta_id: CAJA },
           { tipo: "cheque_tercero", cheque_id: "c1" },
         ],
         imputaciones: [{ comprobante_compra_id: "f1", importe: 500 }],

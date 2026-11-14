@@ -4,7 +4,9 @@
  * comprobante de compra con imputaciones (SQLSTATE OP001–OP017, ver
  * 20261106000001_pagos_compra.sql) y al aplicar el saldo a favor desde la
  * cuenta corriente del proveedor (OP018–OP019, ver
- * 20261106000004_cuenta_corriente_proveedor.sql). Cada código trae su pista (HINT) con el
+ * 20261106000004_cuenta_corriente_proveedor.sql), y de la cuenta de fondos
+ * de sus medios (FN004, FN007–FN009, ver 20261112000001_finanzas_pagos.sql).
+ * Cada código trae su pista (HINT) con el
  * motivo: se busca por las dos, por si llega sólo una. Un deadlock (40P01) o
  * un conflicto de serialización (40001) se resuelve probando de nuevo. Un
  * comprobante o un cheque repetido en la misma orden choca con un índice
@@ -34,6 +36,10 @@ const INMUTABLE_NOTA =
   "Las imputaciones de una nota de crédito no se cambian: para deshacerlas, anulá la nota de crédito.";
 const SIN_SALDO_A_FAVOR = "El proveedor ya no tiene saldo a favor para aplicar. Recargá la página.";
 const DEBITO_SIN_SALDO = "El comprobante ya no tiene saldo pendiente. Recargá la página.";
+const CUENTA_INACTIVA = "La caja o cuenta bancaria elegida está inactiva: elegí otra.";
+const CUENTA_TIPO =
+  "El efectivo sale de una caja; la transferencia y el cheque propio, de una cuenta bancaria: revisá la cuenta de cada medio.";
+const CUENTA_NO_CORRESPONDE = "Un cheque de terceros no lleva cuenta: sale de la cartera.";
 const REINTENTAR = "Otra persona estaba usando los mismos comprobantes o cheques. Probá de nuevo.";
 
 const PROPIOS: Record<string, string> = {
@@ -67,6 +73,12 @@ const PROPIOS: Record<string, string> = {
   sin_saldo_a_favor: SIN_SALDO_A_FAVOR,
   OP019: DEBITO_SIN_SALDO,
   debito_sin_saldo: DEBITO_SIN_SALDO,
+  FN004: CUENTA_INACTIVA,
+  cuenta_inactiva: CUENTA_INACTIVA,
+  FN008: CUENTA_TIPO,
+  cuenta_tipo_distinto: CUENTA_TIPO,
+  FN009: CUENTA_NO_CORRESPONDE,
+  cuenta_no_corresponde: CUENTA_NO_CORRESPONDE,
   "40P01": REINTENTAR,
   "40001": REINTENTAR,
   "23503": "El proveedor, un comprobante o un cheque ya no existen. Recargá la página.",
@@ -74,7 +86,8 @@ const PROPIOS: Record<string, string> = {
 
 /**
  * El mensaje de la base ya dice qué comprobante (saldo excedido, no
- * imputable) o qué cheque (fuera de la cartera, no devolvible).
+ * imputable), qué cheque (fuera de la cartera, no devolvible) o qué medio
+ * no tiene cuenta.
  */
 const MENSAJE_DE_LA_BASE = new Set([
   "OP006",
@@ -85,11 +98,13 @@ const MENSAJE_DE_LA_BASE = new Set([
   "cheque_no_disponible",
   "OP010",
   "cheque_no_devolvible",
+  "FN007",
+  "cuenta_requerida",
 ]);
 
 /** Controles de la tabla (23514), por nombre de la restricción. */
 const MENSAJES_CONTROL: [restriccion: string, mensaje: string][] = [
-  ["orden_pago_medio_cheque_propio_check", "Cada cheque propio lleva banco, número y fecha de pago."],
+  ["orden_pago_medio_cheque_propio_check", "Cada cheque propio lleva cuenta bancaria, número y fecha de pago."],
   ["orden_pago_medio_importe_check", "El importe de cada medio de pago tiene que ser mayor que cero."],
   ["orden_pago_medio_", MEDIO],
   ["imputacion_compra_importe_check", "El importe de cada imputación tiene que ser mayor que cero."],
