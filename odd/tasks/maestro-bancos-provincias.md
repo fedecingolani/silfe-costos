@@ -50,12 +50,12 @@ la base para provincia.
 | ID | Tarea | Ruta | Estado |
 |----|-------|------|--------|
 | T1 | Provincias: constante compartida, desplegable en cliente y sucursal, normalización | delegada (escritor, 2+ archivos) | hecha (959e8ca) |
-| T2 | Tabla `banco` + RLS + precarga + ABM en Configuración | delegada | pendiente |
-| T3 | FK y selector de banco en cuenta de fondos y cheque de terceros | delegada | pendiente |
+| T2 | Tabla `banco` + RLS + precarga + ABM en Configuración | delegada | hecha (fa35c78) |
+| T3 | FK y selector de banco en cuenta de fondos y cheque de terceros | delegada | hecha (1821209) |
 
 - [x] T1: commit 959e8ca. typecheck, lint y 1330 tests ok; migración aplicada en local y probada con filas de ejemplo (rollback). Riesgo medio, under_budget: la revisión queda para el tramo.
-- [ ] T2
-- [ ] T3
+- [x] T2: commit fa35c78. 53 bancos precargados; índice único sólo entre activos (las grafías viejas de cheques quedan como bancos inactivos). typecheck, lint y 1340 tests ok; migraciones aplicadas en local.
+- [x] T3: commit 1821209. FK en cuenta_fondos (cascade) y cheque (sin cascade); valores existentes sin coincidencia se agregan como bancos (cheques: inactivos si ya hay uno equivalente). Selector en cuenta de fondos y cheque del recibo; Bancos en el menú. typecheck, lint y 1342 tests ok; migración aplicada en local y probada con rollback.
 
 ## Criterios de aceptación
 
@@ -71,4 +71,4 @@ la base para provincia.
 
 ## Avance
 
-T1 hecha. Sigue T2. Falta probar los desplegables en el navegador.
+T1, T2 y T3 hechas. Pendiente: probar en el navegador, revisión RDD y PR. Variantes con palabras distintas ("Banco Galicia" vs "Banco de Galicia") quedan como bancos separados: falta unificar duplicados.
