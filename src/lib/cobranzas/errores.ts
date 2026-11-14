@@ -46,3 +46,16 @@ export function mensajeErrorCobranza(error: { code?: string; message: string }, 
   if (CON_MENSAJE_DE_LA_BASE.has(code)) return error.message;
   return PROPIOS[code] ?? `No se pudo ${contexto}: ${error.message}`;
 }
+
+/**
+ * Errores de un cambio de estado de un cheque. Los de la cuenta de depósito
+ * (FN004, FN007, FN008 y FN009, ver 20261112000002_finanzas_cheques.sql)
+ * se muestran con el mensaje de la base, que habla del depósito; los demás,
+ * como los de cobranzas.
+ */
+export function mensajeErrorCheque(error: { code?: string; message: string }, contexto: string): string {
+  const code = error.code ?? "";
+  if (code === "FN004" || code === "FN007" || code === "FN008" || code === "FN009") return error.message;
+  if (code === "23503") return "La cuenta bancaria ya no existe. Recargá la página.";
+  return mensajeErrorCobranza(error, contexto);
+}

@@ -1,30 +1,44 @@
 import Link from "next/link";
-import { cuentasDelMedio, tipoCuentaDelMedio, type CuentaElegible } from "@/lib/finanzas/medios";
-import type { TipoMedioPagoCompra } from "@/lib/tipos";
+import { cuentasDelTipo, tipoCuentaDelMedio, type CuentaElegible } from "@/lib/finanzas/medios";
+import type { TipoCuentaFondos, TipoMedioPago, TipoMedioPagoCompra } from "@/lib/tipos";
+
+/** El tipo de cuenta, directo o el del medio de pago (null o un medio sin cuenta: no se muestra). */
+type Destino =
+  | { tipoCuenta: TipoCuentaFondos | null; tipo?: never }
+  | { tipo: TipoMedioPago | TipoMedioPagoCompra; tipoCuenta?: never };
 
 /**
- * Selector de la caja o la cuenta bancaria de un medio de una orden de pago
- * (sólo las activas del tipo que corresponde). Sin ninguna, enlaza a la
- * pantalla donde se crea.
+ * Selector de una caja o una cuenta bancaria activa: la de un medio de un
+ * recibo o de una orden de pago, o la del depósito de un cheque. Sin
+ * ninguna, enlaza a la pantalla donde se crea. Sin tipo (un medio que no
+ * lleva cuenta) no muestra nada.
  */
 export function SelectorCuenta({
   cuentas,
-  tipo,
+  para = "para confirmar",
   valor,
   onCambiar,
   className = "",
-}: {
+  ...destino
+}: Destino & {
+  /** Cuentas activas (se muestran las del tipo). */
   cuentas: readonly CuentaElegible[];
-  tipo: TipoMedioPagoCompra;
+  /** Cuándo es obligatoria, para la etiqueta ("para emitir"); null: sin aclaración. */
+  para?: string | null;
   valor: string;
   onCambiar: (valor: string) => void;
   className?: string;
 }) {
-  const esCaja = tipoCuentaDelMedio(tipo) === "caja";
-  const posibles = cuentasDelMedio(cuentas, tipo);
+  const tipoCuenta = destino.tipo ? tipoCuentaDelMedio(destino.tipo) : destino.tipoCuenta;
+  if (!tipoCuenta) return null;
+  const esCaja = tipoCuenta === "caja";
+  const posibles = cuentasDelTipo(cuentas, tipoCuenta);
   return (
     <label className={`block ${className}`}>
-      <span className="etiqueta">{esCaja ? "Caja" : "Cuenta bancaria"} (para confirmar)</span>
+      <span className="etiqueta">
+        {esCaja ? "Caja" : "Cuenta bancaria"}
+        {para ? ` (${para})` : ""}
+      </span>
       <select value={valor} onChange={(e) => onCambiar(e.target.value)} className="campo">
         <option value="">Elegí…</option>
         {posibles.map((c) => (

@@ -1229,6 +1229,8 @@ export type Cheque = {
   proveedor_id: string | null;
   /** Orden de pago con que se entregó (vuelve a la cartera si se anula). */
   orden_pago_id: string | null;
+  /** Cuenta bancaria donde se depositó (null en los demás estados y en los depositados históricos). */
+  deposito_cuenta_id: string | null;
   creado_en: string;
 };
 
@@ -1322,8 +1324,10 @@ export type AjusteFondos = {
  * Origen de un movimiento de fondos. recibo: origen_id es el id del recibo;
  * orden_pago: el de la orden (puede dar más de un movimiento por cuenta, uno
  * por fecha: los cheques propios salen en su fecha de pago).
+ * cheque_deposito y cheque_rechazo: el del cheque de terceros (ingreso al
+ * depositarlo, egreso si se rechaza después).
  */
-export type OrigenMovimientoFondos = "ajuste" | "recibo" | "orden_pago";
+export type OrigenMovimientoFondos = "ajuste" | "recibo" | "orden_pago" | "cheque_deposito" | "cheque_rechazo";
 
 /** Fila de v_movimiento_fondos. importe: positivo = ingreso. */
 export type MovimientoFondos = {

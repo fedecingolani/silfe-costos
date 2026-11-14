@@ -73,6 +73,7 @@ export async function cargarMovimientos(
     .order("fecha", { ascending: false })
     .order("creado_en", { ascending: false })
     .order("origen_id", { ascending: false })
+    .order("origen", { ascending: false })
     .limit(LIMITE_MOVIMIENTOS);
   if (error) return `No se pudieron leer los movimientos: ${error.message}`;
   return ((data ?? []) as MovimientoFondos[]).map((m) => ({

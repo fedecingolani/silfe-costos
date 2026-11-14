@@ -23,6 +23,7 @@ import {
 } from "@/lib/tipos";
 import type { ClienteEncontrado } from "../comprobantes/acciones";
 import { BuscadorCliente } from "../comprobantes/BuscadorCliente";
+import { SelectorCuenta } from "../finanzas/SelectorCuenta";
 import { borrarRecibo, cuentaDelCliente, emitirRecibo, guardarRecibo } from "./acciones";
 import type { CuentaCliente } from "./datos";
 
@@ -145,44 +146,6 @@ function medioDeFila(f: FilaMedio): MedioBorrador {
           }
         : null,
   };
-}
-
-/** Selector de la caja (efectivo) o la cuenta bancaria (transferencia) del medio: sólo las activas. */
-function SelectorCuenta({
-  cuentas,
-  tipo,
-  valor,
-  onCambiar,
-}: {
-  cuentas: readonly CuentaElegible[];
-  tipo: TipoMedioPago;
-  valor: string;
-  onCambiar: (valor: string) => void;
-}) {
-  const esCaja = tipoCuentaDelMedio(tipo) === "caja";
-  const posibles = cuentasDelMedio(cuentas, tipo);
-  return (
-    <label className="block sm:col-span-3">
-      <span className="etiqueta">{esCaja ? "Caja" : "Cuenta bancaria"} (para emitir)</span>
-      <select value={valor} onChange={(e) => onCambiar(e.target.value)} className="campo">
-        <option value="">Elegí…</option>
-        {posibles.map((c) => (
-          <option key={c.id} value={c.id}>
-            {c.nombre}
-          </option>
-        ))}
-      </select>
-      {posibles.length === 0 && (
-        <span className="mt-1 block text-xs text-amber-700">
-          No hay {esCaja ? "cajas activas" : "cuentas bancarias activas"}: creá una en{" "}
-          <Link href={esCaja ? "/caja" : "/bancos"} className="text-marca-700 hover:underline">
-            {esCaja ? "Caja" : "Bancos"}
-          </Link>
-          .
-        </span>
-      )}
-    </label>
-  );
 }
 
 /** Campo de texto con su etiqueta. */
@@ -507,14 +470,14 @@ export function EditorRecibo({
                 />
               </label>
 
-              {tipoCuentaDelMedio(f.tipo) && (
-                <SelectorCuenta
-                  cuentas={cuentas}
-                  tipo={f.tipo}
-                  valor={f.cuentaId}
-                  onCambiar={(v) => cambiarFila(f.clave, { cuentaId: v })}
-                />
-              )}
+              <SelectorCuenta
+                cuentas={cuentas}
+                tipo={f.tipo}
+                para="para emitir"
+                valor={f.cuentaId}
+                onCambiar={(v) => cambiarFila(f.clave, { cuentaId: v })}
+                className="sm:col-span-3"
+              />
 
               {f.tipo === "transferencia" && (
                 <>

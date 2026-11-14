@@ -3,11 +3,13 @@
 import { useState, useTransition, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { NOMBRES_ACCION_CHEQUE, type AccionCheque, type DatosCambioCheque } from "@/lib/cobranzas/cartera";
+import { cuentaUnica, type CuentaElegible } from "@/lib/finanzas/medios";
+import { SelectorCuenta } from "../../finanzas/SelectorCuenta";
 import { cambiarEstadoCheque, type ResultadoCheque } from "../acciones";
 
 /**
  * Cambios de estado del cheque: las acciones que admite su estado actual.
- * Depositar (fecha y observación), entregar (a quién, fecha y observación) y
+ * Depositar (cuenta bancaria, fecha y observación), entregar (a quién, fecha y observación) y
  * rechazar (fecha, observación y gastos bancarios opcionales). El rechazo
  * crea la nota de débito y abre su editor.
  */
@@ -15,11 +17,14 @@ export function AccionesCheque({
   id,
   acciones,
   hoy,
+  cuentas,
   previaRechazo,
 }: {
   id: string;
   acciones: AccionCheque[];
   hoy: string;
+  /** Cuentas bancarias activas, para elegir dónde se deposita. */
+  cuentas: CuentaElegible[];
   /** Qué nota de débito se va a crear, o por qué no se puede. */
   previaRechazo: { texto: string } | { error: string } | null;
 }) {
@@ -27,6 +32,7 @@ export function AccionesCheque({
   const [pendiente, iniciar] = useTransition();
   const [accion, setAccion] = useState<AccionCheque | null>(null);
   const [resultado, setResultado] = useState<ResultadoCheque | null>(null);
+  const [cuentaId, setCuentaId] = useState(() => cuentaUnica(cuentas, "banco") ?? "");
 
   if (acciones.length === 0) return null;
 
@@ -43,6 +49,7 @@ export function AccionesCheque({
       entregadoA: accion === "entregar" ? valor("entregadoA") : null,
       gastosImporte: accion === "rechazar" && gastos !== "" ? Number(gastos.replace(",", ".")) : null,
       gastosDescripcion: accion === "rechazar" ? valor("gastosDescripcion") : null,
+      cuentaId: accion === "depositar" ? cuentaId : null,
     };
     if (accion === "rechazar" && !confirm("¿Rechazar el cheque? Se crea la nota de débito al cliente y no se puede deshacer.")) {
       return;
@@ -99,6 +106,16 @@ export function AccionesCheque({
             </label>
             <input id="cambio-fecha" name="fecha" type="date" defaultValue={hoy} required className="campo" />
           </div>
+          {accion === "depositar" && (
+            <SelectorCuenta
+              cuentas={cuentas}
+              tipoCuenta="banco"
+              para={null}
+              valor={cuentaId}
+              onCambiar={setCuentaId}
+              className="sm:col-span-4"
+            />
+          )}
           {accion === "entregar" && (
             <div className="sm:col-span-4">
               <label className="etiqueta" htmlFor="cambio-entregado">

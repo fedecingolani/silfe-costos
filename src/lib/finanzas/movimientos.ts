@@ -6,15 +6,23 @@ const NOMBRES: Record<string, string> = {
   ajuste: "Ajuste",
   recibo: "Recibo",
   orden_pago: "Orden de pago",
+  cheque_deposito: "Depósito de cheque",
+  cheque_rechazo: "Cheque rechazado",
 };
 
 export function nombreOrigen(origen: string): string {
   return NOMBRES[origen] ?? origen;
 }
 
-/** Página del origen del movimiento, o null si no tiene (un ajuste se ve en la misma tabla). */
+/**
+ * Página del origen del movimiento, o null si no tiene (un ajuste se ve en
+ * la misma tabla). El depósito y el rechazo de un cheque llevan al cheque.
+ */
 export function enlaceOrigen(movimiento: { origen: string; origen_id: string }): string | null {
   if (movimiento.origen === "recibo") return `/cobranzas/${movimiento.origen_id}`;
   if (movimiento.origen === "orden_pago") return `/compras/pagos/${movimiento.origen_id}`;
+  if (movimiento.origen === "cheque_deposito" || movimiento.origen === "cheque_rechazo") {
+    return `/cheques/${movimiento.origen_id}`;
+  }
   return null;
 }

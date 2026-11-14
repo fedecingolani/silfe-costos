@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { DESTINO_ACCION, validarCambioCheque, type AccionCheque, type DatosCambioCheque } from "@/lib/cobranzas/cartera";
-import { mensajeErrorCobranza } from "@/lib/cobranzas/errores";
+import { mensajeErrorCheque, mensajeErrorCobranza } from "@/lib/cobranzas/errores";
 import type { EstadoCheque } from "@/lib/tipos";
 
 // Como en comprobantes y cobranzas: las acciones devuelven el mensaje en lugar de lanzarlo.
@@ -35,13 +35,15 @@ function leerDatos(datos: string): DatosCambioCheque | null {
     entregadoA: textoONulo(d.entregadoA),
     gastosImporte: typeof d.gastosImporte === "number" ? d.gastosImporte : d.gastosImporte == null ? null : Number.NaN,
     gastosDescripcion: textoONulo(d.gastosDescripcion),
+    cuentaId: typeof d.cuentaId === "string" && (d.cuentaId === "" || UUID.test(d.cuentaId)) ? d.cuentaId : null,
   };
 }
 
 /**
  * Cambia el estado de un cheque de la cartera. Depositar y entregar
  * actualizan el cheque (el trigger controla la transición y escribe el
- * historial). Rechazar llama a rechazar_cheque, que en la misma transacción
+ * historial); depositar guarda la cuenta bancaria, que el trigger de
+ * Finanzas valida (activa y de banco) y acredita en la fecha elegida. Rechazar llama a rechazar_cheque, que en la misma transacción
  * crea el borrador de la nota de débito y deja el cheque rechazado con ella;
  * después abre la ND en el editor.
  */
@@ -75,6 +77,7 @@ export async function cambiarEstadoCheque(id: string, datos: string): Promise<Re
     revalidatePath(`${RUTA}/${id}`);
     revalidatePath(`/cobranzas/${cheque.recibo_id}`);
     revalidatePath("/comprobantes");
+    revalidatePath("/bancos", "layout");
     redirect(`/comprobantes/${String(ndId)}`);
   }
 
@@ -85,15 +88,24 @@ export async function cambiarEstadoCheque(id: string, datos: string): Promise<Re
       estado_fecha: cambio.fecha,
       estado_observacion: cambio.observacion,
       ...(cambio.accion === "entregar" ? { entregado_a: cambio.entregadoA } : {}),
+      ...(cambio.accion === "depositar" ? { deposito_cuenta_id: cambio.cuentaId } : {}),
     })
     .eq("id", id)
     .eq("estado", cheque.estado)
     .select("id");
-  if (error) return { error: mensajeErrorCobranza(error, "cambiar el estado del cheque") };
+  if (error) {
+    return {
+      error: mensajeErrorCheque(error, cambio.accion === "depositar" ? "depositar el cheque" : "entregar el cheque"),
+    };
+  }
   if ((data ?? []).length !== 1) return { error: "El cheque cambió de estado. Recargá la página." };
 
   revalidatePath(RUTA);
   revalidatePath(`${RUTA}/${id}`);
   revalidatePath(`/cobranzas/${cheque.recibo_id}`);
+  if (cambio.cuentaId) {
+    revalidatePath("/bancos");
+    revalidatePath(`/bancos/${cambio.cuentaId}`);
+  }
   return { ok: cambio.accion === "depositar" ? "Cheque depositado." : "Cheque entregado." };
 }

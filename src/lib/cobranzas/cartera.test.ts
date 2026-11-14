@@ -7,7 +7,7 @@ import {
   totalesPorEstado,
   validarCambioCheque,
 } from "./cartera";
-import { mensajeErrorCobranza } from "./errores";
+import { mensajeErrorCheque, mensajeErrorCobranza } from "./errores";
 
 describe("filtros de la cartera", () => {
   it("por defecto muestra los cheques en cartera", () => {
@@ -88,12 +88,28 @@ describe("estado visible", () => {
 describe("validarCambioCheque", () => {
   const hoy = "2026-11-20";
 
-  it("depositar pide una fecha válida y normaliza la observación", () => {
-    expect(validarCambioCheque("en_cartera", { accion: "depositar", fecha: hoy, observacion: "  Banco  " })).toEqual({
-      cambio: { accion: "depositar", fecha: hoy, observacion: "Banco", entregadoA: null, gastos: null },
+  const CUENTA = "8f3c2b1a-0000-4000-8000-000000000001";
+
+  it("depositar pide una fecha válida y la cuenta bancaria, y normaliza la observación", () => {
+    expect(
+      validarCambioCheque("en_cartera", { accion: "depositar", fecha: hoy, observacion: "  Banco  ", cuentaId: CUENTA }),
+    ).toEqual({
+      cambio: { accion: "depositar", fecha: hoy, observacion: "Banco", entregadoA: null, gastos: null, cuentaId: CUENTA },
     });
-    expect(validarCambioCheque("en_cartera", { accion: "depositar", fecha: "" })).toEqual({
+    expect(validarCambioCheque("en_cartera", { accion: "depositar", fecha: "", cuentaId: CUENTA })).toEqual({
       errores: ["Completá la fecha."],
+    });
+    expect(validarCambioCheque("en_cartera", { accion: "depositar", fecha: hoy, cuentaId: " " })).toEqual({
+      errores: ["Elegí la cuenta bancaria donde se deposita el cheque."],
+    });
+    expect(validarCambioCheque("en_cartera", { accion: "depositar", fecha: hoy })).toEqual({
+      errores: ["Elegí la cuenta bancaria donde se deposita el cheque."],
+    });
+  });
+
+  it("sólo depositar lleva cuenta", () => {
+    expect(validarCambioCheque("en_cartera", { accion: "entregar", fecha: hoy, entregadoA: "X", cuentaId: CUENTA })).toEqual({
+      cambio: { accion: "entregar", fecha: hoy, observacion: null, entregadoA: "X", gastos: null, cuentaId: null },
     });
   });
 
@@ -102,13 +118,13 @@ describe("validarCambioCheque", () => {
       errores: ["Completá a quién se entregó el cheque."],
     });
     expect(validarCambioCheque("en_cartera", { accion: "entregar", fecha: hoy, entregadoA: " Proveedor SA " })).toEqual({
-      cambio: { accion: "entregar", fecha: hoy, observacion: null, entregadoA: "Proveedor SA", gastos: null },
+      cambio: { accion: "entregar", fecha: hoy, observacion: null, entregadoA: "Proveedor SA", gastos: null, cuentaId: null },
     });
   });
 
   it("rechazar admite gastos bancarios opcionales con descripción", () => {
     expect(validarCambioCheque("depositado", { accion: "rechazar", fecha: hoy, gastosImporte: 0 })).toEqual({
-      cambio: { accion: "rechazar", fecha: hoy, observacion: null, entregadoA: null, gastos: null },
+      cambio: { accion: "rechazar", fecha: hoy, observacion: null, entregadoA: null, gastos: null, cuentaId: null },
     });
     expect(
       validarCambioCheque("depositado", {
@@ -124,6 +140,7 @@ describe("validarCambioCheque", () => {
         observacion: null,
         entregadoA: null,
         gastos: { importe: 1500.5, descripcion: "Comisión" },
+        cuentaId: null,
       },
     });
     expect(validarCambioCheque("en_cartera", { accion: "rechazar", fecha: hoy, gastosImporte: 10 })).toEqual({
@@ -157,6 +174,35 @@ describe("errores de la cartera", () => {
     );
     expect(mensajeErrorCobranza({ code: "CB021", message: "x" }, "rechazar el cheque")).toBe(
       "No se encontró el cheque. Recargá la página.",
+    );
+  });
+});
+
+describe("errores del depósito", () => {
+  it("muestra los mensajes de la base sobre la cuenta de depósito", () => {
+    expect(
+      mensajeErrorCheque({ code: "FN007", message: "Elegí la cuenta bancaria donde se deposita el cheque." }, "depositar"),
+    ).toBe("Elegí la cuenta bancaria donde se deposita el cheque.");
+    expect(
+      mensajeErrorCheque({ code: "FN008", message: "Un cheque se deposita en una cuenta bancaria, no en una caja." }, "x"),
+    ).toBe("Un cheque se deposita en una cuenta bancaria, no en una caja.");
+    expect(mensajeErrorCheque({ code: "FN004", message: 'La cuenta "Galicia" está inactiva: elegí otra.' }, "x")).toBe(
+      'La cuenta "Galicia" está inactiva: elegí otra.',
+    );
+    expect(mensajeErrorCheque({ code: "FN009", message: "La cuenta de depósito no cambia." }, "x")).toBe(
+      "La cuenta de depósito no cambia.",
+    );
+  });
+
+  it("los demás errores se traducen como los de cobranzas", () => {
+    expect(mensajeErrorCheque({ code: "CB021", message: "x" }, "depositar el cheque")).toBe(
+      "No se encontró el cheque. Recargá la página.",
+    );
+    expect(mensajeErrorCheque({ code: "23503", message: "fk" }, "depositar el cheque")).toBe(
+      "La cuenta bancaria ya no existe. Recargá la página.",
+    );
+    expect(mensajeErrorCheque({ code: "XX000", message: "boom" }, "depositar el cheque")).toBe(
+      "No se pudo depositar el cheque: boom",
     );
   });
 });

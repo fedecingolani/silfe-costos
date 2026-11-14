@@ -18,7 +18,7 @@ import { RegistrarAjuste } from "./RegistrarAjuste";
 
 export type ParametrosCuenta = { desde?: string; hasta?: string; editar?: string };
 
-/** Descripción del movimiento, con enlace a su origen si tiene página (un recibo o una orden de pago). */
+/** Descripción del movimiento, con enlace a su origen si tiene página (un recibo, una orden de pago o un cheque). */
 function Descripcion({ movimiento }: { movimiento: MovimientoFondos }) {
   const enlace = enlaceOrigen(movimiento);
   if (!enlace) return <>{movimiento.descripcion}</>;
