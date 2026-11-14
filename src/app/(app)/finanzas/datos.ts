@@ -60,19 +60,19 @@ export async function cargarCuenta(
   };
 }
 
-/** Movimientos del rango, del más nuevo al más viejo, con el saldo acumulado de toda la historia. */
+/**
+ * Movimientos del rango, del más nuevo al más viejo, con el saldo acumulado
+ * de toda la historia. Sin "hasta", incluye los de fecha futura.
+ */
 export async function cargarMovimientos(
   supabase: Supabase,
   cuentaId: string,
   desde: string,
-  hasta: string,
+  hasta: string | null,
 ): Promise<MovimientoFondos[] | string> {
-  const { data, error } = await supabase
-    .from("v_movimiento_fondos")
-    .select("*")
-    .eq("cuenta_id", cuentaId)
-    .gte("fecha", desde)
-    .lte("fecha", hasta)
+  let consulta = supabase.from("v_movimiento_fondos").select("*").eq("cuenta_id", cuentaId).gte("fecha", desde);
+  if (hasta) consulta = consulta.lte("fecha", hasta);
+  const { data, error } = await consulta
     .order("fecha", { ascending: false })
     .order("creado_en", { ascending: false })
     .order("origen_id", { ascending: false })

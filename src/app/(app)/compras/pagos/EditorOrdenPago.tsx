@@ -437,15 +437,15 @@ export function EditorOrdenPago({
                   )}
                 </label>
 
-                {tipoCuentaDelMedio(f.tipo) && (
-                  <SelectorCuenta
-                    cuentas={cuentas}
-                    tipo={f.tipo}
-                    valor={f.cuentaId}
-                    onCambiar={(v) => cambiarFila(f.clave, { cuentaId: v })}
-                    className="sm:col-span-3"
-                  />
-                )}
+                {/* Un cheque propio suma número y fecha de pago: la cuenta ocupa menos para que "Quitar" no baje de línea. */}
+                <SelectorCuenta
+                  cuentas={cuentas}
+                  tipoCuenta={tipoCuentaDelMedio(f.tipo)}
+                  para="para confirmar"
+                  valor={f.cuentaId}
+                  onCambiar={(v) => cambiarFila(f.clave, { cuentaId: v })}
+                  className={f.tipo === "cheque_propio" ? "sm:col-span-2" : "sm:col-span-3"}
+                />
 
                 {f.tipo === "transferencia" && (
                   <Campo

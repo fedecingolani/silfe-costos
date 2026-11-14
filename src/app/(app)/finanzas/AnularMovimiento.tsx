@@ -11,15 +11,15 @@ import { anularAjuste, anularTransferencia } from "./acciones";
  * contar en el saldo (una transferencia, en las dos cuentas) y no se puede
  * deshacer. Una transferencia se anula desde cualquiera de sus cuentas.
  */
-export function AnularAjuste({
-  ajusteId,
+export function AnularMovimiento({
+  origenId,
   cuentaId,
   tipoCuenta,
   descripcion,
   transferencia = false,
 }: {
-  /** Id del ajuste o de la transferencia. */
-  ajusteId: string;
+  /** Id del ajuste o de la transferencia (origen_id del movimiento). */
+  origenId: string;
   cuentaId: string;
   tipoCuenta: TipoCuentaFondos;
   descripcion: string;
@@ -52,8 +52,8 @@ export function AnularAjuste({
     }
     iniciar(async () => {
       const resultado = transferencia
-        ? await anularTransferencia(ajusteId, cuentaId, motivo)
-        : await anularAjuste(ajusteId, cuentaId, tipoCuenta, motivo);
+        ? await anularTransferencia(origenId, cuentaId, motivo)
+        : await anularAjuste(origenId, cuentaId, tipoCuenta, motivo);
       if (resultado.error) {
         setError(resultado.error);
         return;

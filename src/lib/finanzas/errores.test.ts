@@ -65,4 +65,39 @@ describe("mensajeErrorTransferencia", () => {
       "No se pudo registrar la transferencia: falla",
     );
   });
+
+  it("cubre los demás errores propios de las transferencias", () => {
+    expect(mensajeErrorTransferencia({ code: "FN002", message: "x" }, "registrar la transferencia")).toBe(
+      "Una transferencia nueva no puede nacer anulada.",
+    );
+    expect(mensajeErrorTransferencia({ code: "FN003", message: "x" }, "anular la transferencia")).toBe(
+      "Las transferencias no se borran: se anulan con un motivo.",
+    );
+    expect(
+      mensajeErrorTransferencia(
+        { code: "23503", message: 'insert or update on table "transferencia_fondos" violates foreign key constraint' },
+        "registrar la transferencia",
+      ),
+    ).toBe("Alguna de las cuentas ya no existe. Recargue la página.");
+  });
+
+  it("un check desconocido o un error sin código dejan el detalle", () => {
+    expect(
+      mensajeErrorTransferencia(
+        { code: "23514", message: 'new row violates check constraint "otro_check"' },
+        "registrar la transferencia",
+      ),
+    ).toBe('No se pudo registrar la transferencia: new row violates check constraint "otro_check"');
+    expect(mensajeErrorTransferencia({ message: "sin conexión" }, "anular la transferencia")).toBe(
+      "No se pudo anular la transferencia: sin conexión",
+    );
+  });
+
+  it("FN004 de un ajuste usa el mensaje fijo; el de una transferencia, el de la base", () => {
+    const base = 'La cuenta "Banco" está inactiva: no admite transferencias nuevas.';
+    expect(mensajeErrorFinanzas({ code: "FN004", message: base }, "registrar el ajuste")).toBe(
+      "La cuenta está inactiva: no admite ajustes nuevos.",
+    );
+    expect(mensajeErrorTransferencia({ code: "FN004", message: base }, "anular la transferencia")).toBe(base);
+  });
 });

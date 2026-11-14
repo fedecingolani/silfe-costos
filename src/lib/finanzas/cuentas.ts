@@ -37,6 +37,11 @@ function limpiar(valor: string | null | undefined): string | null {
   return texto === "" ? null : texto;
 }
 
+/** Valida el tipo de cuenta que llega del cliente (una acción) antes de usarlo en rutas. */
+export function esTipoCuentaFondos(valor: unknown): valor is TipoCuentaFondos {
+  return valor === "banco" || valor === "caja";
+}
+
 /** Una caja no tiene datos bancarios: se descartan aunque lleguen. */
 export function validarCuenta(tipo: TipoCuentaFondos, entrada: EntradaCuenta): Resultado<DatosCuenta> {
   const nombre = limpiar(entrada.nombre);
