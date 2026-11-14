@@ -48,8 +48,8 @@ const SECCIONES: { titulo: string; items: Item[] }[] = [
   {
     titulo: "Finanzas",
     items: [
-      { texto: "Bancos" },
-      { texto: "Caja" },
+      { href: "/bancos", texto: "Bancos" },
+      { href: "/caja", texto: "Caja" },
       { href: "/cheques", texto: "Cheques" },
       { texto: "Conciliación bancaria" },
     ],
