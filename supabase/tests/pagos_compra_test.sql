@@ -83,6 +83,10 @@ insert into cuenta_fondos (id, tipo, nombre, banco) values
   ('00000000-0000-4000-8000-0000000007f1', 'banco', 'Banco pagos ' || gen_random_uuid(), 'Galicia');
 insert into cuenta_fondos (id, tipo, nombre) values
   ('00000000-0000-4000-8000-0000000007f2', 'caja', 'Caja pagos ' || gen_random_uuid());
+-- Saldo inicial: una caja no queda en negativo
+-- (20261112000005_finanzas_caja_sin_negativo.sql).
+insert into ajuste_fondos (cuenta_id, fecha, tipo, importe, concepto)
+values ('00000000-0000-4000-8000-0000000007f2', '2000-01-01', 'ingreso', 10000000, 'Saldo inicial');
 
 select set_config(
   'request.jwt.claims',

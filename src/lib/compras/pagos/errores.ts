@@ -5,7 +5,8 @@
  * 20261106000001_pagos_compra.sql) y al aplicar el saldo a favor desde la
  * cuenta corriente del proveedor (OP018–OP019, ver
  * 20261106000004_cuenta_corriente_proveedor.sql), y de la cuenta de fondos
- * de sus medios (FN004, FN007–FN009, ver 20261112000001_finanzas_pagos.sql).
+ * de sus medios (FN004, FN007–FN009, ver 20261112000001_finanzas_pagos.sql;
+ * FN011, la caja quedaría en negativo, ver 20261112000005_finanzas_caja_sin_negativo.sql).
  * Cada código trae su pista (HINT) con el
  * motivo: se busca por las dos, por si llega sólo una. Un deadlock (40P01) o
  * un conflicto de serialización (40001) se resuelve probando de nuevo. Un
@@ -86,8 +87,8 @@ const PROPIOS: Record<string, string> = {
 
 /**
  * El mensaje de la base ya dice qué comprobante (saldo excedido, no
- * imputable), qué cheque (fuera de la cartera, no devolvible) o qué medio
- * no tiene cuenta.
+ * imputable), qué cheque (fuera de la cartera, no devolvible), qué medio
+ * no tiene cuenta o qué caja quedaría en negativo.
  */
 const MENSAJE_DE_LA_BASE = new Set([
   "OP006",
@@ -100,6 +101,8 @@ const MENSAJE_DE_LA_BASE = new Set([
   "cheque_no_devolvible",
   "FN007",
   "cuenta_requerida",
+  "FN011",
+  "caja_negativa",
 ]);
 
 /** Controles de la tabla (23514), por nombre de la restricción. */

@@ -36,6 +36,7 @@ Entrega: un PR por tarea, cada uno sobre la rama de la anterior, como en compras
 - [x] T2 Recibos: `recibo_medio.cuenta_id`, selector en el editor, obligatorio al emitir, movimientos en la vista. Rama `feat/finanzas-02-recibos`.
 - [x] T3 Órdenes de pago: `orden_pago_medio.cuenta_id`, selector en el editor, obligatorio al confirmar, cheque propio por fecha de pago. Rama `feat/finanzas-03-pagos`.
 - [x] T4 Cheques: cuenta destino al depositar, débito al rechazar un depositado. Rama `feat/finanzas-04-cheques`.
+- [x] T6 Caja sin saldo negativo: ningún movimiento (ajuste, orden de pago, transferencia, anulación de un ingreso) puede dejar una caja en negativo en ninguna fecha. Rama `feat/finanzas-06-caja-sin-negativo`.
 - [x] T5 Transferencias entre cuentas. Rama `feat/finanzas-05-transferencias`.
 
 ## Verificación
@@ -114,7 +115,18 @@ La revisión de toda la feature junta excedió el límite de contexto del reviso
 
 ## Pendientes y preguntas abiertas
 
-- La caja puede quedar en saldo negativo (no hay control). Decidir si se bloquea o sólo se avisa.
+- Caja en negativo: el usuario decidió bloquearlo (T6).
 - Movimientos futuros en el detalle no siguen el rango filtrado.
 - `EditorOrdenPago` usa la prop vieja `tipo` de `SelectorCuenta`; en una fila de cheque propio el botón "Quitar" baja de línea.
 - Sugerencias de la revisión de T1+T2: validar `tipo` en `finanzas/acciones.ts`, test del `banco` completado con el nombre de la cuenta.
+
+### T6 Caja sin saldo negativo — hecho
+
+- Commit `2269c90` en `feat/finanzas-06-caja-sin-negativo` (sobre T5). Ruta: delegada (un writer). Decisión del usuario: bloquear, no sólo avisar. Los bancos no tienen esta restricción.
+- Migración `20261112000005_finanzas_caja_sin_negativo.sql`: `fn_validar_caja_sin_negativo`, llamada desde triggers AFTER con condición WHEN, sólo en lo que baja el saldo: egreso o anulación de un ingreso en ajustes, transferencia que sale o anulación de una que entra, confirmación de una orden de pago, anulación de un recibo. Código FN011 (`caja_negativa`): 'La caja "X" quedaría en $ -1.500,00 el 12/11/2026.'
+- Regla: se rechaza si algún movimiento desde la fecha de la escritura queda por debajo de cero. Los ingresos nunca se validan (corrigen una caja que ya estaba negativa). Bloqueo con advisory lock por caja, porque subir el `for share` a `for update` provocaba deadlocks.
+- Caso borde con datos negativos previos a la regla: un egreso en una fecha donde ya había un punto negativo se rechaza, y el mensaje muestra ese punto viejo. Pasó con la caja de prueba local; en producción no hay cajas negativas previas.
+- Tres tests existentes ahora cargan un saldo inicial en su caja de prueba.
+- Checks: `npm run typecheck` ok; `npm run lint` ok; `npm test` 1314 pasan (RED observado); `supabase migration up --local` ok; `supabase test db` 1601 pasan (30 nuevos, RED observado).
+- Probado en la app local: egreso en la caja negativa rechazado con el mensaje; ingreso aceptado (la caja pasó a $ 8.500); transferencia de $ 9.000 desde la caja rechazada.
+- Revisión RDD aprobada. WARNING: la concurrencia (dos escrituras a la vez sobre la misma caja) no tiene test automático; el diseño con advisory lock se razonó pero no se probó en paralelo. Sugerencias: el formato del monto en el mensaje para importes enormes, y el orden de bloqueo entre sentencias de una misma transacción.
