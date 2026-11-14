@@ -45,6 +45,10 @@ const CON_MENSAJE_DE_LA_BASE = new Set([
 
 export function mensajeErrorCobranza(error: { code?: string; message: string }, contexto = "guardar el recibo"): string {
   const code = error.code ?? "";
+  // FK del banco del cheque a la lista de bancos (20261114000004_bancos_referencias.sql).
+  if (code === "23503" && error.message.includes('"cheque_banco_fkey"')) {
+    return "El banco de un cheque no está en la lista de bancos: elegilo de la lista.";
+  }
   if (CON_MENSAJE_DE_LA_BASE.has(code)) return error.message;
   return PROPIOS[code] ?? `No se pudo ${contexto}: ${error.message}`;
 }

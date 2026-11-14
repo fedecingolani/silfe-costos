@@ -11,6 +11,7 @@ import {
   reciboDeContado,
   type CuentaCliente,
 } from "../datos";
+import { cargarBancosActivos } from "@/lib/bancos/datos";
 import { EditorRecibo, type ContadoAPagar } from "../EditorRecibo";
 
 export const dynamic = "force-dynamic";
@@ -74,8 +75,9 @@ export default async function NuevaCobranzaPage({
     }
   }
 
-  const cuentas = await cargarCuentasCobro(supabase);
+  const [cuentas, bancos] = await Promise.all([cargarCuentasCobro(supabase), cargarBancosActivos(supabase)]);
   if (typeof cuentas === "string") return <p className="text-sm text-red-700">{cuentas}</p>;
+  if (typeof bancos === "string") return <p className="text-sm text-red-700">{bancos}</p>;
 
   return (
     <>
@@ -94,6 +96,7 @@ export default async function NuevaCobranzaPage({
         clienteInicial={clienteInicial}
         cuentaInicial={cuentaInicial}
         cuentas={cuentas}
+        bancos={bancos}
         hoy={hoyArgentina()}
       />
     </>

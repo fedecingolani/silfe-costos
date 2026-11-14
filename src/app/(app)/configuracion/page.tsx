@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { Encabezado, Tarjeta } from "@/components/ui";
@@ -34,11 +33,6 @@ export default async function ConfiguracionPage() {
       <Encabezado
         titulo="Parámetros de costeo"
         descripcion="Se aplican a todos los productos: los gastos generales se suman al costo directo y el margen se aplica sobre el costo total."
-        acciones={
-          <Link href="/configuracion/bancos" className="boton-secundario">
-            Bancos
-          </Link>
-        }
       />
 
       <div className="grid gap-6 lg:grid-cols-[24rem_1fr] lg:items-start">

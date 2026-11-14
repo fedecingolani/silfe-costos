@@ -60,6 +60,7 @@ const SECCIONES: { titulo: string; items: Item[] }[] = [
       { href: "/unidades", texto: "Unidades" },
       { href: "/configuracion", texto: "Parámetros" },
       { href: "/configuracion/empresa", texto: "Empresa" },
+      { href: "/configuracion/bancos", texto: "Bancos" },
       { href: "/configuracion/arca", texto: "ARCA" },
       { href: "/configuracion/integraciones", texto: "Integraciones" },
     ],

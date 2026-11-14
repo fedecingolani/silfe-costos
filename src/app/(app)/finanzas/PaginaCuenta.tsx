@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { cargarBancosActivos } from "@/lib/bancos/datos";
 import { Encabezado, Migas, Pastilla, Tarjeta, Vacio } from "@/components/ui";
 import { Modal } from "@/components/Modal";
 import { fecha, pesos } from "@/lib/formato";
@@ -63,16 +64,18 @@ export async function PaginaCuenta({
   const supabase = await createClient();
   const hoy = hoyArgentina();
   const { desde, hasta } = rangoMovimientosCuenta(parametros, hoy);
-  const [cuenta, movimientos, activas] = await Promise.all([
+  const [cuenta, movimientos, activas, bancos] = await Promise.all([
     cargarCuenta(supabase, id, tipo),
     cargarMovimientos(supabase, id, desde, hasta),
     cargarCuentasActivas(supabase),
+    tipo === "banco" && parametros.editar ? cargarBancosActivos(supabase) : [],
   ]);
 
   if (cuenta === null) notFound();
   if (typeof cuenta === "string") return <p className="text-sm text-red-700">{cuenta}</p>;
   if (typeof movimientos === "string") return <p className="text-sm text-red-700">{movimientos}</p>;
   if (typeof activas === "string") return <p className="text-sm text-red-700">{activas}</p>;
+  if (typeof bancos === "string") return <p className="text-sm text-red-700">{bancos}</p>;
   const cargadas = await cargarTransferencias(supabase, movimientos);
   if (typeof cargadas === "string") return <p className="text-sm text-red-700">{cargadas}</p>;
   const transferencias: Map<string, TransferenciaConCuentas> = cargadas;
@@ -233,6 +236,7 @@ export async function PaginaCuenta({
             key={cuenta.id}
             accion={actualizarCuenta}
             tipo={tipo}
+            bancos={bancos}
             cuenta={cuenta}
             cancelarHref={hrefCuenta}
           />
