@@ -1325,9 +1325,17 @@ export type AjusteFondos = {
  * orden_pago: el de la orden (puede dar más de un movimiento por cuenta, uno
  * por fecha: los cheques propios salen en su fecha de pago).
  * cheque_deposito y cheque_rechazo: el del cheque de terceros (ingreso al
- * depositarlo, egreso si se rechaza después).
+ * depositarlo, egreso si se rechaza después). transferencia: el de la
+ * transferencia entre cuentas propias (egreso en el origen, ingreso en el
+ * destino; una pata por cuenta).
  */
-export type OrigenMovimientoFondos = "ajuste" | "recibo" | "orden_pago" | "cheque_deposito" | "cheque_rechazo";
+export type OrigenMovimientoFondos =
+  | "ajuste"
+  | "recibo"
+  | "orden_pago"
+  | "cheque_deposito"
+  | "cheque_rechazo"
+  | "transferencia";
 
 /** Fila de v_movimiento_fondos. importe: positivo = ingreso. */
 export type MovimientoFondos = {

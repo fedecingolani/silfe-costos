@@ -8,6 +8,7 @@ describe("nombreOrigen", () => {
     expect(nombreOrigen("orden_pago")).toBe("Orden de pago");
     expect(nombreOrigen("cheque_deposito")).toBe("Depósito de cheque");
     expect(nombreOrigen("cheque_rechazo")).toBe("Cheque rechazado");
+    expect(nombreOrigen("transferencia")).toBe("Transferencia");
     expect(nombreOrigen("otro")).toBe("otro");
   });
 });
@@ -28,5 +29,9 @@ describe("enlaceOrigen", () => {
 
   it("un ajuste no tiene página propia", () => {
     expect(enlaceOrigen({ origen: "ajuste", origen_id: "abc" })).toBeNull();
+  });
+
+  it("una transferencia enlaza a la otra cuenta, no a una página propia", () => {
+    expect(enlaceOrigen({ origen: "transferencia", origen_id: "abc" })).toBeNull();
   });
 });

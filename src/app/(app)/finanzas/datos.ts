@@ -1,5 +1,7 @@
 import "server-only";
 import type { createClient } from "@/lib/supabase/server";
+import type { CuentaElegible } from "@/lib/finanzas/medios";
+import type { TransferenciaConCuentas } from "@/lib/finanzas/transferencias";
 import type { CuentaFondos, MovimientoFondos, SaldoCuentaFondos, TipoCuentaFondos } from "@/lib/tipos";
 
 type Supabase = Awaited<ReturnType<typeof createClient>>;
@@ -8,6 +10,7 @@ export type CuentaConSaldo = CuentaFondos & { saldo: SaldoCuentaFondos };
 
 /** Tope de movimientos: con el rango de fechas alcanza para acotar. */
 export const LIMITE_MOVIMIENTOS = 500;
+const LOTE_IDS = 100;
 
 function saldoVacio(cuentaId: string): SaldoCuentaFondos {
   return { cuenta_id: cuentaId, saldo_actual: 0, movimientos_futuros: 0, ultimo_movimiento: null };
@@ -83,4 +86,36 @@ export async function cargarMovimientos(
     importe: Number(m.importe),
     saldo: Number(m.saldo),
   }));
+}
+
+/** Cuentas activas, bancos y cajas, por nombre: los destinos posibles de una transferencia. */
+export async function cargarCuentasActivas(supabase: Supabase): Promise<CuentaElegible[] | string> {
+  const { data, error } = await supabase
+    .from("cuenta_fondos")
+    .select("id, tipo, nombre")
+    .eq("activa", true)
+    .order("nombre");
+  if (error) return `No se pudieron leer las cuentas: ${error.message}`;
+  return (data ?? []) as CuentaElegible[];
+}
+
+/** Las transferencias de los movimientos, con el tipo de sus dos cuentas (para enlazar a la otra), por id. */
+export async function cargarTransferencias(
+  supabase: Supabase,
+  movimientos: readonly MovimientoFondos[],
+): Promise<Map<string, TransferenciaConCuentas> | string> {
+  const ids = [...new Set(movimientos.filter((m) => m.origen === "transferencia").map((m) => m.origen_id))];
+  const resultado = new Map<string, TransferenciaConCuentas>();
+  // En lotes: los ids viajan en la URL y 500 uuid juntos pueden pasar el límite del gateway.
+  for (let i = 0; i < ids.length; i += LOTE_IDS) {
+    const { data, error } = await supabase
+      .from("transferencia_fondos")
+      .select(
+        "id, cuenta_origen_id, cuenta_destino_id, origen:cuenta_fondos!cuenta_origen_id(tipo), destino:cuenta_fondos!cuenta_destino_id(tipo)",
+      )
+      .in("id", ids.slice(i, i + LOTE_IDS));
+    if (error) return `No se pudieron leer las transferencias: ${error.message}`;
+    for (const t of (data ?? []) as unknown as (TransferenciaConCuentas & { id: string })[]) resultado.set(t.id, t);
+  }
+  return resultado;
 }
