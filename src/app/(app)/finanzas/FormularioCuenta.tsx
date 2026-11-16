@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useActionState } from "react";
 import { ModalError } from "@/components/ModalError";
+import { SelectorBanco } from "@/components/SelectorBanco";
 import { enviarSinReiniciar } from "@/lib/formularios";
 import type { CuentaFondos, TipoCuentaFondos } from "@/lib/tipos";
 import type { EstadoFormularioCuenta } from "./acciones";
@@ -14,11 +15,14 @@ type Accion = (estado: EstadoFormularioCuenta, formData: FormData) => Promise<Es
 export function FormularioCuenta({
   accion,
   tipo,
+  bancos,
   cuenta,
   cancelarHref,
 }: {
   accion: Accion;
   tipo: TipoCuentaFondos;
+  /** Bancos activos (Configuración → Bancos). */
+  bancos: readonly string[];
   cuenta?: CuentaFondos;
   cancelarHref?: string;
 }) {
@@ -48,7 +52,14 @@ export function FormularioCuenta({
                 <label className="etiqueta" htmlFor="cuenta-banco">
                   Banco
                 </label>
-                <input id="cuenta-banco" name="banco" defaultValue={cuenta?.banco ?? ""} className="campo" />
+                <SelectorBanco
+                  id="cuenta-banco"
+                  name="banco"
+                  bancos={bancos}
+                  guardado={cuenta?.banco}
+                  defaultValue={cuenta?.banco ?? ""}
+                  opcional
+                />
               </div>
               <div>
                 <label className="etiqueta" htmlFor="cuenta-numero">

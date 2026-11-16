@@ -5,6 +5,7 @@ import { Modal } from "@/components/Modal";
 import { fecha, pesos } from "@/lib/formato";
 import { sumarPesos } from "@/lib/cobranzas/dinero";
 import { PANTALLA_CUENTAS } from "@/lib/finanzas/cuentas";
+import { cargarBancosActivos } from "@/lib/bancos/datos";
 import type { TipoCuentaFondos } from "@/lib/tipos";
 import { crearCuenta } from "./acciones";
 import { cargarCuentas } from "./datos";
@@ -14,10 +15,16 @@ import { FormularioCuenta } from "./FormularioCuenta";
 export async function PaginaCuentas({ tipo }: { tipo: TipoCuentaFondos }) {
   const pantalla = PANTALLA_CUENTAS[tipo];
   const supabase = await createClient();
-  const cuentas = await cargarCuentas(supabase, tipo);
+  const [cuentas, bancos] = await Promise.all([
+    cargarCuentas(supabase, tipo),
+    tipo === "banco" ? cargarBancosActivos(supabase) : [],
+  ]);
 
   if (typeof cuentas === "string") {
     return <p className="text-sm text-red-700">{cuentas}</p>;
+  }
+  if (typeof bancos === "string") {
+    return <p className="text-sm text-red-700">{bancos}</p>;
   }
 
   const total = sumarPesos(cuentas.filter((c) => c.activa).map((c) => c.saldo.saldo_actual));
@@ -30,7 +37,7 @@ export async function PaginaCuentas({ tipo }: { tipo: TipoCuentaFondos }) {
         descripcion={pantalla.descripcion}
         acciones={
           <Modal boton={`+ ${pantalla.nueva}`} titulo={pantalla.nueva}>
-            <FormularioCuenta accion={crearCuenta} tipo={tipo} />
+            <FormularioCuenta accion={crearCuenta} tipo={tipo} bancos={bancos} />
           </Modal>
         }
       />

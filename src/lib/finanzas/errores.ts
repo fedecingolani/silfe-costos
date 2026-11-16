@@ -1,7 +1,8 @@
 /**
  * Mensajes legibles de los errores de la base de Finanzas (SQLSTATE FN0xx,
  * ver 20261111000001_finanzas_cuentas.sql) y de los checks e índices de
- * cuenta_fondos, ajuste_fondos y transferencia_fondos. Las acciones los devuelven en lugar de
+ * cuenta_fondos (incluida su FK a banco, 20261114000004_bancos_referencias.sql),
+ * ajuste_fondos y transferencia_fondos. Las acciones los devuelven en lugar de
  * lanzarlos: en producción Next reemplaza el mensaje de un error lanzado.
  * La caja en negativo (FN011, ver 20261112000005_finanzas_caja_sin_negativo.sql)
  * se muestra con el mensaje de la base, que nombra la caja, el saldo y la fecha.
@@ -27,12 +28,14 @@ const RESTRICCIONES: Record<string, string> = {
   cuenta_fondos_caja_sin_banco_check: "Una caja no lleva datos bancarios.",
   ajuste_fondos_importe_check: "El importe tiene que ser mayor que cero.",
   ajuste_fondos_concepto_check: "El concepto es obligatorio.",
+  cuenta_fondos_banco_fkey:
+    "El banco no está en la lista de bancos. Elegilo de la lista o cargalo en Configuración → Bancos.",
 };
 
 export function mensajeErrorFinanzas(error: ErrorBase, contexto: string): string {
   const code = error.code ?? "";
   if (code === "FN011") return error.message;
-  if (code === "23505" || code === "23514") {
+  if (code === "23505" || code === "23514" || code === "23503") {
     const clave = Object.keys(RESTRICCIONES).find((nombre) => error.message.includes(`"${nombre}"`));
     if (clave) return RESTRICCIONES[clave];
   }

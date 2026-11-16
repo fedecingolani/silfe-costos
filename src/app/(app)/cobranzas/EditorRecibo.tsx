@@ -10,6 +10,7 @@ import { nombreComprobante } from "@/lib/comprobantes/listado";
 import { aCentavos, sumarPesos } from "@/lib/cobranzas/dinero";
 import { completarEnOrden, pagoContado, saldoAFavor, validarImputaciones } from "@/lib/cobranzas/imputacion";
 import { erroresEmision, totalRecibo, validarRecibo, type MedioBorrador } from "@/lib/cobranzas/recibo";
+import { SelectorBanco } from "@/components/SelectorBanco";
 import { cuentaPorDefecto, cuentasDelMedio, tipoCuentaDelMedio, type CuentaElegible } from "@/lib/finanzas/medios";
 import { erroresImporteImputado, leerImputacionesEditor } from "@/lib/cobranzas/editor";
 import type { ReciboEnviado } from "@/lib/cobranzas/guardado";
@@ -189,6 +190,7 @@ export function EditorRecibo({
   contado,
   cuentaInicial,
   cuentas,
+  bancos,
   clienteInicial = null,
   hoy,
   aviso = null,
@@ -198,6 +200,8 @@ export function EditorRecibo({
   cuentaInicial: CuentaCliente | null;
   /** Cajas y cuentas bancarias activas, para la cuenta de cada medio. */
   cuentas: CuentaElegible[];
+  /** Bancos activos (Configuración → Bancos), para el banco de cada cheque. */
+  bancos: string[];
   /** Cliente ya elegido al abrir una cobranza nueva (`?cliente=` desde su cuenta corriente). */
   clienteInicial?: ClienteEncontrado | null;
   hoy: string;
@@ -492,12 +496,15 @@ export function EditorRecibo({
 
               {(f.tipo === "cheque" || f.tipo === "echeq") && (
                 <>
-                  <Campo
-                    etiqueta="Banco *"
-                    valor={f.chequeBanco}
-                    onCambiar={(v) => cambiarFila(f.clave, { chequeBanco: v })}
-                    className="sm:col-span-3"
-                  />
+                  <label className="block sm:col-span-3">
+                    <span className="etiqueta">Banco *</span>
+                    <SelectorBanco
+                      bancos={bancos}
+                      guardado={f.chequeBanco}
+                      value={f.chequeBanco}
+                      onChange={(e) => cambiarFila(f.clave, { chequeBanco: e.target.value })}
+                    />
+                  </label>
                   <Campo
                     etiqueta="Número *"
                     valor={f.chequeNumero}

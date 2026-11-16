@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useActionState } from "react";
 import { ModalError } from "@/components/ModalError";
+import { SelectorProvincia } from "@/components/SelectorProvincia";
 import type { ClienteContacto, ClienteSucursal, Transporte } from "@/lib/tipos";
 import { enviarSinReiniciar } from "@/lib/formularios";
 import type { EstadoFormularioCliente } from "../acciones";
@@ -58,7 +59,11 @@ export function FormularioSucursal({
           </div>
           <div>
             <label className="etiqueta">Provincia</label>
-            <input name="provincia" defaultValue={sucursal?.provincia ?? ""} className="campo" />
+            <SelectorProvincia
+              name="provincia"
+              defaultValue={sucursal?.provincia ?? ""}
+              guardada={sucursal?.provincia}
+            />
           </div>
         </div>
         <div className="grid grid-cols-2 gap-3">

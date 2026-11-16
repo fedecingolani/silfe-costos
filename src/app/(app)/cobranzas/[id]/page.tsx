@@ -26,6 +26,7 @@ import {
   medioEditable,
   type MedioLeido,
 } from "../datos";
+import { cargarBancosActivos } from "@/lib/bancos/datos";
 import { EditorRecibo, type ContadoAPagar } from "../EditorRecibo";
 import { AnularRecibo } from "./AnularRecibo";
 
@@ -115,12 +116,14 @@ export default async function ReciboPage({
       if (typeof c === "string") return <p className="text-sm text-red-700">{c}</p>;
       contado = { id: c.id, texto: `${nombreComprobante(c.clase, null)} ${c.numeroTexto}`, total: c.total, cliente };
     }
-    const [cuenta, cuentas] = await Promise.all([
+    const [cuenta, cuentas, bancos] = await Promise.all([
       contado ? null : cargarDebitos(supabase, recibo.cliente_id),
       cargarCuentasCobro(supabase),
+      cargarBancosActivos(supabase),
     ]);
     if (typeof cuenta === "string") return <p className="text-sm text-red-700">{cuenta}</p>;
     if (typeof cuentas === "string") return <p className="text-sm text-red-700">{cuentas}</p>;
+    if (typeof bancos === "string") return <p className="text-sm text-red-700">{bancos}</p>;
 
     return (
       <>
@@ -142,6 +145,7 @@ export default async function ReciboPage({
           contado={contado}
           cuentaInicial={cuenta}
           cuentas={cuentas}
+          bancos={bancos}
           hoy={hoyArgentina()}
           aviso={aviso}
         />

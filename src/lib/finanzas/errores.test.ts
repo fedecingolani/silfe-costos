@@ -2,6 +2,18 @@ import { describe, expect, it } from "vitest";
 import { mensajeErrorFinanzas, mensajeErrorTransferencia } from "./errores";
 
 describe("mensajeErrorFinanzas", () => {
+  it("banco que no está en la lista (cuenta_fondos_banco_fkey)", () => {
+    expect(
+      mensajeErrorFinanzas(
+        {
+          code: "23503",
+          message: 'insert or update on table "cuenta_fondos" violates foreign key constraint "cuenta_fondos_banco_fkey"',
+        },
+        "guardar la cuenta",
+      ),
+    ).toBe("El banco no está en la lista de bancos. Elegilo de la lista o cargalo en Configuración → Bancos.");
+  });
+
   it("caja en negativo (FN011): muestra el mensaje de la base, que nombra la caja, el saldo y la fecha", () => {
     const mensaje = 'La caja "Caja chica" quedaría en $ -1.500,00 el 12/11/2026.';
     expect(mensajeErrorFinanzas({ code: "FN011", message: mensaje }, "registrar el ajuste")).toBe(mensaje);

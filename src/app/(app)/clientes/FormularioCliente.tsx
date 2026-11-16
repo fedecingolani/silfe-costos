@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useActionState, useState, type ChangeEvent } from "react";
 import { ModalError } from "@/components/ModalError";
+import { SelectorProvincia } from "@/components/SelectorProvincia";
 import { CONDICIONES_IVA, type Cliente, type Transporte, type Zona } from "@/lib/tipos";
 import { validarCbu, validarCuit, validarCvu, type Validacion } from "@/lib/clientes/validaciones";
 import { enviarSinReiniciar } from "@/lib/formularios";
@@ -154,7 +155,12 @@ export function FormularioCliente({
           </div>
           <div>
             <label className="etiqueta">Provincia</label>
-            <input name="provincia" value={valores.provincia} onChange={cambiar} className="campo" />
+            <SelectorProvincia
+              name="provincia"
+              value={valores.provincia}
+              onChange={cambiar}
+              guardada={cliente?.provincia}
+            />
           </div>
         </div>
         <div className="grid grid-cols-2 gap-3">

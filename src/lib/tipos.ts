@@ -1274,6 +1274,14 @@ export type ApiClaveVisible = {
 
 // ----- Finanzas: bancos y caja ---------------------------------------------
 
+/** Fila de banco (Configuración → Bancos). Se referencia por nombre. */
+export type Banco = {
+  id: string;
+  nombre: string;
+  activo: boolean;
+  creado_en: string;
+};
+
 export const TIPOS_CUENTA_FONDOS = ["banco", "caja"] as const;
 
 export type TipoCuentaFondos = (typeof TIPOS_CUENTA_FONDOS)[number];
