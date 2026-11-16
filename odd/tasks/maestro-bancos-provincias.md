@@ -1,6 +1,6 @@
 # Maestro de bancos y provincias
 
-> Estado: **en curso** (14/11/2026).
+> Estado: **en producción** (16/11/2026).
 > Rama: `feat/maestro-bancos-provincias` (sale de `main` en 49947c9).
 > Copia en Engram: `odd/maestro-bancos-provincias/tasks`.
 
@@ -71,4 +71,4 @@ la base para provincia.
 
 ## Avance
 
-T1, T2 y T3 hechas. Revisión RDD: riesgo medio, declinada por el usuario para este candidato (14/11). Pendiente: probar en el navegador y PR. Variantes con palabras distintas ("Banco Galicia" vs "Banco de Galicia") quedan como bancos separados: falta unificar duplicados.
+T1, T2 y T3 hechas. Revisión RDD: riesgo medio, declinada por el usuario para este candidato (14/11). PR #60 mergeado (ff1d19e). Migraciones aplicadas en el remoto el 16/11: 53 bancos, ninguno agregado desde datos viejos (la única cuenta con banco usa Banco Credicoop) y las 136 provincias cargadas ya estaban en la lista. Worker desplegado (versión b218cc04). Falta probar los desplegables con sesión en el navegador. En producción no hubo variantes de bancos para unificar.
